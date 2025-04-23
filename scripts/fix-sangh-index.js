@@ -13,7 +13,7 @@ const { MongoClient } = require('mongodb');
 
 async function fixSanghIndex() {
   // Use the MongoDB connection string from your environment
-  const uri = process.env.MONGODB_URI || "mongodb+srv://parthpathakpp1:parthpathak@cluster0.zj2c0.mongodb.net/development";
+  const uri = process.env.MONGODB_URI || "";
   const client = new MongoClient(uri);
   
   try {
