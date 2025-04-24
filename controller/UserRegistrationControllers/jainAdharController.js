@@ -57,7 +57,6 @@ const createJainAadhar = asyncHandler(async (req, res) => {
                 level: applicationLevel,
                 status: 'active'
             };
-            
             // Add location filters based on application level
             if (applicationLevel === 'city') {
                 query['location.city'] = location.city;
@@ -69,9 +68,7 @@ const createJainAadhar = asyncHandler(async (req, res) => {
             } else if (applicationLevel === 'state') {
                 query['location.state'] = location.state;
             }
-
             const reviewingSangh = await HierarchicalSangh.findOne(query);
-            
             // If no matching sangh found at the current level, try to escalate to next level
             if (!reviewingSangh) {
                 if (applicationLevel === 'city') {
@@ -109,7 +106,6 @@ const createJainAadhar = asyncHandler(async (req, res) => {
                                 reviewingSanghId = countrySangh._id;
                                 applicationLevel = 'country';
                             } else {
-                                // Only go to superadmin if no country sangh exists
                                 applicationLevel = 'superadmin';
                             }
                         }

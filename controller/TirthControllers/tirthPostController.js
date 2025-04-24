@@ -2,7 +2,7 @@ const TirthPost = require('../../model/TirthModels/tirthPostModel');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
 const { extractS3KeyFromUrl } = require('../../utils/s3Utils');
-const { getOrSetCache, invalidateCache,invalidatePattern } = require('../../utils/cache');
+const { getOrSetCache, invalidateCache } = require('../../utils/cache');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
 // Create new Tirth post
@@ -10,10 +10,8 @@ const createPost = async (req, res) => {
     try {
         const { tirthId } = req.params;
         const { caption } = req.body;
-
         // Handle uploaded media files
         const media = [];
-        
         if (req.files) {
             // Handle images
             if (req.files.image) {
@@ -22,7 +20,6 @@ const createPost = async (req, res) => {
                     url: convertS3UrlToCDN(file.location)
                 })));
             }
-            
             // Handle videos
             if (req.files.video) {
                 media.push(...req.files.video.map(file => ({
