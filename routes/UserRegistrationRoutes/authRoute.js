@@ -28,7 +28,7 @@ const router = express.Router();
 // Rate limiters
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // 5 login attempts per 15 minutes
+    max: 5,
     message: {
         success: false,
         message: 'Too many login attempts. Please try again later.'
@@ -65,7 +65,6 @@ router.use(authMiddleware);
 router.post('/logout', logoutUser);
 router.use(checkAccess);
 router.get('/', getAllUsers);
-// Search users endpoint for suggestion/complaint recipient selection
 router.get('/search', searchUsers);
 router.get('/:id', getUserById);
 router.put('/:id', updateUserById);

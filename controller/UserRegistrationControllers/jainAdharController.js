@@ -32,8 +32,6 @@ const createJainAadhar = asyncHandler(async (req, res) => {
         if (!location || !location.state) {
             return errorResponse(res, 'State is required in location data', 400);
         }
-
-        // Determine application level based on location
         // Default to city level if city is provided
         if (location.city && location.district) {
             applicationLevel = 'city';
