@@ -5,6 +5,7 @@ const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghMode
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
 const { extractS3KeyFromUrl } = require('../../utils/s3Utils');
+const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
 // Get all Panch members of a Sangh
 const getPanchMembers = asyncHandler(async (req, res) => {
@@ -173,7 +174,7 @@ const deletePanchGroup = asyncHandler(async (req, res) => {
 const createPanchGroup = asyncHandler(async (req, res) => {
     try {
         const { sanghId } = req.params;
-        const { members } = req.body;
+        const { members,panchName } = req.body;
         const presidentUserId = req.user._id; // ✅ President user ID
 
         let parsedMembers;
@@ -204,12 +205,12 @@ const createPanchGroup = asyncHandler(async (req, res) => {
             const isSanghMember = sangh.members.some(m =>
                 m.jainAadharNumber === member.personalDetails.jainAadharNumber
             );
-            if (!isSanghMember) {
-                return errorResponse(res,
-                    `Member with Jain Aadhar ${member.personalDetails.jainAadharNumber} is not a Sangh member`,
-                    400
-                );
-            }
+            // if (!isSanghMember) {
+            //     return errorResponse(res,
+            //         `Member with Jain Aadhar ${member.personalDetails.jainAadharNumber} is not a Sangh member`,
+            //         400
+            //     );
+            // }
 
             // if (jainAadharNumbers.has(member.personalDetails.jainAadharNumber)) {
             //     return errorResponse(res, 'Duplicate Jain Aadhar numbers found', 400);
@@ -297,7 +298,8 @@ const createPanchGroup = asyncHandler(async (req, res) => {
                 jainAadharNumber: member.personalDetails.jainAadharNumber
             })),
             term: panchGroup.term,
-            status: panchGroup.status
+            status: panchGroup.status,
+            panchName: panchName 
         };
 
         return successResponse(res, panchWithAccessKey, 'Panch group created successfully', 201);
@@ -319,8 +321,6 @@ const createPanchGroup = asyncHandler(async (req, res) => {
         return errorResponse(res, error.message, 500);
     }
 });
-
-// Get Panch group details
 const getPanchGroup = asyncHandler(async (req, res) => {
     try {
         const { sanghId } = req.params;
@@ -328,11 +328,22 @@ const getPanchGroup = asyncHandler(async (req, res) => {
         const panchGroup = await Panch.findOne({
             sanghId,
             status: 'active'
-        });
+        }).populate('members', 'personalDetails documents status'); // Ensure member details are populated
 
         if (!panchGroup) {
             return successResponse(res, null, 'No active Panch group found');
         }
+
+        // Loop through each member to modify URLs
+        panchGroup.members.forEach(member => {
+            // Convert jainAadharPhoto and profilePhoto URLs if they exist
+            if (member.documents && member.documents.jainAadharPhoto) {
+                member.documents.jainAadharPhoto = convertS3UrlToCDN(member.documents.jainAadharPhoto);
+            }
+            if (member.documents && member.documents.profilePhoto) {
+                member.documents.profilePhoto = convertS3UrlToCDN(member.documents.profilePhoto);
+            }
+        });
 
         return successResponse(res, panchGroup, 'Panch group retrieved successfully');
     } catch (error) {
@@ -350,11 +361,25 @@ const getAllPanchGroups = asyncHandler(async (req, res) => {
             return successResponse(res, [], 'No active Panch groups found');
         }
 
+        // Loop through each Panch group to modify URLs
+        panchGroups.forEach(group => {
+            group.members.forEach(member => {
+                // Convert jainAadharPhoto and profilePhoto URLs if they exist
+                if (member.documents && member.documents.jainAadharPhoto) {
+                    member.documents.jainAadharPhoto = convertS3UrlToCDN(member.documents.jainAadharPhoto);
+                }
+                if (member.documents && member.documents.profilePhoto) {
+                    member.documents.profilePhoto = convertS3UrlToCDN(member.documents.profilePhoto);
+                }
+            });
+        });
+
         return successResponse(res, panchGroups, 'All active Panch groups retrieved successfully');
     } catch (error) {
         return errorResponse(res, error.message, 500);
     }
 });
+
 
 
 // Validate Panch access credentials

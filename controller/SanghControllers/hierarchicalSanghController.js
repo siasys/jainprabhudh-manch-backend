@@ -4,6 +4,7 @@ const asyncHandler = require('express-async-handler');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
 const { extractS3KeyFromUrl } = require('../../utils/s3Utils');
+const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
 // Helper Functions
 const formatFullName = (firstName, lastName) => {
@@ -100,8 +101,8 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
                 name: formatFullName(officeBearers[role]?.firstName || "", officeBearers[role]?.lastName || ""),
                 jainAadharNumber: officeBearers[role]?.jainAadharNumber || "",
                 mobileNumber: officeBearers[role]?.mobileNumber || "",
-                document: req.files[`${role}JainAadhar`] ? req.files[`${role}JainAadhar`][0].location : null,
-                photo: req.files[`${role}Photo`] ? req.files[`${role}Photo`][0].location : null
+               document: req.files[`${role}JainAadhar`] ? convertS3UrlToCDN(req.files[`${role}JainAadhar`][0].location) : null,
+                photo: req.files[`${role}Photo`] ? convertS3UrlToCDN(req.files[`${role}Photo`][0].location) : null
             };
         }));
         // Validate location hierarchy based on level
@@ -177,6 +178,11 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
         await sangh.validateHierarchy();
         // Update office bearer roles in User model
         for (const bearer of formattedOfficeBearers) {
+            console.log('Updating bearer:', bearer);
+            if (!bearer.userId) {
+                console.warn('⚠️ User not found for:', bearer.jainAadharNumber);
+                continue;
+            }
             await User.findByIdAndUpdate(bearer.userId, {
                 $push: {
                     sanghRoles: {
@@ -262,18 +268,34 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
     }
 });
 
-// Get All Sangh
 const getAllSangh = asyncHandler(async (req, res) => {
     try {
         const sanghs = await HierarchicalSangh.find();
+
         if (!sanghs.length) {
             return errorResponse(res, 'No Sangh found', 404);
         }
-        return successResponse(res, sanghs, 'All Sangh retrieved successfully');
+
+        const updatedSanghs = sanghs.map((sangh) => {
+            const updatedOfficeBearers = sangh.officeBearers.map((bearer) => {
+                return {
+                    ...bearer,
+                    photo: bearer.photo ? convertS3UrlToCDN(bearer.photo) : null,
+                };
+            });
+
+            return {
+                ...sangh._doc, // _doc is needed to access plain object
+                officeBearers: updatedOfficeBearers,
+            };
+        });
+
+        return successResponse(res, updatedSanghs, 'All Sangh retrieved successfully');
     } catch (error) {
         return errorResponse(res, error.message, 500);
     }
 });
+
 const getAllSanghs = asyncHandler(async (req, res) => {
     try {
         const { query } = req.query; // Fetch the query from request
@@ -297,6 +319,17 @@ const getAllSanghs = asyncHandler(async (req, res) => {
         if (!sanghs.length) {
             return errorResponse(res, 'No Sangh found', 404);
         }
+
+        // Convert S3 URLs to CDN URLs for each officeBearer's photo
+        sanghs.forEach((sangh) => {
+            if (sangh.officeBearers && sangh.officeBearers.length > 0) {
+                sangh.officeBearers.forEach((bearer) => {
+                    if (bearer.photo) {
+                        bearer.photo = convertS3UrlToCDN(bearer.photo); // Apply the conversion function here
+                    }
+                });
+            }
+        });
 
         // Sort the Sanghs to bring matching results first
         sanghs.sort((a, b) => {
@@ -331,19 +364,31 @@ const getAllSanghs = asyncHandler(async (req, res) => {
     }
 });
 
-// Get Sangh hierarchy
+
 const getHierarchy = asyncHandler(async (req, res) => {
     try {
         const sangh = await HierarchicalSangh.findById(req.params.id);
         if (!sangh) {
             return errorResponse(res, 'Sangh not found', 404);
         }
+
         const hierarchy = await sangh.getHierarchy();
+
+        // Convert URLs in officeBearers
+        if (hierarchy?.current?.officeBearers?.length) {
+            hierarchy.current.officeBearers = hierarchy.current.officeBearers.map((bearer) => ({
+                ...bearer,
+                photo: bearer.photo ? convertS3UrlToCDN(bearer.photo) : '',
+                document: bearer.document ? convertS3UrlToCDN(bearer.document) : ''
+            }));
+        }
+
         return successResponse(res, hierarchy, 'Hierarchy retrieved successfully');
     } catch (error) {
         return errorResponse(res, error.message, 500);
     }
 });
+
 
 // Get Sanghs by level and location
 const getSanghsByLevelAndLocation = asyncHandler(async (req, res) => {
@@ -986,7 +1031,8 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
 
             // Format the name
             const formattedName = formatFullName(bearer.firstName, bearer.lastName);
-
+            const documentUrl = bearer.document ? convertS3UrlToCDN(bearer.document) : '';
+            const photoUrl = bearer.photo ? convertS3UrlToCDN(bearer.photo) : '';
             // Add to formatted office bearers
             formattedOfficeBearers.push({
                 role: role,
@@ -994,9 +1040,10 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
                 firstName: bearer.firstName,
                 lastName: bearer.lastName,
                 name: formattedName,
+                mobileNumber: bearer.mobileNumber,
                 jainAadharNumber: bearer.jainAadharNumber,
-                document: bearer.document || req.files?.[`${role}JainAadhar`]?.[0]?.location || '',
-                photo: bearer.photo || req.files?.[`${role}Photo`]?.[0]?.location || '',
+                document: documentUrl,
+                photo: photoUrl,
                 appointmentDate: new Date(),
                 termEndDate: new Date(Date.now() + (2 * 365 * 24 * 60 * 60 * 1000)), // 2 years from now
                 status: 'active'
@@ -1069,6 +1116,24 @@ const getSpecializedSanghs = asyncHandler(async (req, res) => {
             status: 'active'
         }).select('-__v');
 
+        // Convert S3 files (if needed) for each specialized Sangh
+        const convertedSanghs = await Promise.all(specializedSanghs.map(async (sangh) => {
+            const convertedOfficeBearers = await Promise.all(sangh.officeBearers.map(async (bearer) => {
+                if (bearer.document && bearer.document.startsWith('https://')) {
+                    // Replace S3 link with a converted one if necessary
+                    bearer.document = await convertS3File(bearer.document);
+                }
+                if (bearer.photo && bearer.photo.startsWith('https://')) {
+                    // Replace S3 link with a converted one if necessary
+                    bearer.photo = await convertS3File(bearer.photo);
+                }
+                return bearer;
+            }));
+
+            // Return the updated sangh object with converted office bearers
+            return { ...sangh.toObject(), officeBearers: convertedOfficeBearers };
+        }));
+
         return successResponse(res, {
             mainSangh: {
                 _id: mainSangh._id,
@@ -1076,12 +1141,13 @@ const getSpecializedSanghs = asyncHandler(async (req, res) => {
                 level: mainSangh.level,
                 location: mainSangh.location
             },
-            specializedSanghs
+            specializedSanghs: convertedSanghs
         });
     } catch (error) {
         return errorResponse(res, error.message, 500);
     }
 });
+
 
 // Update specialized Sangh
 const updateSpecializedSangh = asyncHandler(async (req, res) => {

@@ -126,7 +126,7 @@ const feePaymentSchema = new mongoose.Schema({
                 name: String,
                 role: String
             },
-            amount: Number // Amount transferred to next level
+            amount: Number
         }
     }],
     receipt: String,

@@ -90,6 +90,11 @@ const memberSchema = new mongoose.Schema({
         type: String,
         enum: ['active', 'inactive'],
         default: 'active'
+    },
+    paymentStatus: {
+        type: String,
+        enum: ['pending', 'paid', 'failed'],
+        default: 'pending'
     }
 });
 
@@ -97,7 +102,6 @@ const hierarchicalSanghSchema = new mongoose.Schema({
     name: {
         type: String,
         required: true,
-        trim: true
     },
     level: {
         type: String,

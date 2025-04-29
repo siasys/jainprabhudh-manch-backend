@@ -14,7 +14,8 @@ const {
     verifyEmail,
     resendVerificationCode,
     requestPasswordReset,
-    resetPassword
+    resetPassword,
+    sendVerificationCode
 } = require('../../controller/UserRegistrationControllers/userController');
 const { authMiddleware, checkAccess } = require('../../middlewares/authMiddlewares');
 const upload = require('../../middlewares/upload');
@@ -28,7 +29,7 @@ const router = express.Router();
 // Rate limiters
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5,
+    max: 5, // 5 login attempts per 15 minutes
     message: {
         success: false,
         message: 'Too many login attempts. Please try again later.'
@@ -54,6 +55,7 @@ router.post('/register',
     ],
     registerUser
 );
+router.post('/verification-email',sendVerificationCode)
 router.post('/verify-email', verifyEmail);
 router.post('/resend-code', resendVerificationCode);
 
@@ -65,6 +67,7 @@ router.use(authMiddleware);
 router.post('/logout', logoutUser);
 router.use(checkAccess);
 router.get('/', getAllUsers);
+// Search users endpoint for suggestion/complaint recipient selection
 router.get('/search', searchUsers);
 router.get('/:id', getUserById);
 router.put('/:id', updateUserById);

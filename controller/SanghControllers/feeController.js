@@ -182,20 +182,17 @@ const generateReminders = asyncHandler(async (req, res) => {
         if (!sangh) {
             return errorResponse(res, 'Sangh not found', 404);
         }
-
         const policy = await FeePolicy.findOne({ sanghId });
         if (!policy) {
             return errorResponse(res, 'Fee policy not found', 404);
         }
-
-        // Get all members who haven't paid
+        // Get allmembers who haven't paid
         const paidMembers = await FeePayment.find({
             sanghId,
             month,
             year,
             status: 'completed'
         }).distinct('userId');
-
         const reminders = [];
         for (const member of sangh.members) {
             if (!paidMembers.includes(member.userId)) {
@@ -211,9 +208,7 @@ const generateReminders = asyncHandler(async (req, res) => {
                 });
             }
         }
-
         await FeeReminder.insertMany(reminders);
-
         return successResponse(res, reminders, 'Fee reminders generated successfully');
     } catch (error) {
         return errorResponse(res, error.message, 500);
@@ -225,16 +220,13 @@ const getFeeStatus = asyncHandler(async (req, res) => {
     try {
         const { sanghId } = req.params;
         const { month, year } = req.query;
-
         // Convert month and year to numbers
         const queryMonth = parseInt(month);
         const queryYear = parseInt(year);
-
         // Validate month and year
         if (!queryMonth || !queryYear) {
             return errorResponse(res, 'Month and year are required query parameters', 400);
         }
-
         const [payments, policy, sangh] = await Promise.all([
             FeePayment.find({ 
                 sanghId, 
@@ -245,26 +237,21 @@ const getFeeStatus = asyncHandler(async (req, res) => {
             FeePolicy.findOne({ sanghId }),
             Sangh.findById(sanghId)
         ]);
-
         if (!sangh) {
             return errorResponse(res, 'Sangh not found', 404);
         }
-
         if (!policy) {
             return errorResponse(res, 'Fee policy not found', 404);
         }
-
         // Get unique member IDs who have paid (in case of duplicate payments)
         const paidMemberIds = new Set(payments.map(p => p.userId.toString()));
         const totalMembers = sangh.members.length;
         const paidMembers = paidMemberIds.size;
         const pendingMembers = Math.max(0, totalMembers - paidMembers);
-
         // Calculate if any payments are overdue
         const today = new Date();
         const isOverdue = new Date(queryYear, queryMonth - 1, policy.gracePeriod + 1) < today;
         const overdueMembers = isOverdue ? pendingMembers : 0;
-
         // Initialize distribution object
         const distribution = {
             foundation: 0,
@@ -273,7 +260,6 @@ const getFeeStatus = asyncHandler(async (req, res) => {
             district: 0,
             city: 0
         };
-
         // Calculate distribution amounts
         payments.forEach(payment => {
             const dist = payment.distribution;
@@ -283,7 +269,6 @@ const getFeeStatus = asyncHandler(async (req, res) => {
             distribution.district += (payment.amount * dist.district) / 100;
             distribution.city += (payment.amount * dist.city) / 100;
         });
-
         const status = {
             totalMembers,
             paidMembers,
@@ -308,7 +293,6 @@ const getFeeStatus = asyncHandler(async (req, res) => {
                     phoneNumber: member.phoneNumber
                 }))
         };
-
         return successResponse(res, status, 'Fee status retrieved successfully');
     } catch (error) {
         return errorResponse(res, error.message, 500);
@@ -319,13 +303,10 @@ const getFeeStatus = asyncHandler(async (req, res) => {
 const getMemberPaymentHistory = asyncHandler(async (req, res) => {
     try {
         const { sanghId, userId } = req.params;
-
         const payments = await FeePayment.find({ sanghId, userId })
             .sort({ year: -1, month: -1 });
-
         const reminders = await FeeReminder.find({ sanghId, userId })
             .sort({ year: -1, month: -1 });
-
         return successResponse(res, { payments, reminders }, 'Payment history retrieved successfully');
     } catch (error) {
         return errorResponse(res, error.message, 500);
@@ -337,12 +318,10 @@ const sendReminders = asyncHandler(async (req, res) => {
     try {
         const { sanghId } = req.params;
         const { method } = req.body;
-
         const pendingReminders = await FeeReminder.find({
             sanghId,
             status: { $in: ['pending', 'overdue'] }
         }).populate('userId', 'phoneNumber email fullName');
-
         const results = [];
         for (const reminder of pendingReminders) {
             // Here you would integrate with your notification service
@@ -359,7 +338,6 @@ const sendReminders = asyncHandler(async (req, res) => {
                 status: 'sent'
             });
         }
-
         return successResponse(res, results, 'Reminders sent successfully');
     } catch (error) {
         return errorResponse(res, error.message, 500);
@@ -373,13 +351,11 @@ const calculatePendingFees = asyncHandler(async (req, res) => {
         const currentDate = new Date();
         const currentMonth = currentDate.getMonth() + 1;
         const currentYear = currentDate.getFullYear();
-
         // Get fee policy
         const policy = await FeePolicy.findOne({ sanghId });
         if (!policy) {
             return errorResponse(res, 'Fee policy not found', 404);
         }
-
         // Get all payments for the user
         const payments = await FeePayment.find({
             userId,
@@ -390,16 +366,13 @@ const calculatePendingFees = asyncHandler(async (req, res) => {
         // Calculate pending amounts
         const pendingFees = [];
         let totalPending = 0;
-
         // Start from user's join date or last 12 months
         const sangh = await Sangh.findById(sanghId);
         const member = sangh.members.find(m => m.userId.toString() === userId);
         const startDate = member ? new Date(member.joinedAt) : new Date(currentYear - 1, currentMonth - 1, 1);
-
         for (let d = new Date(startDate); d <= currentDate; d.setMonth(d.getMonth() + 1)) {
             const month = d.getMonth() + 1;
             const year = d.getFullYear();
-
             // Find payment for this month
             const monthPayment = payments.find(p => p.month === month && p.year === year);
             
@@ -441,16 +414,13 @@ const calculatePendingFees = asyncHandler(async (req, res) => {
 const calculateRemainingAmount = (currentLevel, totalAmount, distribution) => {
     const levels = ['city', 'district', 'state', 'country', 'foundation'];
     const currentIndex = levels.indexOf(currentLevel);
-    
     if (currentIndex === -1 || currentIndex === levels.length - 1) {
         return 0;
     }
-
     let remainingAmount = totalAmount;
     for (let i = 0; i <= currentIndex; i++) {
         remainingAmount -= (totalAmount * distribution[levels[i]]) / 100;
     }
-    
     return remainingAmount;
 };
 
@@ -477,23 +447,18 @@ const updateDistributionStatus = asyncHandler(async (req, res) => {
         if (distributionIndex === -1) {
             return errorResponse(res, 'Distribution detail not found', 404);
         }
-
         const distribution = payment.distributionDetails[distributionIndex];
-
         // Calculate remaining amount to be transferred
         const remainingAmount = payment.amount - (payment.amount * payment.distribution.city) / 100;
-
         // Validate status transition
         const validTransitions = {
             'pending': ['transferred'],
             'transferred': ['received'],
             'received': ['completed']
         };
-
         if (!validTransitions[distribution.status]?.includes(status)) {
             return errorResponse(res, `Invalid status transition from ${distribution.status} to ${status}`, 400);
         }
-
         // Update distribution details
         if (status === 'transferred') {
             distribution.status = status;
@@ -521,9 +486,7 @@ const updateDistributionStatus = asyncHandler(async (req, res) => {
                 role: 'president'
             };
         }
-
         await payment.save();
-
         return successResponse(res, {
             payment,
             remainingAmount,
@@ -533,7 +496,6 @@ const updateDistributionStatus = asyncHandler(async (req, res) => {
         return errorResponse(res, error.message, 500);
     }
 });
-
 // Get distribution details for a Sangh
 const getDistributionDetails = asyncHandler(async (req, res) => {
     try {
@@ -548,12 +510,10 @@ const getDistributionDetails = asyncHandler(async (req, res) => {
                 $lte: new Date(endDate)
             };
         }
-
         // Get payments with distribution details
         const payments = await FeePayment.find(query)
             .populate('userId', 'fullName')
             .sort({ paymentDate: -1 });
-
         // Filter distributions by status if specified
         let distributions = payments.map(payment => ({
             paymentId: payment._id,
@@ -564,7 +524,6 @@ const getDistributionDetails = asyncHandler(async (req, res) => {
                 payment.distributionDetails.filter(d => d.status === status) :
                 payment.distributionDetails
         }));
-
         return successResponse(res, distributions, 'Distribution details retrieved successfully');
     } catch (error) {
         return errorResponse(res, error.message, 500);
@@ -576,13 +535,11 @@ const getPendingDistributions = asyncHandler(async (req, res) => {
     try {
         const { sanghId } = req.params;
         const { level } = req.query;
-
         // Get all payments with pending distributions
         const payments = await FeePayment.find({
             sanghId,
             'distributionDetails.status': 'pending'
         }).populate('userId', 'fullName');
-
         // Filter and calculate remaining amounts
         const pendingDistributions = payments.map(payment => {
             const remainingAmount = calculateRemainingAmount(
@@ -590,7 +547,6 @@ const getPendingDistributions = asyncHandler(async (req, res) => {
                 payment.amount,
                 payment.distribution
             );
-
             return {
                 paymentId: payment._id,
                 memberName: payment.userId.fullName,
@@ -605,14 +561,12 @@ const getPendingDistributions = asyncHandler(async (req, res) => {
                     payment.distributionDetails.filter(d => d.status === 'pending')
             };
         }).filter(p => p.distributionDetails.length > 0);
-
         // Calculate totals
         const totals = {
             totalPending: pendingDistributions.reduce((sum, p) => sum + p.remainingAmount, 0),
             totalRetained: pendingDistributions.reduce((sum, p) => sum + p.retainedAmount, 0),
             count: pendingDistributions.length
         };
-
         return successResponse(res, {
             distributions: pendingDistributions,
             totals
@@ -627,7 +581,6 @@ const getDistributionHistory = asyncHandler(async (req, res) => {
     try {
         const { sanghId } = req.params;
         const { startDate, endDate, level } = req.query;
-
         // Build query
         const query = { sanghId };
         if (startDate && endDate) {
@@ -636,12 +589,10 @@ const getDistributionHistory = asyncHandler(async (req, res) => {
                 $lte: new Date(endDate)
             };
         }
-
         // Get completed distributions
         const payments = await FeePayment.find(query)
             .populate('userId', 'fullName')
             .sort({ paymentDate: -1 });
-
         // Filter and format distribution history
         const history = payments.map(payment => ({
             paymentId: payment._id,
@@ -660,7 +611,6 @@ const getDistributionHistory = asyncHandler(async (req, res) => {
             totalPayments: history.length,
             byLevel: {}
         };
-
         // Calculate level-wise statistics
         history.forEach(payment => {
             payment.distributionDetails.forEach(d => {
@@ -674,7 +624,6 @@ const getDistributionHistory = asyncHandler(async (req, res) => {
                 statistics.byLevel[d.level].count++;
             });
         });
-
         return successResponse(res, {
             history,
             statistics

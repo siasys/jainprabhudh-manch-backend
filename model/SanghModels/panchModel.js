@@ -25,11 +25,11 @@ const panchMemberSchema = new mongoose.Schema({
         },
         jainAadharNumber: {
             type: String,
-            required: [true, 'Jain Aadhar number is required']
+          //  required: [true, 'Jain Aadhar number is required']
         },
         professionalBio: {
             type: String,
-            required: [true, 'Professional introduction is required'],
+           // required: [true, 'Professional introduction is required'],
             maxLength: [500, 'Professional bio cannot exceed 500 characters']
         }
     },

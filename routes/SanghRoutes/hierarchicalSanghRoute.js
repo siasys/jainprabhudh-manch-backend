@@ -50,7 +50,7 @@ router.post('/create',
 
 // Get Sangh hierarchy
 router.get('/hierarchy/:id', 
-    validateSanghAccess,
+    //validateSanghAccess,
     getHierarchy
 );
 
@@ -95,7 +95,7 @@ router.post('/:sanghId/members',
 
 router.delete('/:sanghId/members/:memberId', 
     isOfficeBearer,
-    validateSanghAccess,
+    //validateSanghAccess,
     removeSanghMember
 );
 

@@ -11,11 +11,11 @@ const { generateToken } = require("../../helpers/authHelpers");
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../../services/nodemailerEmailService');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
-const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, 
-    message: { error: 'Too many login attempts. Please try again later.' }
-});
+// const authLimiter = rateLimit({
+//     windowMs: 15 * 60 * 1000, // 15 minutes
+//     max: 5, 
+//     message: { error: 'Too many login attempts. Please try again later.' }
+// });
 // Generate a random 6-digit code
 const generateVerificationCode = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
@@ -114,6 +114,43 @@ const registerUser = [
         );
     })
 ];
+const sendVerificationCode = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return errorResponse(res, 'Email is required', 400);
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+        return errorResponse(res, 'User not found', 404);
+    }
+
+    if (user.isEmailVerified) {
+        return errorResponse(res, 'Email is already verified', 400);
+    }
+
+    // Generate new verification code
+    const verificationCode = generateVerificationCode();
+    const codeExpiry = new Date();
+    codeExpiry.setMinutes(codeExpiry.getMinutes() + 30);
+
+    // Save code in user record
+    user.verificationCode = {
+        code: verificationCode,
+        expiresAt: codeExpiry
+    };
+    await user.save();
+
+    try {
+        await sendVerificationEmail(email, user.firstName, verificationCode);
+        return successResponse(res, {}, 'Verification code sent to your email');
+    } catch (error) {
+        console.error('Error sending verification email:', error);
+        return errorResponse(res, 'Failed to send verification email', 500);
+    }
+});
 // Verify email with verification code
 const verifyEmail = asyncHandler(async (req, res) => {
     const { email, code } = req.body;
@@ -296,7 +333,7 @@ const resetPassword = asyncHandler(async (req, res) => {
 });
 
 const loginUser = [
-    authLimiter,
+   // authLimiter,
     userValidation.login,
     asyncHandler(async (req, res) => {
     const { email, password } = req.body;
@@ -644,5 +681,6 @@ module.exports = {
     verifyEmail,
     resendVerificationCode,
     requestPasswordReset,
-    resetPassword
+    resetPassword,
+    sendVerificationCode
 };

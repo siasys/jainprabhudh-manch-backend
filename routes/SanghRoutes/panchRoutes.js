@@ -21,7 +21,7 @@ router.use(authenticate);
 // router.get('/validate/:sanghId', validateSangh);
 
 // Panch group management
-router.post('/:sanghId/group', isPresident, panchGroupDocs, createPanchGroup);
+router.post('/:sanghId/group', panchGroupDocs, createPanchGroup);
 router.get('/:sanghId/group', getPanchGroup);
 router.get('/panch-groups', getAllPanchGroups);
 router.delete('/:sanghId/group', isPresident, deletePanchGroup);

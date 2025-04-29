@@ -47,7 +47,8 @@ const { initializeWebSocket } = require('./websocket/socket');
 const { scheduleStoryCleanup } = require('./jobs/storyCleanupJob');
 const vyaparRoutes = require('./routes/VyaparRoutes/vyaparRoutes');
 const vyaparPostRoutes = require('./routes/VyaparRoutes/vyaparPostRoutes');
-const inquiryRoutes = require('./routes/SanghRoutes/inquiryRoutes')
+const inquiryRoutes = require('./routes/SanghRoutes/inquiryRoutes');
+const paymentRoute = require('./routes/SanghRoutes/paymentRoutes');
 app.set('trust proxy',1)
 // connect to databse
 dbConnect();
@@ -117,6 +118,7 @@ app.use('/api/sadhu', sadhuRoutes);
 app.use('/api/sadhu/posts', sadhuPostRoutes);
 
 // Sangh Routes
+app.use('/api/sangh-payment',paymentRoute)
 app.use('/api/hierarchical-sangh', authMiddleware, hierarchicalSanghRoutes);
 app.use('/api/sangh-access', authMiddleware, sanghAccessRoutes);
 app.use('/api/sangh-posts', authMiddleware, sanghPostRoutes);
