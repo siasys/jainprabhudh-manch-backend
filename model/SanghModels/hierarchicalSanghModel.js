@@ -105,7 +105,7 @@ const hierarchicalSanghSchema = new mongoose.Schema({
     },
     level: {
         type: String,
-        enum: ['country', 'state', 'district', 'city'],
+        enum: ['foundation', 'country', 'state', 'district', 'city', 'area'],
        // required: true
     },
     location: {
@@ -199,6 +199,7 @@ const hierarchicalSanghSchema = new mongoose.Schema({
 hierarchicalSanghSchema.pre('save', async function(next) {
     if (this.isNew && !this.accessId) {
         const prefix = {
+            foundation: 'FND',
             country: 'CNT',
             state: 'ST',
             district: 'DST',
@@ -235,7 +236,7 @@ hierarchicalSanghSchema.methods.validateHierarchy = async function() {
         throw new Error('Parent Sangh not found');
     }
 
-    const levelHierarchy = ['country', 'state', 'district', 'city', 'area'];
+    const levelHierarchy = ['foundation','country', 'state', 'district', 'city', 'area'];
     const parentIndex = levelHierarchy.indexOf(parentSangh.level);
     const currentIndex = levelHierarchy.indexOf(this.level);
 

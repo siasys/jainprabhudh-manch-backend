@@ -95,7 +95,7 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             const user = await User.findOne({ jainAadharNumber: officeBearers[role].jainAadharNumber });
             return {
                 role,
-                userId: user ? user._id : null,  // Ensure user exists
+                userId: user ? user._id : null,
                 firstName: officeBearers[role]?.firstName || "",
                 lastName: officeBearers[role]?.lastName || "",
                 name: formatFullName(officeBearers[role]?.firstName || "", officeBearers[role]?.lastName || ""),
@@ -148,7 +148,7 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
         // Validate hierarchy level before creation
         const parentSangh = parentSanghId ? await HierarchicalSangh.findById(parentSanghId) : null;
         if (parentSangh) {
-            const levelHierarchy = ['country', 'state', 'district', 'city', 'area'];
+            const levelHierarchy = ['foundation','country', 'state', 'district', 'city', 'area'];
             const parentIndex = levelHierarchy.indexOf(parentSangh.level);
             const currentIndex = levelHierarchy.indexOf(level);
             

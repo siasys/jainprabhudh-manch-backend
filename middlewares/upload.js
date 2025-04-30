@@ -39,8 +39,6 @@ const getS3Folder = (fieldname, req) => {
   switch(fieldname) {
     case 'profilePicture':
       return 'profile-pictures/';
-    case 'panCard':
-      return 'documents/pan-cards/';
     case 'aadharCard':
       return 'documents/aadhar-cards/';
     case 'userProfile':
@@ -199,7 +197,6 @@ module.exports = upload;
 module.exports.handleMulterError = handleMulterError;
 module.exports.chatImageUpload = [upload.single('chatImage'), optimizeImage];
 module.exports.jainAadharDocs = upload.fields([
-  { name: 'panCard', maxCount: 1 },
   { name: 'aadharCard', maxCount: 1 },
   { name: 'userProfile', maxCount: 1 }
 ]);

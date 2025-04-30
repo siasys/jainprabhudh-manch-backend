@@ -178,7 +178,18 @@ const createJainAadhar = asyncHandler(async (req, res) => {
                 timestamp: new Date()
             }]
       };
-
+     // ✅ Handle uploaded files
+     if (req.files) {
+        if (req.files.aadharCard && req.files.aadharCard[0]) {
+            const aadharUrl = req.files.aadharCard[0].location || req.files.aadharCard[0].path;
+            jainAadharData.AadharCard = convertS3UrlToCDN(aadharUrl);
+        }
+        if (req.files.userProfile && req.files.userProfile[0]) {
+            const profileUrl = req.files.userProfile[0].location || req.files.userProfile[0].path;
+            jainAadharData.userProfile = convertS3UrlToCDN(profileUrl);
+        }
+    }
+    
       const newJainAadhar = await JainAadhar.create(jainAadharData);
 
         // Update user's status
