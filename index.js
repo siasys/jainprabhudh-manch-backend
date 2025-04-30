@@ -49,6 +49,8 @@ const vyaparRoutes = require('./routes/VyaparRoutes/vyaparRoutes');
 const vyaparPostRoutes = require('./routes/VyaparRoutes/vyaparPostRoutes');
 const inquiryRoutes = require('./routes/SanghRoutes/inquiryRoutes');
 const paymentRoute = require('./routes/SanghRoutes/paymentRoutes');
+const contactUsRoutes = require('./routes/UserRegistrationRoutes/contactUsRoutes');
+
 app.set('trust proxy',1)
 // connect to databse
 dbConnect();
@@ -87,7 +89,7 @@ app.use('/api/stories', storyRoutes);
 app.use('/api/notification', authMiddleware, notificationRoutes);
 app.use('/api/messages', authMiddleware, messageRoutes);
 app.use('/api/group', authMiddleware, groupChatRoutes);
-
+app.use('/api/contact-us', contactUsRoutes);
 // app.use('/api/units', authMiddleware, unitRoutes );
 //app.use('/api/panchayat',panchayatRoute );
 
