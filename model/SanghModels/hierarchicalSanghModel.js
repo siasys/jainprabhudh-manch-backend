@@ -241,7 +241,7 @@ hierarchicalSanghSchema.methods.validateHierarchy = async function() {
         throw new Error('Parent Sangh not found');
     }
 
-    const levelHierarchy = ['foundation','country', 'state', 'district', 'city', 'area'];
+    const levelHierarchy = ['foundation', 'country', 'state', 'district', 'city', 'area'];
     const parentIndex = levelHierarchy.indexOf(parentSangh.level);
     const currentIndex = levelHierarchy.indexOf(this.level);
 

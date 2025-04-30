@@ -1,17 +1,15 @@
 const JainItihas = require("../model/JainItihas");
+const { convertS3UrlToCDN } = require('../utils/s3Utils');
 
 exports.createJainItihas = async (req, res) => {
   try {
-    console.log("🟢 Request Body:", req.body);
-    console.log("🟢 Uploaded File:", req.file);
-
     const { title, caption, userId } = req.body;
     
     if (!userId) {
       return res.status(400).json({ error: "User ID is required!" });
     }
 
-    const image = req.file?.location || ""; // Fetch S3 URL
+    const image = req.file?.location ? convertS3UrlToCDN(req.file.location) : "";
 
     const newEntry = new JainItihas({ title, caption, image, userId });
 
@@ -26,20 +24,23 @@ exports.createJainItihas = async (req, res) => {
   }
 };
 
-
-
 exports.getAllJainItihas = async (req, res) => {
   try {
     const entries = await JainItihas.find().populate("userId", "firstName lastName profilePicture");
 
-    console.log("✅ Populated Data:", JSON.stringify(entries, null, 2)); // Debug output
+    // Convert image URLs to CDN
+    const updatedEntries = entries.map(entry => ({
+      ...entry._doc,
+      image: convertS3UrlToCDN(entry.image)
+    }));
 
-    res.status(200).json(entries);
+    res.status(200).json(updatedEntries);
   } catch (error) {
     console.error("❌ Error fetching JainItihas:", error);
     res.status(500).json({ error: error.message });
   }
 };
+
 
 
 //  Update Jain Itihas entry
