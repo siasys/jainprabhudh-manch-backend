@@ -179,7 +179,6 @@ const createJainAadhar = asyncHandler(async (req, res) => {
                 timestamp: new Date()
             }]
       };
-     // ✅ Handle uploaded files
      if (req.files) {
         if (req.files.aadharCard && req.files.aadharCard[0]) {
             const aadharUrl = req.files.aadharCard[0].location || req.files.aadharCard[0].path;
