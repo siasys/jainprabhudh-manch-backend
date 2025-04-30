@@ -226,10 +226,15 @@ hierarchicalSanghSchema.methods.validateHierarchy = async function() {
         }
         return;
     }
-
-    if (!this.parentSangh) {
-        throw new Error('Non-country level Sangh must have a parent Sangh');
+    if (this.level === 'foundation') {
+        if (this.parentSangh) {
+            throw new Error('foundation level Sangh cannot have a parent Sangh');
+        }
+        return;
     }
+    // if (!this.parentSangh) {
+    //     throw new Error('Non-country level Sangh must have a parent Sangh');
+    // }
 
     const parentSangh = await this.constructor.findById(this.parentSangh);
     if (!parentSangh) {
