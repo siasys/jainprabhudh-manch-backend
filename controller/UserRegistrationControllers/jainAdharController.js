@@ -5,6 +5,7 @@ const asyncHandler = require('express-async-handler');
 const { validationResult } = require('express-validator');
 const { jainAadharValidation } = require('../../validators/validations');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
+const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
 // Check if user has existing application
 const checkExistingApplication = asyncHandler(async (req, res, next) => {
