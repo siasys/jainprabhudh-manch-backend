@@ -292,7 +292,7 @@ hierarchicalSanghSchema.methods.getChildSanghs = async function() {
 
 // Optimize indexes for common query patterns
 hierarchicalSanghSchema.index({ level: 1 });
-hierarchicalSanghSchema.index({ parentSanghId: 1 });
+hierarchicalSanghSchema.index({ parentSangh: 1 });
 hierarchicalSanghSchema.index({ state: 1 });
 hierarchicalSanghSchema.index({ district: 1 });
 hierarchicalSanghSchema.index({ city: 1 });
