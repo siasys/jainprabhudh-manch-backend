@@ -29,7 +29,10 @@ const jainAadharSchema = new mongoose.Schema(
     panth: {
       type:String
     },
-    subCaste: { type: String, enum: ['Parwar', 'Khandelwal', 'Porwal', 'Golalare', 'Golapurab'] },
+    subCaste: {
+       type: String,
+
+     },
     gotra: { type: String },
     sansthan: { type: String },
     sansthanPosition: { type: String },
