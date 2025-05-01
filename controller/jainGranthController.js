@@ -1,16 +1,18 @@
 const JainGranth = require("../model/JainGranthModel");
+const { convertS3UrlToCDN } = require('../utils/s3Utils');
 
 exports.uploadGranth = async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "File is required!" });
     }
+
     const { title } = req.body;
     if (!title) {
       return res.status(400).json({ error: "Title is required!" });
     }
-    // ✅ Corrected file URL
-    const fileUrl = req.file.location; 
+
+    const fileUrl = convertS3UrlToCDN(req.file.location); // ✅ CDN conversion
 
     const newGranth = new JainGranth({ title, fileUrl });
     await newGranth.save();
@@ -20,7 +22,6 @@ exports.uploadGranth = async (req, res) => {
     res.status(500).json({ error: "Server error", details: error.message });
   }
 };
-
 
 exports.getAllGranths = async (req, res) => {
   try {

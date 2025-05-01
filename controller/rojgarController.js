@@ -1,6 +1,7 @@
 // controllers/rojgarController.js
 const Rojgar = require("../model/RojgarModel");
 const RojgarRecruitee = require("../model/RojgarRecruiteeModel")
+const { convertS3UrlToCDN } = require('../utils/s3Utils');
 
 // Create a new job
 exports.createJob = async (req, res) => {
@@ -11,11 +12,10 @@ exports.createJob = async (req, res) => {
     let jobPost = [];
     if (req.files && req.files.jobPost) {
       jobPost = req.files.jobPost.map((file) => ({
-        url: file.location,
+        url: convertS3UrlToCDN(file.location), // ✅ CDN conversion
         type: file.mimetype.startsWith("video/") ? "video" : "image",
       }));
     }
-
     console.log("Job Post Data:", jobPost);
 
     const newJob = new Rojgar({

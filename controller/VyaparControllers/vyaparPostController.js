@@ -3,6 +3,7 @@ const JainVyapar = require('../../model/VyaparModels/vyaparModel');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
 const { extractS3KeyFromUrl } = require('../../utils/s3Utils');
+const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
 // Create new Vyapar post
 const createPost = async (req, res) => {
@@ -11,26 +12,23 @@ const createPost = async (req, res) => {
         const { caption } = req.body;
 
         // Handle uploaded media files
-        const media = [];
-        
         if (req.files) {
             // Handle images
             if (req.files.image) {
                 media.push(...req.files.image.map(file => ({
                     type: 'image',
-                    url: file.location
-            })));
-        }
+                    url: convertS3UrlToCDN(file.location) // ✅ CDN URL
+                })));
+            }
 
             // Handle videos
             if (req.files.video) {
                 media.push(...req.files.video.map(file => ({
                     type: 'video',
-                    url: file.location
+                    url: convertS3UrlToCDN(file.location) // ✅ CDN URL
                 })));
             }
         }
-
         const postData = {
             vyaparId,
             caption,

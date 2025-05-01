@@ -130,9 +130,9 @@ const getSadhuPosts = async (req, res) => {
             sadhuId,
             isHidden: false
         });
-
+        const convertedPosts = convertMediaUrls(posts);
         return successResponse(res, {
-            posts,
+            posts: convertedPosts,
             totalPosts: total,
             currentPage: parseInt(page),
             totalPages: Math.ceil(total / limit)

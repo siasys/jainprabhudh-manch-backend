@@ -7,6 +7,7 @@ const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { s3Client } = require('../../config/s3Config');
 const { extractS3KeyFromUrl } = require('../../utils/s3Utils');
 const { getOrSetCache, invalidateCache,invalidatePattern } = require('../../utils/cache');
+const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
 // Create a post as Sangh
 const createSanghPost = asyncHandler(async (req, res) => {
@@ -84,9 +85,16 @@ const getSanghPosts = asyncHandler(async (req, res) => {
       sanghId,
       isHidden: false 
     });
-    
-    return successResponse(res, {
-      posts,
+    // Convert media URLs
+    const updatedPosts = posts.map(post => ({
+      ...post,
+      media: post.media.map(m => ({
+        ...m,
+        url: convertS3UrlToCDN(m.url)
+      }))
+    }));
+      return successResponse(res, {
+      posts: updatedPosts,
       pagination: {
         total,
         page,
