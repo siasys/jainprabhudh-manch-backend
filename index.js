@@ -50,7 +50,7 @@ const vyaparPostRoutes = require('./routes/VyaparRoutes/vyaparPostRoutes');
 const inquiryRoutes = require('./routes/SanghRoutes/inquiryRoutes');
 const paymentRoute = require('./routes/SanghRoutes/paymentRoutes');
 const contactUsRoutes = require('./routes/UserRegistrationRoutes/contactUsRoutes');
-
+const foundationPaymentRoutes = require('./routes/Foundation/foundationPaymentRoutes')
 app.set('trust proxy',1)
 // connect to databse
 dbConnect();
@@ -127,7 +127,10 @@ app.use('/api/sangh-posts', authMiddleware, sanghPostRoutes);
 app.use('/api/panch', authMiddleware, panchayatRoutes);
 app.use('/api/panch-posts', authMiddleware, panchPostRoutes);
 app.use('/api/locations', locationRoutes);
-app.use('/api/inqury', inquiryRoutes)
+app.use('/api/inqury', inquiryRoutes);
+
+// Foundation Payment
+app.use('/api/payment',foundationPaymentRoutes)
 // Admin API routes
 app.use("/api/admin", adminRouter);
 

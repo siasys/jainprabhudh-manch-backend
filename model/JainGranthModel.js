@@ -5,6 +5,9 @@ const JainGranthSchema = new mongoose.Schema(
     title: {
       type: String,
     },
+    description: {
+      type: String, // New field added
+    },
     fileUrl: {
       type: String,
     },

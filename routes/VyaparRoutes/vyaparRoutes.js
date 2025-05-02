@@ -12,7 +12,8 @@ const {
 const { 
     createVyaparPaymentOrder,
     verifyVyaparPayment,
-    completeVyaparRegistration
+    completeVyaparRegistration,
+    verifyVyaparQrPayment
 } = require('../../controller/PaymentControllers/paymentController');
 const { authMiddleware, verifyVyaparRole } = require('../../middlewares/authMiddlewares');
 const upload = require('../../middlewares/upload');
@@ -31,6 +32,7 @@ router.get('/access/:vyaparId', verifyVyaparRole, vyaparLogin);
 // Payment and registration flow
 router.post('/create-payment', createVyaparPaymentOrder);
 router.post('/verify-payment', verifyVyaparPayment);
+router.post('/verify-qr-payment', verifyVyaparQrPayment);
 router.post('/complete-registration/:orderId', 
     upload.vyaparDocs,
     completeVyaparRegistration

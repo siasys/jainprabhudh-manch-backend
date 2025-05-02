@@ -7,14 +7,15 @@ exports.uploadGranth = async (req, res) => {
       return res.status(400).json({ error: "File is required!" });
     }
 
-    const { title } = req.body;
+    const { title, description } = req.body;
+
     if (!title) {
       return res.status(400).json({ error: "Title is required!" });
     }
 
     const fileUrl = convertS3UrlToCDN(req.file.location); // ✅ CDN conversion
 
-    const newGranth = new JainGranth({ title, fileUrl });
+    const newGranth = new JainGranth({ title, description, fileUrl }); // Added description
     await newGranth.save();
 
     res.status(201).json({ message: "Granth uploaded successfully!", granth: newGranth });

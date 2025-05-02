@@ -28,7 +28,7 @@ const createVyaparPaymentOrder = async (req, res) => {
         if (!formData.businessName || !formData.businessType || !formData.productCategory) {
             return errorResponse(res, 'Missing required business details', 400);
         }
-        
+
         // Create a shorter receipt ID (max 40 chars)
         // Using timestamp + random number instead of full UUID
         const timestamp = Date.now().toString();
@@ -179,7 +179,44 @@ const verifyVyaparPayment = async (req, res) => {
         return errorResponse(res, error.message, 500);
     }
 };
+const verifyVyaparQrPayment = async (req, res) => {
+    try {
+        const { paymentId, formData } = req.body;
 
+        // Fetch payment from Razorpay
+        const razorpayPayment = await razorpayService.fetchPaymentById(paymentId);
+
+        // Basic validations
+        if (
+            razorpayPayment.status !== 'captured' ||
+            parseInt(razorpayPayment.amount) !== PAYMENT_AMOUNTS.vyapar
+        ) {
+            return errorResponse(res, 'Payment not completed or invalid amount', 400);
+        }
+
+        // Save manual payment
+        const payment = new Payment({
+            paymentId: razorpayPayment.id,
+            amount: razorpayPayment.amount,
+            currency: razorpayPayment.currency,
+            status: 'paid',
+            entityType: 'vyapar',
+            userId: req.user._id,
+            formData,
+            receipt: razorpayPayment.id
+        });
+
+        await payment.save();
+
+        return successResponse(res, {
+            message: 'Manual QR Payment verified successfully',
+            paymentId: razorpayPayment.id
+        });
+    } catch (error) {
+        console.error('QR Payment verify error:', error);
+        return errorResponse(res, error.message, 500);
+    }
+};
 /**
  * Verify payment for Biodata registration
  * @param {Object} req - Express request object
@@ -436,5 +473,6 @@ module.exports = {
     completeVyaparRegistration,
     createBiodataPaymentOrder,
     verifyBiodataPayment,
-    completeBiodataRegistration
+    completeBiodataRegistration,
+    verifyVyaparQrPayment
 };

@@ -16,6 +16,16 @@ const razorpay = new Razorpay({
  * @param {Object} options.notes - Additional notes
  * @returns {Promise<Object>} - Razorpay order object
  */
+
+const fetchPaymentById = async (paymentId) => {
+    try {
+        const payment = await razorpay.payments.fetch(paymentId);
+        return payment;
+    } catch (error) {
+        console.error('Error fetching Razorpay payment:', error);
+        throw new Error('Payment ID not found or invalid');
+    }
+};
 const createOrder = async (options) => {
     try {
         console.log("Creating Razorpay Order with options:", options);
@@ -111,5 +121,6 @@ module.exports = {
     createOrder,
     verifyPaymentSignature,
     updatePaymentStatus,
-    getPaymentByOrderId
+    getPaymentByOrderId,
+    fetchPaymentById
 };
