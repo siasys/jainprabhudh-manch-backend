@@ -7,7 +7,7 @@ exports.uploadGranth = async (req, res) => {
       return res.status(400).json({ error: "File is required!" });
     }
 
-    const { title, description } = req.body;
+    const {userId, title, description } = req.body;
 
     if (!title) {
       return res.status(400).json({ error: "Title is required!" });
