@@ -2,11 +2,15 @@ const mongoose = require("mongoose");
 
 const JainGranthSchema = new mongoose.Schema(
   {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
     title: {
       type: String,
     },
     description: {
-      type: String, // New field added
+      type: String,
     },
     fileUrl: {
       type: String,
