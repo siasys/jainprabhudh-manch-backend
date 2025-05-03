@@ -279,9 +279,8 @@ exports.getMessages = async (req, res) => {
     // Mark messages as read
     await Message.updateMany(
       { sender: receiver, receiver: sender, isRead: false },
-      { isRead: true }
+      { isRead: true, status: 'read' }
     );
-
     // Convert attachments to use CDN URLs
     const updatedMessages = messages.map(msg => {
       const updatedAttachments = msg.attachments?.map(att => ({

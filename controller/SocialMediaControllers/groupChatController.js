@@ -291,6 +291,7 @@ exports.sendGroupMessage = async (req, res) => {
         name: req.file.originalname,
         size: req.file.size
       }] : [],
+      readBy: [{ user: sender, readAt: new Date() }],
       createdAt: new Date()
     };
     group.groupMessages.push(newMessage);
@@ -355,8 +356,6 @@ exports.sendGroupMessage = async (req, res) => {
     return errorResponse(res, error.message, 500);
   }
 };
-
-// 5. Get All Messages for a Group
 exports.getGroupMessages = async (req, res) => {
   try {
     const { groupId } = req.params;
@@ -369,6 +368,10 @@ exports.getGroupMessages = async (req, res) => {
       .populate({
         path: 'groupMessages.sender',
         select: 'firstName lastName profilePicture'
+      })
+      .populate({
+        path: 'groupMessages.readBy.user',
+        select: 'firstName lastName profilePicture' // ✅ Populate readBy.user
       })
       .slice('groupMessages', [skip, parseInt(limit)]);
 
@@ -387,7 +390,17 @@ exports.getGroupMessages = async (req, res) => {
     const decryptedMessages = group.groupMessages.map(msg => {
       const plain = msg.toObject({ getters: true });
 
-      // ✅ CDN URL conversion for each attachment
+      // ✅ Add current user to readBy if not already there
+      const alreadyRead = msg.readBy.some(r => r.user.toString() === userId.toString());
+      if (!alreadyRead) {
+        // Add user to the readBy array with the current timestamp
+        msg.readBy.push({ user: userId, readAt: new Date() });
+      }
+
+      // Update the message in the database after modifying the readBy field
+      msg.save();
+
+      // ✅ Handle attachments and CDN conversion
       if (plain.attachments && plain.attachments.length > 0) {
         plain.attachments = plain.attachments.map(att => ({
           ...att,
@@ -397,6 +410,9 @@ exports.getGroupMessages = async (req, res) => {
 
       return plain;
     });
+
+    // Save updated group with the modified readBy info
+    await group.save();
 
     return successResponse(res, {
       messages: decryptedMessages,
@@ -411,7 +427,6 @@ exports.getGroupMessages = async (req, res) => {
     return errorResponse(res, error.message, 500);
   }
 };
-
 
 
 // 5. Delete Group Message
