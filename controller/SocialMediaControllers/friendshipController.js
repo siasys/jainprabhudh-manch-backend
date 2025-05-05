@@ -16,7 +16,7 @@ const followUser = asyncHandler(async (req, res) => {
 const getFollowRequests = asyncHandler(async (req, res) => {
     const { userId } = req.params;
     const requests = await Friendship.find({ following: userId, followStatus: 'following' })
-        .populate('follower', 'firstName lastName profilePicture');
+        .populate('follower', 'firstName lastName fullName profilePicture');
     res.json({ success: true, requests });
 });
 
@@ -61,7 +61,7 @@ const getFollowers = asyncHandler(async (req, res) => {
     const { userId } = req.params;
     try {
         const followers = await Friendship.find({ following: userId })
-            .populate('follower', 'firstName lastName profilePicture');
+            .populate('follower', 'firstName lastName fullName profilePicture');
         res.status(200).json({
             success: true,
             count: followers.length,
@@ -69,6 +69,7 @@ const getFollowers = asyncHandler(async (req, res) => {
                 id: f.follower._id,
                 firstName: f.follower.firstName,
                 lastName: f.follower.lastName,
+                fullName: f.follower.fullName,
                 profilePicture: f.follower.profilePicture,
                 followStatus: "following"
             }))
@@ -83,7 +84,7 @@ const getFollowing = asyncHandler(async (req, res) => {
     const { userId } = req.params;
     try {
         const following = await Friendship.find({ follower: userId })
-            .populate('following', 'firstName lastName profilePicture'); 
+            .populate('following', 'firstName lastName fullName profilePicture'); 
         res.status(200).json({
             success: true,
             count: following.length,
@@ -91,6 +92,7 @@ const getFollowing = asyncHandler(async (req, res) => {
                 id: f.following._id,
                 firstName: f.following.firstName,
                 lastName: f.following.lastName,
+                fullName: f.following.fullName,
                 profilePicture: f.following.profilePicture,
                 followStatus: "following" 
             }))

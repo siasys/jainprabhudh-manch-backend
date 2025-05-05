@@ -143,18 +143,14 @@ const jainAadharSchema = new mongoose.Schema(
         default: Date.now
       }
     }],
-    location: {
-      country: {
-        type: String,
-        required: true,
-        default: 'India'
-      },
-      state: String,
-      district: String,
-      city: String,
-      address: String,
-      pinCode: String
-    }
+location: {
+  country: { type: String, required: true, default: 'India' },
+  state: String,
+  district: String,
+  city: String,
+  address: String,
+  pinCode: String
+}
   },
   { timestamps: true }
 );

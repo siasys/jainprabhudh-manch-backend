@@ -34,7 +34,7 @@ exports.getNotifications = async (req, res) => {
       .sort({ createdAt: -1 })
       .populate({
         path: "senderId",
-        select: "firstName lastName profilePicture", // Sirf yahi fields chahiye
+        select: "firstName lastName fullName profilePicture", // Sirf yahi fields chahiye
       });
       res.status(200).json({ success: true, notifications });
   } catch (error) {

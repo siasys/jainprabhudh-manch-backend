@@ -19,7 +19,8 @@ const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 // Generate a random 6-digit code
 const generateVerificationCode = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
-};
+  };
+  
 // Register new user with enhanced security
 const registerUser = [
     userValidation.register,
@@ -44,22 +45,22 @@ const registerUser = [
             city,
         } = req.body;
         // Check if user already exists
-        const existingUser = await User.findOne({ phoneNumber });
-        if (existingUser) {
-            return errorResponse(res, 'User with this phone number already exists', 400);
-        }
-        
         const existingUserByEmail = await User.findOne({ email });
 
         if (existingUserByEmail) {
             if (existingUserByEmail.isEmailVerified) {
                 return errorResponse(res, 'User with this email already exists', 400);
             }
-
-            // 💡 Delete old unverified user to allow clean re-registration
+        
+            // 💡 Delete old unverified user to allow re-registration
             await User.deleteOne({ _id: existingUserByEmail._id });
         }
-
+        
+        // Now check phone number AFTER possibly deleting the old user
+        const existingUser = await User.findOne({ phoneNumber });
+        if (existingUser) {
+            return errorResponse(res, 'User with this phone number already exists', 400);
+        }
 
         // Generate verification code
         const verificationCode = generateVerificationCode();
@@ -206,7 +207,6 @@ const verifyEmail = asyncHandler(async (req, res) => {
         200
     );
 });
-
 // Resend verification code
 const resendVerificationCode = asyncHandler(async (req, res) => {
     const { email } = req.body;
@@ -341,9 +341,14 @@ const loginUser = [
     try {
             const user = await User.findOne({ email });
 
-            if (!user || !(await user.isPasswordMatched(password))) {
-                return errorResponse(res, "Invalid email or password", 401);
-            }
+            if (!user) {
+                return errorResponse(res, "Email not found", 401);
+              }
+        
+              const isMatch = await user.isPasswordMatched(password);
+              if (!isMatch) {
+                return errorResponse(res, "Incorrect password", 401);
+              }
 
             if (!user.isEmailVerified) {
                 return errorResponse(res, "Please verify your email before logging in", 401, {
@@ -395,7 +400,8 @@ const getAllUsers = asyncHandler(async (req, res) => {
         query.$or = [
             { firstName: searchRegex },
             { lastName: searchRegex },
-            { fullName: searchRegex }
+            { fullName: searchRegex },
+            { city: searchRegex }
         ];
     }
 
@@ -408,10 +414,8 @@ const getAllUsers = asyncHandler(async (req, res) => {
     // Role Filter
     if (role) query.role = role;
 
-    console.log("Final Query:", query); // Debugging ke liye
-
+    console.log("Final Query:", query);
     const skip = (parseInt(page) - 1) * parseInt(limit);
-
     const users = await User.find(query)
         .select('-password -__v')
         .sort({ createdAt: -1 })

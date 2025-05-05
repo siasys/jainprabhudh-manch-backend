@@ -21,6 +21,7 @@ const { canReviewJainAadharByLocation } = require('../../middlewares/sanghPermis
 const upload = require('../../middlewares/upload');
 const rateLimit = require('express-rate-limit');
 const { body, param, query } = require('express-validator');
+const { generateJainAadharCard } = require('../../controller/UserRegistrationControllers/generateCard');
 
 // Rate limiting for application submission
 // const applicationLimiter = rateLimit({
@@ -76,7 +77,7 @@ router.get(
   ],
   getAllApplications
 );
-
+router.get('/generate-card/:id', generateJainAadharCard);
 // Admin application management
 // router.get(
 //   '/applications',

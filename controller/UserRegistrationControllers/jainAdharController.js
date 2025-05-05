@@ -165,11 +165,12 @@ const createJainAadhar = asyncHandler(async (req, res) => {
             reviewingSanghId,
             status: 'pending',
             location: {
-                country: 'India',
-                state: location.state,
+                country: location.country || 'India',
+                state: location.state || '',
                 district: location.district || '',
                 city: location.city || '',
-                area: location.area || null
+                address: location.address || '',
+                pinCode: location.pinCode || '',
             },
             reviewHistory: [{
                 action: 'submitted',

@@ -83,7 +83,7 @@ const getPostsByUser = asyncHandler(async (req, res) => {
   }
   const posts = await getOrSetCache(cacheKey, async () => {
     return await Post.find({ user: userId })
-      .populate('user', 'firstName lastName profilePicture')
+      .populate('user', 'firstName lastName fullName profilePicture')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -119,15 +119,15 @@ const getPostById = asyncHandler(async (req, res) => {
   // filter hata diya aur postId se direct search kar rahe hain
   const post = await getOrSetCache(`post:${postId}`, async () => {
     return await Post.findById(postId)
-      .populate('user', 'firstName lastName profilePicture postType')
+      .populate('user', 'firstName lastName fullName profilePicture postType')
       .populate({
         path: 'comments.user',
-        select: 'firstName lastName profilePicture',
+        select: 'firstName lastName fullName profilePicture',
       })
       .populate({
         path: 'comments.replies.user',
         model: 'User',
-        select: 'firstName lastName profilePicture',
+        select: 'firstName lastName fullName profilePicture',
       });
   }, 3600); 
 
@@ -145,7 +145,7 @@ const getPostById = asyncHandler(async (req, res) => {
       text: comment.text,
       user: {
         id: comment.user?._id,
-        name: `${comment.user?.firstName || ''} ${comment.user?.lastName || ''}`.trim(),
+        name: comment.user?.fullName,
         avatar: comment.user?.profilePicture,
       },
       createdAt: comment.createdAt,
@@ -154,14 +154,14 @@ const getPostById = asyncHandler(async (req, res) => {
         text: reply.text,
         user: {
           id: reply.user?._id,
-          name: `${reply.user?.firstName || ''} ${reply.user?.lastName || ''}`.trim(),
+          name: reply.user?.fullName,
           avatar: reply.user?.profilePicture,
         },
         createdAt: reply.createdAt,
       })),
     })),
     userId: post.user?._id,
-    userName: `${post.user?.firstName || ''} ${post.user?.lastName || ''}`.trim(),
+    userName: post.user?.fullName,
     profilePicture: post.user?.profilePicture,
     createdAt: post.createdAt,
   });
@@ -241,7 +241,7 @@ const getAllPosts = async (req, res) => {
       console.log("Query params:", { cursor, cursorDate: cursor ? new Date(cursor) : null, limit, skip });
       
       const posts = await Post.find(cursorQuery)
-        .populate('user', 'firstName lastName profilePicture')
+        .populate('user', 'firstName lastName fullName profilePicture')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -534,7 +534,7 @@ const addComment = async (req, res) => {
     await post.save();
     await invalidateCache(`post:${postId}`);
     await invalidateCache(`postComments:${postId}`);
-    await post.populate('comments.user', 'firstName lastName profilePicture');
+    await post.populate('comments.user', 'firstName lastName fullName profilePicture');
     // Send a comment notification
     const notification = new Notification({
       senderId: userId,
@@ -575,7 +575,7 @@ const addReply = async (req, res) => {
     };
     comment.replies.push(newReply);
     await post.save();
-    await post.populate('comments.replies.user', 'firstName lastName profilePicture');
+    await post.populate('comments.replies.user', 'firstName lastName fullName profilePicture');
      // Send a reply notification
      const notification = new Notification({
       senderId: userId,
@@ -610,7 +610,7 @@ const getReplies = async (req, res) => {
     if (!comment) {
       return res.status(404).json({ message: 'Comment not found' });
     }
-    await post.populate('comments.replies.user', 'firstName lastName profilePicture');
+    await post.populate('comments.replies.user', 'firstName lastName fullName profilePicture');
       res.status(200).json({
       message: 'Replies fetched successfully',
       replies: comment.replies,
