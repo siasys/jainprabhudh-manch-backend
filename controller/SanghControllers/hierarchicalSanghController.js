@@ -147,23 +147,23 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
        // await validateOfficeBearers(officeBearers);
       
         // Validate hierarchy level before creation
-        const parentSangh = parentSanghId ? await HierarchicalSangh.findById(parentSanghId) : null;
-        if (parentSangh) {
-            const levelHierarchy = ['foundation','country', 'state', 'district', 'city', 'area'];
-            const parentIndex = levelHierarchy.indexOf(parentSangh.level);
-            const currentIndex = levelHierarchy.indexOf(level);
+        // const parentSangh = parentSanghId ? await HierarchicalSangh.findById(parentSanghId) : null;
+        // if (parentSangh) {
+        //     const levelHierarchy = ['foundation','country', 'state', 'district', 'city', 'area'];
+        //     const parentIndex = levelHierarchy.indexOf(parentSangh.level);
+        //     const currentIndex = levelHierarchy.indexOf(level);
             
-            // if (currentIndex <= parentIndex || currentIndex - parentIndex > 1) {
-            //     return errorResponse(res, `Invalid hierarchy: ${level} level cannot be directly under ${parentSangh.level} level`, 400);
-            // }
-        }
+        //     if (currentIndex <= parentIndex || currentIndex - parentIndex > 1) {
+        //         return errorResponse(res, `Invalid hierarchy: ${level} level cannot be directly under ${parentSangh.level} level`, 400);
+        //     }
+        // }
 
         // Create Sangh
         const sangh = await HierarchicalSangh.create({
             name,
             level,
             location,
-            parentSangh: parentSanghId,
+            // parentSangh: parentSanghId,
             officeBearers: formattedOfficeBearers,
             description,
             contact,
