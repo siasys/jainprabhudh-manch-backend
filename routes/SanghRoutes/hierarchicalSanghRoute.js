@@ -30,13 +30,13 @@ router.use(authMiddleware);
 // Create new Sangh (Protected + Requires ability to create lower level)
 router.post('/create', 
     upload.sangathanDocs,
-    // checkSanghCreationPermission,
-    // (req, res, next) => {
-    //     if (req.user.role === 'superadmin') {
-    //         return next();
-    //     }
-    //     validateLocationHierarchy(req, res, next);
-    // },
+    checkSanghCreationPermission,
+    (req, res, next) => {
+        if (req.user.role === 'superadmin') {
+            return next();
+        }
+        validateLocationHierarchy(req, res, next);
+    },
     createHierarchicalSangh
 );
     // Get all Sangh 
