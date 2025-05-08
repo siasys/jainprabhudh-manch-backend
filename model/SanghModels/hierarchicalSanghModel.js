@@ -237,7 +237,7 @@ hierarchicalSanghSchema.methods.validateHierarchy = async function() {
     //     throw new Error('Non-country level Sangh must have a parent Sangh');
     // }
 
-    // const parentSangh = await this.constructor.findById(this.parentSangh);
+    const parentSangh = await this.constructor.findById(this.parentSangh);
     // if (!parentSangh) {
     //     throw new Error('Parent Sangh not found');
     // }
