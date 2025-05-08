@@ -139,10 +139,10 @@ const hierarchicalSanghSchema = new mongoose.Schema({
             }
         }
     },
-    parentSangh: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'HierarchicalSangh'
-    },
+    // parentSangh: {
+    //     type: mongoose.Schema.Types.ObjectId,
+    //     ref: 'HierarchicalSangh'
+    // },
     sanghAccessId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'SanghAccess',

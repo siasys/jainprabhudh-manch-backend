@@ -48,7 +48,7 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             level,
             location,
             officeBearers,
-            parentSanghId,
+           // parentSanghId,
             contact,
             establishedDate,
             description,
@@ -72,22 +72,22 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
          let resolvedSanghType = sanghType;
          let parentMainSanghId = null;
  
-         if (parentSanghId) {
-             const parentSangh = await HierarchicalSangh.findById(parentSanghId);
-            //  if (!parentSangh) {
-            //      return errorResponse(res, 'Parent Sangh not found', 404);
-            //  }
+        //  if (parentSanghId) {
+        //      const parentSangh = await HierarchicalSangh.findById(parentSanghId);
+        //     //  if (!parentSangh) {
+        //     //      return errorResponse(res, 'Parent Sangh not found', 404);
+        //     //  }
  
-             // If parent is specialized, child must be the same type
-             if (parentSangh.sanghType !== 'main') {
-                 resolvedSanghType = parentSangh.sanghType;
-             }
+        //      // If parent is specialized, child must be the same type
+        //     //  if (parentSangh.sanghType !== 'main') {
+        //     //      resolvedSanghType = parentSangh.sanghType;
+        //     //  }
  
-             // Track the top-level main Sangh for specialized Sanghs
-             if (resolvedSanghType !== 'main') {
-                 parentMainSanghId = parentSangh.parentMainSangh || parentSangh._id;
-             }
-         }
+        //      // Track the top-level main Sangh for specialized Sanghs
+        //     //  if (resolvedSanghType !== 'main') {
+        //     //      parentMainSanghId = parentSangh.parentMainSangh || parentSangh._id;
+        //     //  }
+        //  }
          // Validate office bearers
          if (!officeBearers.president || !officeBearers.secretary || !officeBearers.treasurer) {
              return errorResponse(res, 'All office bearer details are required', 400);
@@ -147,23 +147,23 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
        // await validateOfficeBearers(officeBearers);
       
         // Validate hierarchy level before creation
-        const parentSangh = parentSanghId ? await HierarchicalSangh.findById(parentSanghId) : null;
-        if (parentSangh) {
-            const levelHierarchy = ['foundation','country', 'state', 'district', 'city', 'area'];
-            const parentIndex = levelHierarchy.indexOf(parentSangh.level);
-            const currentIndex = levelHierarchy.indexOf(level);
+        // const parentSangh = parentSanghId ? await HierarchicalSangh.findById(parentSanghId) : null;
+        // if (parentSangh) {
+        //     const levelHierarchy = ['foundation','country', 'state', 'district', 'city', 'area'];
+        //     const parentIndex = levelHierarchy.indexOf(parentSangh.level);
+        //     const currentIndex = levelHierarchy.indexOf(level);
             
-            // if (currentIndex <= parentIndex || currentIndex - parentIndex > 1) {
-            //     return errorResponse(res, `Invalid hierarchy: ${level} level cannot be directly under ${parentSangh.level} level`, 400);
-            // }
-        }
+        //     // if (currentIndex <= parentIndex || currentIndex - parentIndex > 1) {
+        //     //     return errorResponse(res, `Invalid hierarchy: ${level} level cannot be directly under ${parentSangh.level} level`, 400);
+        //     // }
+        // }
 
         // Create Sangh
         const sangh = await HierarchicalSangh.create({
             name,
             level,
             location,
-            parentSangh: parentSanghId,
+            // parentSangh: parentSanghId,
             officeBearers: formattedOfficeBearers,
             description,
             contact,
