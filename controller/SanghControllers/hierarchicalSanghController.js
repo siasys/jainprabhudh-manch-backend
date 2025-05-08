@@ -74,9 +74,9 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
  
          if (parentSanghId) {
              const parentSangh = await HierarchicalSangh.findById(parentSanghId);
-             if (!parentSangh) {
-                 return errorResponse(res, 'Parent Sangh not found', 404);
-             }
+            //  if (!parentSangh) {
+            //      return errorResponse(res, 'Parent Sangh not found', 404);
+            //  }
  
              // If parent is specialized, child must be the same type
              if (parentSangh.sanghType !== 'main') {
