@@ -6,9 +6,9 @@ const sharp = require('sharp');
 
 // File type validation
 const allowedTypes = new Set([
-  'image/jpeg', 
+  'image/jpeg',
   'image/jpg', 
-  'image/png', 
+  'image/png',
   'application/pdf',
   'video/mp4',
   'video/quicktime',
@@ -203,7 +203,10 @@ module.exports.jainAadharDocs = upload.fields([
 module.exports.storyUpload = [upload.array('media', 10), optimizeImage];
 module.exports.postMediaUpload = [upload.fields([
   { name: 'image', maxCount: 10 },
-  { name: 'video', maxCount: 10 }
+  { name: 'video', maxCount: 10 },
+  { name: 'image1', maxCount: 1 },
+  { name: 'image2', maxCount: 1 },
+  { name: 'image3', maxCount: 1 }
 ]), optimizeImage];
 module.exports.jobPostUpload = upload.fields([
   { name: 'jobPost', maxCount: 10 },

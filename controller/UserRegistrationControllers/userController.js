@@ -263,7 +263,7 @@ const requestPasswordReset = asyncHandler(async (req, res) => {
 
     // Security-friendly response
     if (!user) {
-        return successResponse(res, {}, 'If your email is registered, you will receive a password reset code');
+        return errorResponse(res, 'This email is not registered', 404);
     }
 
     // ✅ Add this check
