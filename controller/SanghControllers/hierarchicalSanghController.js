@@ -60,7 +60,8 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
         // console.log("Received parentSanghId:", req.body.parentSanghId);
 
          // Validate required fields
-        if (!name || !level || !location || !officeBearers) {
+        // if (!name || !level || !location || !officeBearers) {
+            if (!name || !level || !officeBearers) {
             return errorResponse(res, 'Missing required fields', 400);
         }
         // Validate sanghType
