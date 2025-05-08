@@ -139,10 +139,11 @@ const hierarchicalSanghSchema = new mongoose.Schema({
             }
         }
     },
-    // parentSangh: {
-    //     type: mongoose.Schema.Types.ObjectId,
-    //     ref: 'HierarchicalSangh'
-    // },
+  parentSangh: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'HierarchicalSangh',
+    default: null
+},
     sanghAccessId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'SanghAccess',
@@ -236,10 +237,10 @@ hierarchicalSanghSchema.methods.validateHierarchy = async function() {
     //     throw new Error('Non-country level Sangh must have a parent Sangh');
     // }
 
-    const parentSangh = await this.constructor.findById(this.parentSangh);
-    if (!parentSangh) {
-        throw new Error('Parent Sangh not found');
-    }
+    // const parentSangh = await this.constructor.findById(this.parentSangh);
+    // if (!parentSangh) {
+    //     throw new Error('Parent Sangh not found');
+    // }
 
     const levelHierarchy = ['foundation', 'country', 'state', 'district', 'city', 'area'];
     const parentIndex = levelHierarchy.indexOf(parentSangh.level);
