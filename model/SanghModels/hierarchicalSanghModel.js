@@ -116,9 +116,9 @@ const hierarchicalSanghSchema = new mongoose.Schema({
         },
         state: {
             type: String,
-            required: function() {
-                return ['state', 'district', 'city', 'area'].includes(this.level);
-            }
+            // required: function() {
+            //     return ['state', 'district', 'city', 'area'].includes(this.level);
+            // }
         },
         district: {
             type: String,
