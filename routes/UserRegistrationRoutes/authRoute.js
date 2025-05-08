@@ -65,7 +65,7 @@ router.post('/reset-password', resetPassword);
 router.post('/login',loginUser);
 router.use(authMiddleware);
 router.post('/logout', logoutUser);
-router.use(checkAccess);
+// router.use(checkAccess);
 router.get('/', getAllUsers);
 // Search users endpoint for suggestion/complaint recipient selection
 router.get('/search', searchUsers);
