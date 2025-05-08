@@ -153,9 +153,9 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             const parentIndex = levelHierarchy.indexOf(parentSangh.level);
             const currentIndex = levelHierarchy.indexOf(level);
             
-            if (currentIndex <= parentIndex || currentIndex - parentIndex > 1) {
-                return errorResponse(res, `Invalid hierarchy: ${level} level cannot be directly under ${parentSangh.level} level`, 400);
-            }
+            // if (currentIndex <= parentIndex || currentIndex - parentIndex > 1) {
+            //     return errorResponse(res, `Invalid hierarchy: ${level} level cannot be directly under ${parentSangh.level} level`, 400);
+            // }
         }
 
         // Create Sangh
