@@ -73,7 +73,7 @@ router.get('/:id', getUserById);
 router.put('/:id', updateUserById);
 router.put('/update-privacy/:id', updatePrivacy);
 router.post('/upload-profile-picture', authMiddleware,
- upload.single('profilePicture'),uploadProfilePicture);
+upload.single('profilePicture'),uploadProfilePicture);
 router.post('/skip-profile-picture', authMiddleware, skipProfilePicture);
 
 module.exports = router;
