@@ -217,14 +217,15 @@ const getPostById = asyncHandler(async (req, res) => {
 //     res.json(formattedPosts);
 // });
 
-// Get all posts
+// Get all posts (Modified: Followed User Posts First)
+// Get all posts (Modified: Followed User Posts First)
 const getAllPosts = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 5;
     const cursor = req.query.cursor;
-    
+    const userId = req.query.userId; // User ID of the logged-in user
+
     // Skip the cache when debugging pagination
-    // Or create a unique cache key that includes a timestamp
     const cacheKey = cursor
       ? `allUserPosts:cursor:${cursor}:limit:${limit}:page:${req.query.page || 1}`
       : `allUserPosts:firstPage:limit:${limit}`;
@@ -234,46 +235,49 @@ const getAllPosts = async (req, res) => {
     const skip = cursor ? 0 : (page - 1) * limit;
 
     const result = await getOrSetCache(cacheKey, async () => {
-      // If using cursor, get posts older than the cursor
-      // If not using cursor but using page, skip the appropriate number
       const cursorQuery = cursor ? { createdAt: { $lt: new Date(cursor) } } : {};
-      
-      console.log("Query params:", { cursor, cursorDate: cursor ? new Date(cursor) : null, limit, skip });
-      
+
+      // Fetching the user's followed list
+      const user = await User.findById(userId).select('friends');
+      if (!user) {
+        return { posts: [], pagination: { nextCursor: null, hasMore: false, currentPage: page } };
+      }
+
+      const followedUserIds = user.friends.map(f => f.toString());
+
+      // Fetching posts with followed users first
       const posts = await Post.find(cursorQuery)
         .populate('user', 'firstName lastName fullName profilePicture')
         .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
         .lean();
-      
-      // Log the actual createdAt values to debug
-      console.log("Post dates:", posts.map(p => p.createdAt));
-      
-      // Get the timestamp of the last post for the next cursor
-      const nextCursor = posts.length > 0
-        ? posts[posts.length - 1].createdAt.toISOString()
+
+      // Separate followed and non-followed user posts
+      const followedPosts = posts.filter(post => followedUserIds.includes(post.user._id.toString()));
+      const otherPosts = posts.filter(post => !followedUserIds.includes(post.user._id.toString()));
+
+      const sortedPosts = [...followedPosts, ...otherPosts].slice(skip, skip + limit);
+
+      const nextCursor = sortedPosts.length > 0
+        ? sortedPosts[sortedPosts.length - 1].createdAt.toISOString()
         : null;
-      
-      // Check if there are more posts after this batch
-      const hasMore = posts.length === limit;
-      
+
       return {
-        posts,
+        posts: sortedPosts,
         pagination: {
           nextCursor,
-          hasMore,
+          hasMore: sortedPosts.length === limit,
           currentPage: page,
         }
       };
-    }, 30); // Reduce cache time during debugging
+    }, 30); // Cache for 30 seconds
 
-    // Rest of your code...
     return successResponse(res, result, 'All user posts fetched');
   } catch (error) {
+    console.error("Error in getAllPosts:", error);
     return errorResponse(res, 'Failed to fetch posts', 500, error.message);
   }
 };
+
 // const getAllPosts = async (req, res) => {
 //   try {
 //     const cacheKey = `allUserPosts:all`;

@@ -1,15 +1,30 @@
 const Friendship = require('../../model/SocialMediaModels/friendshipModel');
 const asyncHandler = require('express-async-handler');
 const Notification = require('../../model/SocialMediaModels/notificationModel');
+const User = require('../../model/UserRegistrationModels/userModel');
 
-// Follow a user
+// Follow a user (Modified with User Model Friends Array)
 const followUser = asyncHandler(async (req, res) => {
     const { followerId, followingId } = req.body;
+    // Check if the friendship already exists
     const existingFriendship = await Friendship.findOne({ follower: followerId, following: followingId });
     if (existingFriendship) {
         return res.status(400).json({ message: 'Already following this user' });
     }
-    const newFriendship = await Friendship.create({ follower: followerId, following: followingId, followStatus: 'following' });
+    // Create new friendship
+    const newFriendship = await Friendship.create({
+        follower: followerId,
+        following: followingId,
+        followStatus: 'following'
+    });
+    // Add following user to follower's friends list
+    await User.findByIdAndUpdate(followerId, {
+        $addToSet: { friends: followingId } // Prevents duplicate entries
+    });
+    await User.findByIdAndUpdate(followingId, {
+        $addToSet: { friends: followerId }
+    });
+
     res.status(201).json({ message: 'User followed successfully', friendship: newFriendship });
 });
 
@@ -20,41 +35,45 @@ const getFollowRequests = asyncHandler(async (req, res) => {
     res.json({ success: true, requests });
 });
 
-
 // Unfollow a user
 const unfollowUser = asyncHandler(async (req, res) => {
     const { followerId, followingId } = req.body;
     console.log("Unfollow Request Received:", followerId, followingId);
-    // Follow Relationship Delete
     const friendship = await Friendship.findOneAndDelete({ follower: followerId, following: followingId });
     if (!friendship) {
         return res.status(404).json({ message: "Follow relationship not found" });
     }
     try {
+        // Remove from follower's friends list
+        await User.findByIdAndUpdate(followerId, {
+            $pull: { friends: followingId }
+        });
+        // Optionally, remove from following user's friends list
+        await User.findByIdAndUpdate(followingId, {
+            $pull: { friends: followerId }
+        });
         // Follow notification delete
         const notificationToDelete = await Notification.findOne({
             senderId: followerId,
             receiverId: followingId,
             type: "follow",
         });
-        console.log("Notification Found for Deletion:", notificationToDelete); // Debugging
         if (notificationToDelete) {
-            const deleteResult = await Notification.deleteOne({ _id: notificationToDelete._id });
-            console.log("Deleted Notification Count:", deleteResult.deletedCount);
+            await Notification.deleteOne({ _id: notificationToDelete._id });
             return res.status(200).json({
                 message: "User unfollowed successfully, follow notification removed",
-                followStatus: "follow",
-                notificationDeleted: deleteResult.deletedCount > 0 ? true : false,
+                followStatus: "unfollow",
+                notificationDeleted: true,
             });
         } else {
             return res.status(200).json({
                 message: "User unfollowed successfully, but no follow notification found",
-                followStatus: "follow",
+                followStatus: "unfollow",
             });
         }
     } catch (error) {
-        console.error("Error deleting notification:", error);
-        return res.status(500).json({ message: "Error deleting notification" });
+        console.error("Error deleting notification or updating friends list:", error);
+        return res.status(500).json({ message: "Error deleting notification or updating friends list" });
     }
 });
 const getFollowers = asyncHandler(async (req, res) => {
