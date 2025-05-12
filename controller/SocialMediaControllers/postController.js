@@ -216,118 +216,136 @@ const getPostById = asyncHandler(async (req, res) => {
 
 //     res.json(formattedPosts);
 // });
-
-// Get all posts (Modified: Followed User Posts First)
-// Get all posts (Modified: Followed User Posts First)
+// Optimized Get All Posts API
 const getAllPosts = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 5;
     const cursor = req.query.cursor;
-    const userId = req.query.userId; // User ID of the logged-in user
+    const userId = req.query.userId;
 
-    // Skip the cache when debugging pagination
-    const cacheKey = cursor
-      ? `allUserPosts:cursor:${cursor}:limit:${limit}:page:${req.query.page || 1}`
-      : `allUserPosts:firstPage:limit:${limit}`;
+    // Fetching the user's followed list
+    const user = await User.findById(userId).select('friends');
+    if (!user) {
+      return successResponse(res, {
+        posts: [],
+        pagination: { nextCursor: null, hasMore: false }
+      }, 'User not found');
+    }
 
-    // Add a page parameter to your API call
-    const page = parseInt(req.query.page) || 1;
-    const skip = cursor ? 0 : (page - 1) * limit;
+    const followedUserIds = user.friends.map(f => f.toString());
 
-    const result = await getOrSetCache(cacheKey, async () => {
-      const cursorQuery = cursor ? { createdAt: { $lt: new Date(cursor) } } : {};
+    // Query to fetch followed user posts
+    const followedPostsQuery = {
+      user: { $in: followedUserIds },
+      ...(cursor ? { createdAt: { $lt: new Date(cursor) } } : {})
+    };
 
-      // Fetching the user's followed list
-      const user = await User.findById(userId).select('friends');
-      if (!user) {
-        return { posts: [], pagination: { nextCursor: null, hasMore: false, currentPage: page } };
-      }
+    // Query to fetch non-followed user posts
+    const otherPostsQuery = {
+      user: { $nin: followedUserIds },
+      ...(cursor ? { createdAt: { $lt: new Date(cursor) } } : {})
+    };
 
-      const followedUserIds = user.friends.map(f => f.toString());
+    // Fetching posts of followed users first, then non-followed
+    const followedPosts = await Post.find(followedPostsQuery)
+      .populate('user', 'firstName lastName fullName profilePicture')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
 
-      // Fetching posts with followed users first
-      const posts = await Post.find(cursorQuery)
+    const remainingLimit = limit - followedPosts.length;
+
+    let otherPosts = [];
+    if (remainingLimit > 0) {
+      otherPosts = await Post.find(otherPostsQuery)
         .populate('user', 'firstName lastName fullName profilePicture')
         .sort({ createdAt: -1 })
+        .limit(remainingLimit)
         .lean();
+    }
 
-      // Separate followed and non-followed user posts
-      const followedPosts = posts.filter(post => followedUserIds.includes(post.user._id.toString()));
-      const otherPosts = posts.filter(post => !followedUserIds.includes(post.user._id.toString()));
+    const sortedPosts = [...followedPosts, ...otherPosts];
+    const nextCursor = sortedPosts.length > 0 
+      ? sortedPosts[sortedPosts.length - 1].createdAt.toISOString() 
+      : null;
 
-      const sortedPosts = [...followedPosts, ...otherPosts].slice(skip, skip + limit);
-
-      const nextCursor = sortedPosts.length > 0
-        ? sortedPosts[sortedPosts.length - 1].createdAt.toISOString()
-        : null;
-
-      return {
-        posts: sortedPosts,
-        pagination: {
-          nextCursor,
-          hasMore: sortedPosts.length === limit,
-          currentPage: page,
-        }
-      };
-    }, 30); // Cache for 30 seconds
-
-    return successResponse(res, result, 'All user posts fetched');
+    return successResponse(res, {
+      posts: sortedPosts,
+      pagination: {
+        nextCursor,
+        hasMore: sortedPosts.length === limit
+      }
+    }, 'All user posts fetched');
   } catch (error) {
     console.error("Error in getAllPosts:", error);
     return errorResponse(res, 'Failed to fetch posts', 500, error.message);
   }
 };
-
+// Get all posts (Modified: Followed User Posts First)
 // const getAllPosts = async (req, res) => {
 //   try {
-//     const cacheKey = `allUserPosts:all`;
+//     const limit = parseInt(req.query.limit) || 5;
+//     const cursor = req.query.cursor;
+//     const userId = req.query.userId; // User ID of the logged-in user
+
+//     // Skip the cache when debugging pagination
+//     const cacheKey = cursor
+//       ? `allUserPosts:cursor:${cursor}:limit:${limit}:page:${req.query.page || 1}`
+//       : `allUserPosts:firstPage:limit:${limit}`;
+
+//     // Add a page parameter to your API call
+//     const page = parseInt(req.query.page) || 1;
+//     const skip = cursor ? 0 : (page - 1) * limit;
 
 //     const result = await getOrSetCache(cacheKey, async () => {
-//       // Fetch all visible posts without pagination
-//       const posts = await Post.find({ isHidden: false })
-//         .populate('user', 'firstName lastName profilePicture')
-//         .sort({ createdAt: -1 })  // Most recent first
-//         .lean();
+//       const cursorQuery = cursor ? { createdAt: { $lt: new Date(cursor) } } : {};
 
-//       if (!posts || posts.length === 0) {
-//         return {
-//           posts: [],
-//           pagination: { nextCursor: null, hasMore: false },
-//         };
+//       // Fetching the user's followed list
+//       const user = await User.findById(userId).select('friends');
+//       if (!user) {
+//         return { posts: [], pagination: { nextCursor: null, hasMore: false, currentPage: page } };
 //       }
 
+//       const followedUserIds = user.friends.map(f => f.toString());
+
+//       // Fetching posts with followed users first
+//       const posts = await Post.find(cursorQuery)
+//         .populate('user', 'firstName lastName fullName profilePicture')
+//         .sort({ createdAt: -1 })
+//         .lean();
+
+//       // Separate followed and non-followed user posts
+//       const followedPosts = posts.filter(post => followedUserIds.includes(post.user._id.toString()));
+//       const otherPosts = posts.filter(post => !followedUserIds.includes(post.user._id.toString()));
+
+//       const sortedPosts = [...followedPosts, ...otherPosts].slice(skip, skip + limit);
+
+//       const nextCursor = sortedPosts.length > 0
+//         ? sortedPosts[sortedPosts.length - 1].createdAt.toISOString()
+//         : null;
+
 //       return {
-//         posts,
+//         posts: sortedPosts,
 //         pagination: {
-//           nextCursor: null,
-//           hasMore: false,
+//           nextCursor,
+//           hasMore: sortedPosts.length === limit,
+//           currentPage: page,
 //         }
 //       };
-//     }, 180); // Cache for 3 minutes
-
-//     // Convert S3 URL to CDN
-//     result.posts = result.posts.map(post => ({
-//       ...post,
-//       media: post.media.map(m => ({
-//         ...m,
-//         url: convertS3UrlToCDN(m.url)
-//       }))
-//     }));
+//     }, 30); // Cache for 30 seconds
 
 //     return successResponse(res, result, 'All user posts fetched');
-
 //   } catch (error) {
+//     console.error("Error in getAllPosts:", error);
 //     return errorResponse(res, 'Failed to fetch posts', 500, error.message);
 //   }
 // };
-
 
 // Function to toggle like on a post
 const toggleLike = [
   asyncHandler(async (req, res) => {
     const { postId } = req.params;
     const { userId } = req.body;
-
     if (!userId) {
       return res.status(400).json({ message: 'User ID is required' });
     }
@@ -335,12 +353,10 @@ const toggleLike = [
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-
     const post = await Post.findById(postId).populate('user');
     if (!post) {
       return res.status(404).json({ message: 'Post not found' });
     }
-
     const isLiked = post.likes.includes(userId);
     if (isLiked) {
       post.likes = post.likes.filter((id) => id.toString() !== userId);
@@ -361,12 +377,10 @@ const toggleLike = [
        message:`${user.firstName} ${user.lastName} liked your post.`,
       });
       await notification.save();
-
       // Socket notification send karein
       const io = getIo();
       io.to(post.user._id.toString()).emit('newNotification', notification);
     }
-
     await post.save();
     await invalidateCache(`post:${postId}`);
     await invalidateCache(`postLikes:${postId}`);
@@ -426,7 +440,6 @@ const deletePost = asyncHandler(async (req, res) => {
             Bucket: process.env.AWS_BUCKET_NAME,
             Key: key
           };
-          
           await s3Client.send(new DeleteObjectCommand(deleteParams));
           console.log(`Successfully deleted file from S3: ${key}`);
         }
@@ -435,7 +448,6 @@ const deletePost = asyncHandler(async (req, res) => {
         // Continue with post deletion even if S3 deletion fails
       }
     });
-    
     // Wait for all S3 delete operations to complete
     await Promise.all(deletePromises);
   }
@@ -452,10 +464,8 @@ const deletePost = asyncHandler(async (req, res) => {
 const editPost = asyncHandler(async (req, res) => {
   const { userId, caption, image } = req.body;
   const { postId } = req.params;
-
   try {
     const post = await Post.findById(postId);
-
     if (!post) {
       return res.status(404).json({ error: 'Post not found' });
     }
