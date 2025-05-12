@@ -55,7 +55,7 @@ router.get('/hierarchy/:id',
 );
 
 // Get Sanghs by level and location
-router.get('/search', 
+router.get('/search',
     getSanghsByLevelAndLocation
 );
 
@@ -66,16 +66,7 @@ router.get('/children/:id',
 );
 
 // Update Sangh (Requires office bearer permission)
-router.patch('/update/:id', 
-    upload.sangathanDocs,
-    (req, res, next) => {
-        if (req.user.role === 'superadmin') {
-            return next();
-        }
-        validateSanghAccess(req, res, next);
-    },
-    updateHierarchicalSangh
-);
+router.patch('/update/:id', upload.sangathanDocs, updateHierarchicalSangh);
 
 // Member management routes with updated permissions
 router.post('/:sanghId/members', 
