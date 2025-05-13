@@ -236,10 +236,6 @@ const createPanchGroup = asyncHandler(async (req, res) => {
             } else {
                 return errorResponse(res, 'Date of birth is required for all members', 400);
             }
-            
-            // if (!member.personalDetails.educationQualification) {
-            //     return errorResponse(res, 'Education qualification is required for all members', 400);
-            // }
         }
 
         const membersWithDocs = parsedMembers.map((member, index) => {
@@ -262,10 +258,10 @@ const createPanchGroup = asyncHandler(async (req, res) => {
             term: {
                 startDate: new Date(),
                 endDate: new Date(Date.now() + (2 * 365 * 24 * 60 * 60 * 1000))
-            }
+            },
+            panchName
         });
 
-        // ✅ **Get Level of Sangh President**
         const presidentUser = await User.findById(presidentUserId);
         let sanghRole = presidentUser.sanghRoles.find(role => role.sanghId.toString() === sanghId);
         const level = sanghRole ? sanghRole.level : 'city'; // Default level = city
