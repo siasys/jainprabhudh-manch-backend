@@ -299,7 +299,7 @@ const createPanchGroup = asyncHandler(async (req, res) => {
             })),
             term: panchGroup.term,
             status: panchGroup.status,
-            panchName: panchName 
+            panchName: panchName
         };
 
         return successResponse(res, panchWithAccessKey, 'Panch group created successfully', 201);

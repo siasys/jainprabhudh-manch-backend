@@ -15,13 +15,13 @@ const panchMemberSchema = new mongoose.Schema({
         },
         mobileNumber: {
             type: String,
-            required: [true, 'Mobile number is required'],
-            validate: {
-                validator: function(v) {
-                    return /\d{10}/.test(v);
-                },
-                message: 'Please enter a valid 10-digit mobile number'
-            }
+            // required: [true, 'Mobile number is required'],
+            // validate: {
+            //     validator: function(v) {
+            //         return /\d{10}/.test(v);
+            //     },
+            //     message: 'Please enter a valid 10-digit mobile number'
+            // }
         },
         jainAadharNumber: {
             type: String,
