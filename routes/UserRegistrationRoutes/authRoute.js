@@ -4,7 +4,7 @@ const {
     registerUser, 
     getAllUsers, 
     getUserById, 
-    updateUserById, 
+    updateUserById,
     loginUser, 
     updatePrivacy,
     uploadProfilePicture,
