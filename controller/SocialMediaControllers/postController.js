@@ -234,20 +234,14 @@ const getAllPosts = async (req, res) => {
 
     const followedUserIds = user.friends.map(f => f.toString());
 
-    // Query to fetch followed user posts
-    const followedPostsQuery = {
+    // Building the query
+    const query = {
       user: { $in: followedUserIds },
-      ...(cursor ? { createdAt: { $lt: new Date(cursor) } } : {})
+      ...(cursor ? { createdAt: { $lt: new Date(cursor) } } : {}),
     };
 
-    // Query to fetch non-followed user posts
-    const otherPostsQuery = {
-      user: { $nin: followedUserIds },
-      ...(cursor ? { createdAt: { $lt: new Date(cursor) } } : {})
-    };
-
-    // Fetching posts of followed users first, then non-followed
-    const followedPosts = await Post.find(followedPostsQuery)
+    // Fetching posts of followed users first
+    const followedPosts = await Post.find(query)
       .populate('user', 'firstName lastName fullName profilePicture')
       .sort({ createdAt: -1 })
       .limit(limit)
@@ -257,6 +251,11 @@ const getAllPosts = async (req, res) => {
 
     let otherPosts = [];
     if (remainingLimit > 0) {
+      // Fetching posts from non-followed users
+      const otherPostsQuery = {
+        user: { $nin: followedUserIds },
+        ...(cursor ? { createdAt: { $lt: new Date(cursor) } } : {}),
+      };
       otherPosts = await Post.find(otherPostsQuery)
         .populate('user', 'firstName lastName fullName profilePicture')
         .sort({ createdAt: -1 })
@@ -264,11 +263,13 @@ const getAllPosts = async (req, res) => {
         .lean();
     }
 
+    // Combining posts from followed and non-followed users
     const sortedPosts = [...followedPosts, ...otherPosts];
     const nextCursor = sortedPosts.length > 0 
       ? sortedPosts[sortedPosts.length - 1].createdAt.toISOString() 
       : null;
 
+    // Sending response
     return successResponse(res, {
       posts: sortedPosts,
       pagination: {
@@ -276,11 +277,13 @@ const getAllPosts = async (req, res) => {
         hasMore: sortedPosts.length === limit
       }
     }, 'All user posts fetched');
+    
   } catch (error) {
     console.error("Error in getAllPosts:", error);
     return errorResponse(res, 'Failed to fetch posts', 500, error.message);
   }
 };
+
 // Get all posts (Modified: Followed User Posts First)
 // const getAllPosts = async (req, res) => {
 //   try {
