@@ -26,7 +26,7 @@ exports.createJainItihas = async (req, res) => {
 
 exports.getAllJainItihas = async (req, res) => {
   try {
-    const entries = await JainItihas.find().populate("userId", "firstName lastName profilePicture");
+    const entries = await JainItihas.find().populate("userId", "firstName lastName fullName profilePicture");
 
     // Convert image URLs to CDN
     const updatedEntries = entries.map(entry => ({

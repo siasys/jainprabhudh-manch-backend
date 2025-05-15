@@ -29,7 +29,7 @@ exports.getAllGranths = async (req, res) => {
   try {
     const granths = await JainGranth.find()
       .sort({ createdAt: -1 })
-      .populate('userId', 'firstName lastName profilePicture'); // ✅ Populate
+      .populate('userId', 'firstName lastName fullName profilePicture'); // ✅ Populate
 
     res.status(200).json(granths);
   } catch (error) {
