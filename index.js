@@ -61,9 +61,10 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   credentials: true
 }));
+
+app.use(logMiddleware);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended:false}));
-app.use(logMiddleware);
 app.use(express.json()); 
 app.use(express.urlencoded({ extended: true }));
 // Session configuration for payment flow
