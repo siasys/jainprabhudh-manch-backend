@@ -12,15 +12,12 @@ const getPanchMembers = asyncHandler(async (req, res) => {
     try {
         const { sanghId } = req.params;
         const { status } = req.query;
-
         const query = { sanghId };
         if (status) {
             query.status = status;
         }
-
         const panchMembers = await Panch.find(query)
             .sort({ createdAt: -1 });
-
         return successResponse(res, panchMembers, 'Panch members retrieved successfully');
     } catch (error) {
         return errorResponse(res, error.message, 500);
@@ -32,36 +29,29 @@ const updatePanchStatus = asyncHandler(async (req, res) => {
     try {
         const { sanghId, panchId } = req.params;
         const { status, replacementMember, replacementDocs } = req.body;
-
         // Note: isPresident middleware has already checked hierarchical permissions
         // We can proceed with the operation as the user has been verified
-
         const panchGroup = await Panch.findOne({ sanghId });
         if (!panchGroup) {
             return errorResponse(res, 'Panch group not found', 404);
         }
-
         const memberToUpdate = panchGroup.members.id(panchId);
         if (!memberToUpdate) {
             return errorResponse(res, 'Panch member not found', 404);
         }
-
         // If deactivating a member, require a replacement
         if (status === 'inactive') {
             if (!replacementMember || !replacementDocs) {
                 return errorResponse(res, 'Replacement member details and documents are required when deactivating a member', 400);
             }
-
             // Verify replacement member belongs to Sangh
             const sangh = await HierarchicalSangh.findById(panchGroup.sanghId);
-            const isSanghMember = sangh.members.some(m => 
+            const isSanghMember = sangh.members.some(m =>
                 m.jainAadharNumber === replacementMember.jainAadharNumber
             );
-
             if (!isSanghMember) {
-                return errorResponse(res, 'Replacement member must be a Sangh member', 400);
+             return errorResponse(res, 'Replacement member must be a Sangh member', 400);
             }
-
             // Create new member entry
             const newMember = {
                 personalDetails: replacementMember,
@@ -71,7 +61,6 @@ const updatePanchStatus = asyncHandler(async (req, res) => {
                 },
                 status: 'active'
             };
-
             // Update the Panch document
             await Panch.findOneAndUpdate(
                 { 'members._id': panchId },
@@ -83,14 +72,12 @@ const updatePanchStatus = asyncHandler(async (req, res) => {
                     $push: { members: newMember }
                 }
             );
-
             return successResponse(res, null, 'Panch member replaced successfully');
         }
 
         // If just updating status
         memberToUpdate.status = status;
         await memberToUpdate.save();
-
         return successResponse(res, memberToUpdate, 'Panch member status updated successfully');
     } catch (error) {
         return errorResponse(res, error.message, 500);
@@ -102,14 +89,12 @@ const editPanchMember = asyncHandler(async (req, res) => {
     try {
         const { sanghId, panchId } = req.params;
         const { personalDetails } = req.body;
-
         // Note: isPresident middleware has already checked hierarchical permissions
         // We can proceed with the operation as the user has been verified
-
         const updatedMember = await Panch.findOneAndUpdate(
-            { 
+            {
                 sanghId,
-                'members._id': panchId 
+                'members._id': panchId
             },
             {
                 $set: {
@@ -118,11 +103,9 @@ const editPanchMember = asyncHandler(async (req, res) => {
             },
             { new: true }
         );
-
         if (!updatedMember) {
             return errorResponse(res, 'Panch member not found', 404);
         }
-
         return successResponse(res, updatedMember, 'Panch member details updated successfully');
     } catch (error) {
         return errorResponse(res, error.message, 500);
@@ -133,15 +116,12 @@ const editPanchMember = asyncHandler(async (req, res) => {
 const deletePanchGroup = asyncHandler(async (req, res) => {
     try {
         const { sanghId } = req.params;
-
         // Note: isPresident middleware has already checked hierarchical permissions
         // We can proceed with the operation as the user has been verified
-
         const panchGroup = await Panch.findOne({ sanghId });
         if (!panchGroup) {
             return errorResponse(res, 'Panch group not found', 404);
         }
-
         // Delete all S3 files
         for (const member of panchGroup.members) {
             if (member.documents.jainAadharPhoto) {
@@ -163,7 +143,6 @@ const deletePanchGroup = asyncHandler(async (req, res) => {
                 }
             }
         }
-
         await Panch.deleteOne({ sanghId });
         return successResponse(res, null, 'Panch group deleted successfully');
     } catch (error) {
@@ -175,8 +154,7 @@ const createPanchGroup = asyncHandler(async (req, res) => {
     try {
         const { sanghId } = req.params;
         const { members,panchName } = req.body;
-        const presidentUserId = req.user._id; // ✅ President user ID
-
+        const presidentUserId = req.user._id;
         let parsedMembers;
         try {
             parsedMembers = members.map(member =>
@@ -185,7 +163,6 @@ const createPanchGroup = asyncHandler(async (req, res) => {
         } catch (error) {
             return errorResponse(res, 'Invalid member data format', 400);
         }
-
         if (!Array.isArray(parsedMembers) || parsedMembers.length !== 5) {
             return errorResponse(res, 'Exactly 5 members are required', 400);
         }
@@ -216,19 +193,16 @@ const createPanchGroup = asyncHandler(async (req, res) => {
             //     return errorResponse(res, 'Duplicate Jain Aadhar numbers found', 400);
             // }
             jainAadharNumbers.add(member.personalDetails.jainAadharNumber);
-            
             if (member.personalDetails.dateOfBirth) {
                 const today = new Date();
                 const birthDate = new Date(member.personalDetails.dateOfBirth);
                 let age = today.getFullYear() - birthDate.getFullYear();
                 const monthDiff = today.getMonth() - birthDate.getMonth();
-                
                 if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
                     age--;
                 }
-
                 if (age < 50) {
-                    return errorResponse(res, 
+                    return errorResponse(res,
                         `Member with Jain Aadhar ${member.personalDetails.jainAadharNumber} must be at least 50 years old`,
                         400
                     );
@@ -237,11 +211,9 @@ const createPanchGroup = asyncHandler(async (req, res) => {
                 return errorResponse(res, 'Date of birth is required for all members', 400);
             }
         }
-
         const membersWithDocs = parsedMembers.map((member, index) => {
             const jainAadharFile = req.files[`members[${index}].jainAadharPhoto`]?.[0];
             const profileFile = req.files[`members[${index}].profilePhoto`]?.[0];
-
             return {
                 personalDetails: member.personalDetails,
                 documents: {
@@ -268,7 +240,7 @@ const createPanchGroup = asyncHandler(async (req, res) => {
 
         // ✅ **Update all members' Panch roles**
         await Promise.all(parsedMembers.map(async (member) => {
-            const user = await User.findOne({ 
+            const user = await User.findOne({
                 'jainAadharNumber': member.personalDetails.jainAadharNumber 
             });
 
@@ -348,32 +320,40 @@ const getPanchGroup = asyncHandler(async (req, res) => {
 });
 // Get All Panch Groups
 const getAllPanchGroups = asyncHandler(async (req, res) => {
-    try {
-        const panchGroups = await Panch.find({ status: 'active' })
-            .populate('sanghId', 'level name') // ✅ Fetching only 'level' and 'name' from Sangh collection
-            .populate('members', 'personalDetails documents status'); // ✅ Fetching member details
+  try {
+    const { panchName } = req.query;  // Query parameter se panchName le rahe hain
 
-        if (!panchGroups || panchGroups.length === 0) {
-            return successResponse(res, [], 'No active Panch groups found');
-        }
+    // Base query: active panch groups
+    let query = { status: 'active' };
 
-        // Loop through each Panch group to modify URLs
-        panchGroups.forEach(group => {
-            group.members.forEach(member => {
-                // Convert jainAadharPhoto and profilePhoto URLs if they exist
-                if (member.documents && member.documents.jainAadharPhoto) {
-                    member.documents.jainAadharPhoto = convertS3UrlToCDN(member.documents.jainAadharPhoto);
-                }
-                if (member.documents && member.documents.profilePhoto) {
-                    member.documents.profilePhoto = convertS3UrlToCDN(member.documents.profilePhoto);
-                }
-            });
-        });
-
-        return successResponse(res, panchGroups, 'All active Panch groups retrieved successfully');
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
+    // Agar panchName diya ho, to uske hisaab se regex search laga do
+    if (panchName) {
+      query.name = { $regex: panchName, $options: 'i' }; // case-insensitive search on 'name' field
     }
+
+    const panchGroups = await Panch.find(query)
+      .populate('sanghId', 'level name')
+      .populate('members', 'personalDetails documents status');
+
+    if (!panchGroups || panchGroups.length === 0) {
+      return successResponse(res, [], 'No active Panch groups found');
+    }
+
+    panchGroups.forEach(group => {
+      group.members.forEach(member => {
+        if (member.documents && member.documents.jainAadharPhoto) {
+          member.documents.jainAadharPhoto = convertS3UrlToCDN(member.documents.jainAadharPhoto);
+        }
+        if (member.documents && member.documents.profilePhoto) {
+          member.documents.profilePhoto = convertS3UrlToCDN(member.documents.profilePhoto);
+        }
+      });
+    });
+
+    return successResponse(res, panchGroups, 'All active Panch groups retrieved successfully');
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
 });
 
 

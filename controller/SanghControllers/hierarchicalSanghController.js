@@ -302,15 +302,21 @@ const getAllSanghs = asyncHandler(async (req, res) => {
         const { query } = req.query; // Fetch the query from request
 
         // If there's a search query, filter based on the query in name or location (country, state, etc.)
-        const searchCriteria = query
+       const searchCriteria = query
             ? {
                   $or: [
                       { name: { $regex: query, $options: 'i' } }, // Match name with case insensitive regex
-                      { 'location.country': { $regex: query, $options: 'i' } }, // Match country
-                      { 'location.state': { $regex: query, $options: 'i' } }, // Match state
-                      { 'location.district': { $regex: query, $options: 'i' } }, // Match district
-                      { 'location.city': { $regex: query, $options: 'i' } }, // Match city
-                      { 'location.area': { $regex: query, $options: 'i' } } // Match area
+                      { 
+                        'location': {
+                            $or: [
+                                { country: { $regex: query, $options: 'i' } },
+                                { state: { $regex: query, $options: 'i' } },
+                                { district: { $regex: query, $options: 'i' } },
+                                { city: { $regex: query, $options: 'i' } },
+                                { area: { $regex: query, $options: 'i' } }
+                            ]
+                        }
+                      }
                   ]
               }
             : {}; // If no query, return all

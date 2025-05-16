@@ -29,7 +29,6 @@ const createPanchPost = asyncHandler(async (req, res) => {
     const lastName = panchMemberData.lastName || '';
     const postedByName = `${firstName} ${lastName}`.trim();
     const postedProfilePicture = panchMemberData.profilePicture || '';
-    
     let mediaFiles = [];
     if (req.files?.media) {
       mediaFiles = req.files.media.map(file => ({
@@ -69,7 +68,6 @@ const getPanchPosts = asyncHandler(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-    
     // Verify Panch exists
     const panchGroup = await Panch.findById(panchId);
     if (!panchGroup) {
