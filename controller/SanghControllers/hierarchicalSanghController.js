@@ -946,9 +946,9 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
         console.log("Received Body:", req.body);
         console.log("SanghType:", req.body.sanghType);
         // Validate sanghType
-        // if (!['women', 'youth'].includes(sanghType)) {
-        //     return errorResponse(res, 'Invalid Sangh type. Must be "women" or "youth"', 400);
-        // }
+        if (!['women', 'youth'].includes(sanghType)) {
+            return errorResponse(res, 'Invalid Sangh type. Must be "women" or "youth"', 400);
+        }
 
         // If creating from a specialized Sangh, ensure the types match
         if (parentSangh.sanghType !== 'main' && parentSangh.sanghType !== sanghType) {
@@ -1009,7 +1009,7 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
         // Format office bearers data
         const formattedOfficeBearers = [];
         for (const role of ['president', 'secretary', 'treasurer']) {
-            const bearer = officeBearers[role];
+            const bearer = officeBearers[role];   
             // Find the user by Jain Aadhar
             const user = await User.findOne({
                 jainAadharNumber: bearer.jainAadharNumber,
