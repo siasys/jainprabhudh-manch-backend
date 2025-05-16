@@ -1010,7 +1010,6 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
         const formattedOfficeBearers = [];
         for (const role of ['president', 'secretary', 'treasurer']) {
             const bearer = officeBearers[role];
-            
             // Find the user by Jain Aadhar
             const user = await User.findOne({
                 jainAadharNumber: bearer.jainAadharNumber,

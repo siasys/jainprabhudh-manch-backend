@@ -7,12 +7,11 @@ const userSchema = new mongoose.Schema(
     firstName: {
       type: String,
       required: [true, 'First name is required'],
-      trim: true,
+     // trim: true,
     },
     lastName: {
       type: String,
       required: [true, 'Last name is required'],
-      trim: true,
     },
     fullName: {
       type: String,
@@ -54,12 +53,12 @@ const userSchema = new mongoose.Schema(
     },
     phoneNumber: {
       type: String,
-      validate: {
-        validator: function (v) {
-          return /\d{10}/.test(v);
-        },
-        message: props => `${props.value} is not a valid phone number!`
-      },
+      // validate: {
+      //   validator: function (v) {
+      //     return /\d{10}/.test(v);
+      //   },
+      //   message: props => `${props.value} is not a valid phone number!`
+      // },
       required: [true, 'Phone number is required'],
       
     },

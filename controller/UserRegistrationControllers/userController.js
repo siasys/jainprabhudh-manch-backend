@@ -105,7 +105,7 @@ const registerUser = [
             {
                 user: userResponse,
                 verificationCode: newUser.verificationCode,
-                nextStep: 'verify_email' 
+                nextStep: 'verify_email'
             },
             'User registered successfully. Please verify your email.',
             201
