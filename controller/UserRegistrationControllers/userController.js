@@ -13,14 +13,14 @@ const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
 // const authLimiter = rateLimit({
 //     windowMs: 15 * 60 * 1000, // 15 minutes
-//     max: 5, 
+//     max: 5,
 //     message: { error: 'Too many login attempts. Please try again later.' }
 // });
+
 // Generate a random 6-digit code
-const generateVerificationCode = () => {
+const generateVerificationCode = () =>{
     return Math.floor(100000 + Math.random() * 900000).toString();
   };
-  
 // Register new user with enhanced security
 const registerUser = [
     userValidation.register,
@@ -28,9 +28,9 @@ const registerUser = [
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
             return errorResponse(
-                res, 
-                'Validation failed', 
-                400, 
+                res,
+                'Validation failed',
+                400,
                 errors.array().map(err => ({ field: err.param, message: err.msg }))
             );
         }
@@ -51,17 +51,14 @@ const registerUser = [
             if (existingUserByEmail.isEmailVerified) {
                 return errorResponse(res, 'User with this email already exists', 400);
             }
-        
             // 💡 Delete old unverified user to allow re-registration
             await User.deleteOne({ _id: existingUserByEmail._id });
         }
-        
         // Now check phone number AFTER possibly deleting the old user
         const existingUser = await User.findOne({ phoneNumber });
         if (existingUser) {
             return errorResponse(res, 'User with this phone number already exists', 400);
         }
-
         // Generate verification code
         const verificationCode = generateVerificationCode();
         const codeExpiry = new Date();

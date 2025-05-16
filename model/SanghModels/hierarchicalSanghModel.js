@@ -184,7 +184,6 @@ const hierarchicalSanghSchema = new mongoose.Schema({
         type: String,
         enum: ['main', 'women', 'youth'],
         default: 'main',
-        required: true
     },
     parentMainSangh: {
         type: mongoose.Schema.Types.ObjectId,

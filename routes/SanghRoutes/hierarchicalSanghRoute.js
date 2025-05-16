@@ -126,9 +126,9 @@ router.delete('/area/:sanghId/members/:memberId',
 );
 // Create specialized Sangh (Women/Youth) - For both main Sangh presidents and specialized Sangh presidents
 router.post('/create-specialized-sangh',
-  authMiddleware,
+ // authMiddleware,
     upload.sangathanDocs,
-  canCreateSpecializedSangh,
+  //canCreateSpecializedSangh,
     createSpecializedSangh
 );
 
