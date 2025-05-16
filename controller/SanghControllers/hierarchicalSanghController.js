@@ -943,7 +943,8 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
             contact,
             socialMedia
         } = req.body;
-
+        console.log("Received Body:", req.body);
+        console.log("SanghType:", req.body.sanghType);
         // Validate sanghType
         if (!['women', 'youth'].includes(sanghType)) {
             return errorResponse(res, 'Invalid Sangh type. Must be "women" or "youth"', 400);
