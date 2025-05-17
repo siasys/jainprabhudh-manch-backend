@@ -128,7 +128,7 @@ router.delete('/area/:sanghId/members/:memberId',
 router.post('/create-specialized-sangh',
  // authMiddleware,
     upload.sangathanDocs,
- // canCreateSpecializedSangh,
+  canCreateSpecializedSangh,
     createSpecializedSangh
 );
 
