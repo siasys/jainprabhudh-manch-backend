@@ -1043,9 +1043,9 @@ if (parentSangh) {
                    ...(parentSangh ? { '_id': { $ne: parentSangh._id } } : {}) 
             });
 
-            if (existingSangh) {
-                return errorResponse(res, `${role} is already an office bearer in another Sangh`, 400);
-            }
+            // if (existingSangh) {
+            //     return errorResponse(res, `${role} is already an office bearer in another Sangh`, 400);
+            // }
 
             // Format the name
             const formattedName = formatFullName(bearer.firstName, bearer.lastName);
