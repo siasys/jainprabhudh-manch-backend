@@ -946,24 +946,35 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
         console.log("Received Body:", req.body);
         console.log("SanghType:", req.body.sanghType);
         // Validate sanghType
+if (!sanghType) {
+    return errorResponse(res, 'Sangh type is required.', 400);
+}
+        // Validate sanghType
         if (!['women', 'youth'].includes(sanghType)) {
             return errorResponse(res, 'Invalid Sangh type. Must be "women" or "youth"', 400);
         }
 
         // If creating from a specialized Sangh, ensure the types match
-        if (parentSangh.sanghType !== 'main' && parentSangh.sanghType !== sanghType) {
-            return errorResponse(res, `You can only create a ${parentSangh.sanghType} Sangh as a ${parentSangh.sanghType} Sangh president`, 400);
-        }
+if (parentSangh) {
+    if (parentSangh.sanghType !== 'main' && parentSangh.sanghType !== sanghType) {
+        return errorResponse(
+            res,
+            `You can only create a ${parentSangh.sanghType} Sangh as a ${parentSangh.sanghType} Sangh president`,
+            400
+        );
+    }
+}
 
-        // Determine the parent main Sangh
-        let parentMainSanghId;
-        if (parentSangh.sanghType === 'main') {
-            parentMainSanghId = parentSangh._id;
-        } else {
-            // If parent is already a specialized Sangh, use its parentMainSangh
-            parentMainSanghId = parentSangh.parentMainSangh;
-        }
-
+// Determine the parent main Sangh
+let parentMainSanghId = null;
+if (parentSangh) {
+    if (parentSangh.sanghType === 'main') {
+        parentMainSanghId = parentSangh._id;
+    } else {
+        // If parent is already a specialized Sangh, use its parentMainSangh
+        parentMainSanghId = parentSangh.parentMainSangh;
+    }
+}
         // Check if a specialized Sangh of this type already exists at this level
         let locationQuery = {};
         
@@ -1029,7 +1040,7 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
                     }
                 },
                 'status': 'active',
-                '_id': { $ne: parentSangh._id }
+                   ...(parentSangh ? { '_id': { $ne: parentSangh._id } } : {}) 
             });
 
             if (existingSangh) {
@@ -1094,11 +1105,13 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
             sangh: specializedSangh
         });
     } catch (error) {
-        if (req.files) {
-            await deleteS3Files(req.files);
-        }
-        return errorResponse(res, error.message, 500);
+    console.error("Error in createSpecializedSangh:", error);
+    if (req.files) {
+        await deleteS3Files(req.files);
     }
+    return errorResponse(res, error.message || "Something went wrong", 500);
+}
+
 });
 
 // Get specialized Sanghs for a main Sangh
