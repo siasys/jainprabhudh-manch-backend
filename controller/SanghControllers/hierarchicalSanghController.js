@@ -934,8 +934,6 @@ const addMultipleSanghMembers = asyncHandler(async (req, res) => {
 const createSpecializedSangh = asyncHandler(async (req, res) => {
     try {
         const parentSangh = req.parentSangh; // From canCreateSpecializedSangh middleware
-
-        // Directly use req.body without parsing
         const {
             name,
             sanghType,
@@ -943,13 +941,10 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
             officeBearers,
             description,
             contact,
-            socialMedia,
-            location
+            socialMedia
         } = req.body;
-
-        console.log("Parsed Body:", req.body);
-        console.log("SanghType:", sanghType);
-
+        console.log("Received Body:", req.body);
+        console.log("SanghType:", req.body.sanghType);
         // Validate sanghType
         if (!['women', 'youth'].includes(sanghType)) {
             return errorResponse(res, 'Invalid Sangh type. Must be "women" or "youth"', 400);
@@ -965,34 +960,36 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
         if (parentSangh.sanghType === 'main') {
             parentMainSanghId = parentSangh._id;
         } else {
+            // If parent is already a specialized Sangh, use its parentMainSangh
             parentMainSanghId = parentSangh.parentMainSangh;
         }
 
-        // Build location query based on the level
+        // Check if a specialized Sangh of this type already exists at this level
         let locationQuery = {};
+        
+        // Build location query based on the level
         if (level === 'state') {
-            locationQuery = { 'location.state': location.state };
+            locationQuery = { 'location.state': req.body.location.state };
         } else if (level === 'district') {
             locationQuery = { 
-                'location.state': location.state,
-                'location.district': location.district 
+                'location.state': req.body.location.state,
+                'location.district': req.body.location.district 
             };
         } else if (level === 'city') {
             locationQuery = { 
-                'location.state': location.state,
-                'location.district': location.district,
-                'location.city': location.city 
+                'location.state': req.body.location.state,
+                'location.district': req.body.location.district,
+                'location.city': req.body.location.city 
             };
         } else if (level === 'area') {
             locationQuery = { 
-                'location.state': location.state,
-                'location.district': location.district,
-                'location.city': location.city,
-                'location.area': location.area 
+                'location.state': req.body.location.state,
+                'location.district': req.body.location.district,
+                'location.city': req.body.location.city,
+                'location.area': req.body.location.area 
             };
         }
         
-        // Check for existing specialized Sangh
         const existingSpecializedSangh = await HierarchicalSangh.findOne({
             level: level,
             ...locationQuery,
@@ -1009,15 +1006,66 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
             return errorResponse(res, 'All office bearer details are required', 400);
         }
 
-        // Proceed with creating the specialized Sangh
+        // Format office bearers data
+        const formattedOfficeBearers = [];
+        for (const role of ['president', 'secretary', 'treasurer']) {
+            const bearer = officeBearers[role];   
+            // Find the user by Jain Aadhar
+            const user = await User.findOne({
+                jainAadharNumber: bearer.jainAadharNumber,
+                jainAadharStatus: 'verified'
+            });
+
+            if (!user) {
+                return errorResponse(res, `${role}'s Jain Aadhar is not verified`, 400);
+            }
+
+            // Check if user is already an office bearer in another active Sangh
+            const existingSangh = await HierarchicalSangh.findOne({
+                'officeBearers': {
+                    $elemMatch: {
+                        'userId': user._id,
+                        'status': 'active'
+                    }
+                },
+                'status': 'active',
+                '_id': { $ne: parentSangh._id }
+            });
+
+            if (existingSangh) {
+                return errorResponse(res, `${role} is already an office bearer in another Sangh`, 400);
+            }
+
+            // Format the name
+            const formattedName = formatFullName(bearer.firstName, bearer.lastName);
+            const documentUrl = bearer.document ? convertS3UrlToCDN(bearer.document) : '';
+            const photoUrl = bearer.photo ? convertS3UrlToCDN(bearer.photo) : '';
+            // Add to formatted office bearers
+            formattedOfficeBearers.push({
+                role: role,
+                userId: user._id,
+                firstName: bearer.firstName,
+                lastName: bearer.lastName,
+                name: formattedName,
+                mobileNumber: bearer.mobileNumber,
+                jainAadharNumber: bearer.jainAadharNumber,
+                document: documentUrl,
+                photo: photoUrl,
+                appointmentDate: new Date(),
+                termEndDate: new Date(Date.now() + (2 * 365 * 24 * 60 * 60 * 1000)), // 2 years from now
+                status: 'active'
+            });
+        }
+
+        // Create the specialized Sangh
         const specializedSangh = new HierarchicalSangh({
             name,
-            level,
-            location,
-            parentSangh: level === 'country' ? null : parentSangh._id,
-            parentMainSangh: level === 'country' ? null : parentMainSanghId,
-            sanghType,
-            officeBearers,
+            level: level, // Same level as parent Sangh
+            location: req.body.location, // Same location as parent Sangh
+            parentSangh: level === 'country' ? null : parentSangh._id, // Country level Sanghs don't have parent
+            parentMainSangh: level === 'country' ? null : parentMainSanghId, // Country level Sanghs don't have parent
+            sanghType: sanghType,
+            officeBearers: formattedOfficeBearers,
             description,
             contact,
             socialMedia,
@@ -1026,16 +1074,32 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
 
         await specializedSangh.save();
 
+        // Update the sanghRoles for each office bearer
+        for (const officeBearer of formattedOfficeBearers) {
+            await User.findByIdAndUpdate(officeBearer.userId, {
+                $push: {
+                    sanghRoles: {
+                        sanghId: specializedSangh._id,
+                        role: officeBearer.role,
+                        level: specializedSangh.level,
+                        sanghType: sanghType,
+                        addedAt: new Date()
+                    }
+                }
+            });
+        }
+
         return successResponse(res, {
             message: `${sanghType.charAt(0).toUpperCase() + sanghType.slice(1)} Sangh created successfully`,
             sangh: specializedSangh
         });
     } catch (error) {
+        if (req.files) {
+            await deleteS3Files(req.files);
+        }
         return errorResponse(res, error.message, 500);
     }
 });
-
-
 
 // Get specialized Sanghs for a main Sangh
 const getSpecializedSanghs = asyncHandler(async (req, res) => {

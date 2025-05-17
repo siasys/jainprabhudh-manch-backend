@@ -482,28 +482,13 @@ const canManageSpecializedSangh = asyncHandler(async (req, res, next) => {
 });
 
 // Check if user can create specialized Sangh (either as main Sangh president or as specialized Sangh president)
-// Check if user can create specialized Sangh (either as main Sangh president or as specialized Sangh president)
 const canCreateSpecializedSangh = asyncHandler(async (req, res, next) => {
     try {
-        console.log("✅ Middleware: canCreateSpecializedSangh called!");
-
         const userId = req.user._id;
-        let parsedData = req.body;
-
-        // If jsonData exists, parse it
-        if (req.body.jsonData) {
-            console.log("✅ JSON Data Detected. Parsing...");
-            parsedData = JSON.parse(req.body.jsonData);
-        }
-
-        const { sanghType, level, location } = parsedData;
-        console.log("✅ Parsed Sangh Type:", sanghType);
-        console.log("✅ Parsed Level:", level);
-        console.log("✅ Parsed Location:", location);
+        const { sanghType, level } = req.body;
 
         // 1. Allow superadmin or admin full access
         if (req.user.role === 'superadmin' || req.user.role === 'admin') {
-            console.log("✅ User is superadmin/admin. Access granted.");
             return next();
         }
 
@@ -525,23 +510,38 @@ const canCreateSpecializedSangh = asyncHandler(async (req, res, next) => {
             'status': 'active'
         });
 
-        console.log("✅ Main Sangh Found:", mainSangh);
-
         if (mainSangh) {
+            // Get the hierarchy levels in order
             const levelHierarchy = ['country', 'state', 'district', 'city', 'area'];
             const mainSanghLevelIndex = levelHierarchy.indexOf(mainSangh.level);
             const targetLevelIndex = levelHierarchy.indexOf(level);
 
+            // Allow creation only at lower levels (targetLevelIndex should be greater than mainSanghLevelIndex)
             if (targetLevelIndex > mainSanghLevelIndex) {
+                // Check if there's already a specialized Sangh of this type at this level and location
+                const existingSpecializedSangh = await HierarchicalSangh.findOne({
+                    sanghType,
+                    level,
+                    'status': 'active',
+                    'location.country': req.body.location.country,
+                    'location.state': req.body.location.state,
+                    'location.district': req.body.location.district,
+                    'location.city': req.body.location.city,
+                    'location.area': req.body.location.area
+                });
+
+                if (existingSpecializedSangh) {
+                    return errorResponse(res, `A ${sanghType} Sangh already exists at this ${level} level in this location`, 409);
+                }
+
                 req.parentSangh = mainSangh;
                 req.parentMainSanghId = mainSangh._id;
-                console.log("✅ User is Main Sangh President. Access granted.");
                 return next();
             }
             return errorResponse(res, `As a ${mainSangh.level} level president, you can only create specialized Sanghs at levels below ${mainSangh.level}`, 403);
         }
 
-        // 4. Check if user is president of a specialized Sangh
+        // 4. If not a main Sangh president, check if user is president of a specialized Sangh
         const specializedSangh = await HierarchicalSangh.findOne({
             'officeBearers': {
                 $elemMatch: {
@@ -553,8 +553,6 @@ const canCreateSpecializedSangh = asyncHandler(async (req, res, next) => {
             'sanghType': sanghType,
             'status': 'active'
         });
-
-        console.log("✅ Specialized Sangh Found:", specializedSangh);
 
         if (!specializedSangh) {
             return errorResponse(res, `You must be a president of either a main Sangh or a ${sanghType} Sangh to create a new ${sanghType} Sangh`, 403);
@@ -571,14 +569,11 @@ const canCreateSpecializedSangh = asyncHandler(async (req, res, next) => {
 
         req.parentSangh = specializedSangh;
         req.parentMainSanghId = specializedSangh.parentMainSangh;
-        console.log("✅ User is Specialized Sangh President. Access granted.");
         next();
     } catch (error) {
-        console.error("❌ Error in canCreateSpecializedSangh Middleware:", error.message);
         return errorResponse(res, error.message, 500);
     }
 });
-
 module.exports = {
     isPresident,
     isOfficeBearer,
