@@ -215,7 +215,10 @@ module.exports.candidateResumeUpload = upload.fields([
   { name: 'candidateResume', maxCount: 1 }
 ]);
 module.exports.jaintihasUpload = upload.single('image');
-module.exports.jainGranthUpload = upload.single('jainGranth');
+module.exports.jainGranthUpload = upload.fields([
+  { name: 'jainGranth', maxCount: 1 },
+  { name: 'jainGranthImage', maxCount: 1 }
+]);
 module.exports.govtYojanaUpload = upload.single('image');
 module.exports.optimizeGroupIcon = optimizeImage;
 // Add Sangathan document upload configuration

@@ -15,6 +15,9 @@ const JainGranthSchema = new mongoose.Schema(
     fileUrl: {
       type: String,
     },
+    imageUrl: {
+      type: String,
+    },
     uploadedAt: {
       type: Date,
       default: Date.now,

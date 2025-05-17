@@ -1042,7 +1042,6 @@ if (parentSangh) {
                 'status': 'active',
                    ...(parentSangh ? { '_id': { $ne: parentSangh._id } } : {}) 
             });
-
             if (existingSangh) {
                 return errorResponse(res, `${role} is already an office bearer in another Sangh`, 400);
             }
