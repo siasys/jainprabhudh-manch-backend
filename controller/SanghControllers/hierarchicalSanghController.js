@@ -933,13 +933,7 @@ const addMultipleSanghMembers = asyncHandler(async (req, res) => {
 // Create specialized Sangh (Women/Youth)
 const createSpecializedSangh = asyncHandler(async (req, res) => {
     try {
-        const parentSangh = req.parentSangh; // From canCreateSpecializedSangh middleware
-        
-        // JSON parse jsonData if it exists
-        let parsedData = req.body;
-        if (req.body.jsonData) {
-            parsedData = JSON.parse(req.body.jsonData);
-        }
+        const parentSangh = req.parentSangh; // From canCreateSpecializedSangh middlewar
 
         const {
             name,
@@ -951,7 +945,7 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
             socialMedia
         } = parsedData;
         
-        console.log("Parsed Body:", parsedData);
+         console.log("Parsed Body:", req.body);
         console.log("SanghType:", sanghType);
 
         // Validate sanghType
