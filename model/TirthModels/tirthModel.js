@@ -113,6 +113,10 @@ const tirthSchema = new mongoose.Schema({
         url: String,
         caption: String
     }],
+    documents: [{
+    url: String,
+    type: String
+    }],
     applicationStatus: {
         type: String,
         enum: ['pending', 'approved', 'rejected'],
