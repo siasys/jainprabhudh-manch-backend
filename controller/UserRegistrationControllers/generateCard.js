@@ -60,7 +60,7 @@ const generateJainAadharCard = async (req, res) => {
             const mobileTextWidth = combinedCtx.measureText(mobileText).width;
             combinedCtx.fillText(mobileText, width - mobileTextWidth - 100, height + 240);
         }
-        const footerText = 'Jain Prabuddh Manch Trust';
+        const footerText = 'Jain Prabuddh Manch';
         combinedCtx.font = 'bold 26px Georgia';  // Bold font set karo
         combinedCtx.fillText(footerText, 280, (height * 2) - 152);
 

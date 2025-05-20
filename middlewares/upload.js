@@ -39,6 +39,8 @@ const getS3Folder = (fieldname, req) => {
   switch(fieldname) {
     case 'profilePicture':
       return 'profile-pictures/';
+    case 'bailorImage':
+      return 'bailors/images/';
     case 'aadharCard':
       return 'documents/aadhar-cards/';
     case 'userProfile':

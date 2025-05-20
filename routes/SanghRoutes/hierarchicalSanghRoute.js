@@ -23,14 +23,14 @@ const {
 } = require('../../controller/SanghControllers/hierarchicalSanghController');
 
 const upload = require('../../middlewares/upload');
+const { generateMemberCard } = require('../../controller/SanghControllers/sanghCardController');
 
+router.get('/sangh/:userId', generateMemberCard);
 // Protect all routes
 router.use(authMiddleware);
 
 // Create new Sangh (Protected + Requires ability to create lower level)
-router.post('/create', 
-    upload.sangathanDocs,
-    checkSanghCreationPermission,
+router.post('/create', upload.sangathanDocs, checkSanghCreationPermission,
     (req, res, next) => {
         if (req.user.role === 'superadmin') {
             return next();
@@ -39,20 +39,15 @@ router.post('/create',
     },
     createHierarchicalSangh
 );
-    // Get all Sangh 
-    router.get('/sangh/all',
-        getAllSangh
-    );
-  // Get all Sangh 
-  router.get('/all',
-    getAllSanghs
-);
+    // Get all Sangh
+    router.get('/sangh/all', getAllSangh);
+  // Get all Sangh
+    router.get('/all', getAllSanghs);
 
 // Get Sangh hierarchy
-router.get('/hierarchy/:id', 
+router.get('/hierarchy/:id', getHierarchy
     //validateSanghAccess,
-    getHierarchy
-);
+    );
 
 // Get Sanghs by level and location
 router.get('/search',
@@ -60,10 +55,7 @@ router.get('/search',
 );
 
 // Get child Sanghs
-router.get('/children/:id', 
-    validateSanghAccess,
-    getChildSanghs
-);
+router.get('/children/:id', validateSanghAccess, getChildSanghs);
 
 // Update Sangh (Requires office bearer permission)
 router.patch('/update/:id', upload.sangathanDocs, updateHierarchicalSangh);
