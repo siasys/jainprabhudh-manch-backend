@@ -41,6 +41,12 @@ const getS3Folder = (fieldname, req) => {
       return 'profile-pictures/';
     case 'bailorImage':
       return 'bailors/images/';
+    case 'jainPrathibha':
+      return 'jainPrathibha/images/';
+    case 'jainHostal':
+      return 'jainHostal/images/';
+    case 'jainFood':
+      return 'jainFood/images/';
     case 'aadharCard':
       return 'documents/aadhar-cards/';
     case 'userProfile':
