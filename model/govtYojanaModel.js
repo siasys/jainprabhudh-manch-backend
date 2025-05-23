@@ -6,6 +6,7 @@ const govtYojanaSchema = new mongoose.Schema({
         ref: 'User',
       },
   yojanaName: { type: String, required: true },
+  likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   image: { type: String, required: true },
 }, { timestamps: true });
 

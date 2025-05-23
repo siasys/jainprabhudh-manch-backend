@@ -42,3 +42,35 @@ exports.deleteYojana = async (req, res) => {
     res.status(500).json({ message: "Server Error", error });
   }
 };
+exports.toggleLikeYojana = async (req, res) => {
+  try {
+    const { yojanaId } = req.params;
+    const { userId } = req.body;
+
+    const yojana = await GovtYojana.findById(yojanaId);
+    if (!yojana) {
+      return res.status(404).json({ message: "Yojana not found" });
+    }
+
+    const isLiked = yojana.likes.includes(userId);
+
+    if (isLiked) {
+      // Unlike
+      yojana.likes.pull(userId);
+    } else {
+      // Like
+      yojana.likes.push(userId);
+    }
+
+    await yojana.save();
+
+    res.status(200).json({
+      message: isLiked ? "Unliked successfully" : "Liked successfully",
+      totalLikes: yojana.likes.length,
+      isLiked: !isLiked
+    });
+  } catch (error) {
+    console.error("Error in toggleLikeYojana:", error);
+    res.status(500).json({ message: "Server Error", error });
+  }
+};

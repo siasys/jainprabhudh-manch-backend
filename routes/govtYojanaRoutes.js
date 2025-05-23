@@ -7,5 +7,5 @@ const govtYojanaController = require('../controller/govtYojanaController')
 router.post("/create", upload.govtYojanaUpload, govtYojanaController.createYojana);
 router.get("/all", govtYojanaController.getAllYojanas);
 router.delete("/delete/:id", govtYojanaController.deleteYojana);
-
+router.post("/like/:yojanaId", govtYojanaController.toggleLikeYojana);
 module.exports = router;
