@@ -66,7 +66,7 @@ exports.createRecruitee = async (req, res) => {
 // Get all jobs
 exports.getAllJobs = async (req, res) => {
   try {
-    const jobs = await Rojgar.find().populate("user", "firstName lastName profilePicture");
+    const jobs = await Rojgar.find().populate("user", "firstName lastName fullName profilePicture");
     res.status(200).json(jobs);
   } catch (error) {
     res.status(400).json({ error: error.message });
