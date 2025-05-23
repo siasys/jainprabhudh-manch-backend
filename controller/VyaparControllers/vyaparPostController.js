@@ -83,12 +83,12 @@ const getPosts = async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        const posts = await JainVyaparPost.find({ 
+        const posts = await JainVyaparPost.find({
             vyaparId,
             isHidden: false
         })
         .populate('vyaparId', 'name businessType')
-        .populate('postedByUserId', 'firstName lastName profilePicture')
+        .populate('postedByUserId', 'firstName lastName fullName profilePicture')
         .sort('-createdAt')
         .skip(skip)
         .limit(limit);
@@ -119,10 +119,10 @@ const getAllVyapars = async (req, res) => {
 
         const posts = await JainVyaparPost.find({ isHidden: false })
             .populate('vyaparId', 'name businessType')  // ✅ Vyapar details
-            .populate('postedByUserId', 'firstName lastName profilePicture') // ✅ Post owner details
-            .populate('likes', 'firstName lastName profilePicture') // ✅ Liked users
-            .populate('comments.user', 'firstName lastName profilePicture') // ✅ Commented users
-            .populate('comments.replies.user', 'firstName lastName profilePicture') // ✅ Replied users
+            .populate('postedByUserId', 'firstName lastName fullName profilePicture') // ✅ Post owner details
+            .populate('likes', 'firstName lastName fullName profilePicture') // ✅ Liked users
+            .populate('comments.user', 'firstName lastName fullName profilePicture') // ✅ Commented users
+            .populate('comments.replies.user', 'firstName lastName fullName profilePicture') // ✅ Replied users
             .sort('-createdAt')
             .skip(skip)
             .limit(limit);
@@ -152,10 +152,10 @@ const getPostById = async (req, res) => {
             isHidden: false
         })
         .populate('vyaparId', 'name businessType')
-        .populate('postedByUserId', 'firstName lastName profilePicture')
-        .populate('likes', 'firstName lastName profilePicture')
-        .populate('comments.user', 'firstName lastName profilePicture')
-        .populate('comments.replies.user', 'firstName lastName profilePicture');
+        .populate('postedByUserId', 'firstName lastName fullName profilePicture')
+        .populate('likes', 'firstName lastName fullName profilePicture')
+        .populate('comments.user', 'firstName lastName fullName profilePicture')
+        .populate('comments.replies.user', 'firstName lastName fullName profilePicture');
 
         if (!post) {
             return errorResponse(res, 'Post not found', 404);
@@ -271,7 +271,7 @@ const addComment = async (req, res) => {
         await post.save();
         
         // Populate the user info for the new comment
-        await post.populate('comments.user', 'firstName lastName profilePicture');
+        await post.populate('comments.user', 'firstName lastName fullName profilePicture');
         
         // Find the newly added comment
         const newComment = post.comments.id(comment._id);
@@ -303,7 +303,7 @@ const deleteComment = async (req, res) => {
             },
             { new: true }
         )
-        .populate('comments.user', 'firstName lastName profilePicture');
+        .populate('comments.user', 'firstName lastName fullName profilePicture');
 
         if (!post) {
             return errorResponse(res, 'Comment not found or unauthorized', 404);
@@ -350,7 +350,7 @@ const addReply = async (req, res) => {
         await post.save();
 
         // Populate user info for the reply
-        await post.populate('comments.replies.user', 'firstName lastName profilePicture');
+        await post.populate('comments.replies.user', 'firstName lastName fullName profilePicture');
         
         // Get the updated comment with the new reply
         const updatedComment = post.comments.id(commentId);
@@ -381,7 +381,7 @@ const getReplies = async (req, res) => {
         }
 
         // Populate user info for replies
-        await post.populate('comments.replies.user', 'firstName lastName profilePicture');
+        await post.populate('comments.replies.user', 'firstName lastName fullName profilePicture');
         
         // Get the updated comment with populated replies
         const updatedComment = post.comments.id(commentId);
@@ -413,7 +413,7 @@ const deleteReply = async (req, res) => {
             },
             { new: true }
         )
-        .populate('comments.replies.user', 'firstName lastName profilePicture');
+        .populate('comments.replies.user', 'firstName lastName fullName profilePicture');
 
         if (!post) {
             return errorResponse(res, 'Reply not found or unauthorized', 404);
