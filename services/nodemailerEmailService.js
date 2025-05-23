@@ -14,7 +14,7 @@ const sendVerificationEmail = async (email, name, code) => {
   return transporter.sendMail({
     from: process.env.EMAIL_FROM,
     to: email,
-    subject: 'Verify Your Email - Jain Prabhutmanch',
+    subject: 'Verify Your Email - Jain Prabhuddh Manch',
     html
   });
 };
@@ -24,7 +24,7 @@ const sendWelcomeEmail = async (email, name) => {
   return transporter.sendMail({
     from: process.env.EMAIL_FROM,
     to: email,
-    subject: 'Welcome to Jain Prabhutmanch 🎉',
+    subject: 'Welcome to Jain Prabhuddh Manch 🎉',
     html
   });
 };
