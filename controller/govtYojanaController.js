@@ -23,7 +23,7 @@ exports.createYojana = async (req, res) => {
     try {
       const yojanas = await GovtYojana.find()
         .sort({ createdAt: -1 })
-        .populate('userId', 'profilePicture firstName lastName');
+        .populate('userId', 'profilePicture firstName lastName fullName');
       res.status(200).json(yojanas);
     } catch (error) {
       res.status(500).json({ message: "Server Error", error });
