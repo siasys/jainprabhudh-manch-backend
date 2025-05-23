@@ -133,7 +133,7 @@ const getAllBiodatas = async (req, res) => {
       filter.dobPlace = { $regex: dobPlace, $options: 'i' };
     }
     const biodatas = await VyavahikBiodata.find(filter)
-      .populate('userId', 'firstName lastName profilePicture');
+      .populate('userId', 'firstName lastName fullName profilePicture');
     res.status(200).json({
       success: true,
       data: biodatas,
