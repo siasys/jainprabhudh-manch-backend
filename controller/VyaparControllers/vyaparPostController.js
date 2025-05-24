@@ -382,7 +382,6 @@ const getReplies = async (req, res) => {
 
         // Populate user info for replies
         await post.populate('comments.replies.user', 'firstName lastName fullName profilePicture');
-        
         // Get the updated comment with populated replies
         const updatedComment = post.comments.id(commentId);
 

@@ -3,6 +3,7 @@ const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghMode
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { s3Client, DeleteObjectCommand } = require('../../config/config');
 const { extractS3KeyFromUrl } = require('../../utils/s3Utils');
+const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
 // Get available cities with active Sanghs
 const getAvailableCities = async (req, res) => {
@@ -21,34 +22,21 @@ const getAvailableCities = async (req, res) => {
 // Submit new Tirth application
 const submitTirthApplication = async (req, res) => {
     try {
-        console.log("Headers Authorization:", req.headers.authorization); // ✅ Token print karein
+        console.log("Headers Authorization:", req.headers.authorization);
         console.log("Received Body:", req.body);
+
         const {
-            name,
-            userId,
-            tirthType,
-            tirthShetra,
-            otherTirthShetra,
-            regionName,
-            mulPratima,
-            description,
-            location,
-            citySanghId,
-            managerName,            
-            facilities,
-            prabandhInputs,
-            transport,
-            nearestCity,
-            nearestTirth,
-            regionHistory,
-            projects,
+            name, userId, tirthType, tirthShetra, otherTirthShetra,
+            regionName, mulPratima, description, location, citySanghId,
+            managerName, facilities, prabandhInputs, transport,
+            nearestCity, nearestTirth, regionHistory, projects,
         } = req.body;
-        // ✅ Parse JSON string fields
+
         const parsedManagerName = JSON.parse(managerName);
         const parsedFacilities = JSON.parse(facilities);
         const parsedPrabandhInputs = JSON.parse(prabandhInputs);
         const parsedTransport = JSON.parse(transport);
-        // Verify city Sangh exists
+
         const citySangh = await HierarchicalSangh.findOne({
             _id: citySanghId,
             level: 'city',
@@ -59,21 +47,21 @@ const submitTirthApplication = async (req, res) => {
             return errorResponse(res, 'Invalid city Sangh selected', 400);
         }
 
-        // Handle uploaded photos and documents
+        // Convert uploaded URLs to CDN
         const photos = [];
         const documents = [];
 
         if (req.files) {
             if (req.files.entityPhoto) {
                 photos.push(...req.files.entityPhoto.map(file => ({
-                    url: file.location,
+                    url: convertS3UrlToCDN(file.location),
                     type: file.mimetype.startsWith('image/') ? 'image' : 'other'
                 })));
             }
 
             if (req.files.entityDocuments) {
                 documents.push(...req.files.entityDocuments.map(file => ({
-                    url: file.location,
+                    url: convertS3UrlToCDN(file.location),
                     type: file.mimetype === 'application/pdf' ? 'pdf' : 'other'
                 })));
             }
@@ -90,16 +78,16 @@ const submitTirthApplication = async (req, res) => {
             location,
             citySanghId,
             userId,
-            managerName:parsedManagerName,
+            managerName: parsedManagerName,
             photos,
             documents,
             nearestCity,
             nearestTirth,
             regionHistory,
             projects,
-            facilities: parsedFacilities, 
+            facilities: parsedFacilities,
             prabandhInputs: parsedPrabandhInputs,
-            transport: parsedTransport 
+            transport: parsedTransport
         });
 
         await tirth.save();
@@ -109,11 +97,11 @@ const submitTirthApplication = async (req, res) => {
             tirthId: tirth._id
         });
     } catch (error) {
-        // If there's an error, clean up any uploaded files
+        // Clean up on error
         if (req.files) {
             const deletePromises = [];
             if (req.files.entityPhoto) {
-                deletePromises.push(...req.files.entityPhoto.map(file => 
+                deletePromises.push(...req.files.entityPhoto.map(file =>
                     s3Client.send(new DeleteObjectCommand({
                         Bucket: process.env.AWS_BUCKET_NAME,
                         Key: extractS3KeyFromUrl(file.location)
@@ -121,7 +109,7 @@ const submitTirthApplication = async (req, res) => {
                 ));
             }
             if (req.files.entityDocuments) {
-                deletePromises.push(...req.files.entityDocuments.map(file => 
+                deletePromises.push(...req.files.entityDocuments.map(file =>
                     s3Client.send(new DeleteObjectCommand({
                         Bucket: process.env.AWS_BUCKET_NAME,
                         Key: extractS3KeyFromUrl(file.location)
@@ -130,6 +118,7 @@ const submitTirthApplication = async (req, res) => {
             }
             await Promise.all(deletePromises);
         }
+
         return errorResponse(res, error.message, 500);
     }
 };

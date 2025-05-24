@@ -54,7 +54,7 @@ const createJainAadhar = asyncHandler(async (req, res) => {
         // Find appropriate reviewing Sangh based on location hierarchy
         let reviewingSanghId = null;
         if (applicationLevel !== 'superadmin') {
-            const query = { 
+            const query = {
                 level: applicationLevel,
                 status: 'active'
             };
@@ -80,7 +80,6 @@ const createJainAadhar = asyncHandler(async (req, res) => {
                         'location.district': location.district,
                         'location.state': location.state
                     });
-                    
                     if (districtSangh) {
                         reviewingSanghId = districtSangh._id;
                         applicationLevel = 'district';
@@ -91,7 +90,6 @@ const createJainAadhar = asyncHandler(async (req, res) => {
                             status: 'active',
                             'location.state': location.state
                         });
-                        
                         if (stateSangh) {
                             reviewingSanghId = stateSangh._id;
                             applicationLevel = 'state';
@@ -102,7 +100,6 @@ const createJainAadhar = asyncHandler(async (req, res) => {
                                 status: 'active',
                                 'location.country': 'India'  // Since we're only operating in India
                             });
-                            
                             if (countrySangh) {
                                 reviewingSanghId = countrySangh._id;
                                 applicationLevel = 'country';
@@ -118,7 +115,6 @@ const createJainAadhar = asyncHandler(async (req, res) => {
                         status: 'active',
                         'location.state': location.state
                     });
-                    
                     if (stateSangh) {
                         reviewingSanghId = stateSangh._id;
                         applicationLevel = 'state';
@@ -129,7 +125,6 @@ const createJainAadhar = asyncHandler(async (req, res) => {
                             status: 'active',
                             'location.country': 'India'
                         });
-                        
                         if (countrySangh) {
                             reviewingSanghId = countrySangh._id;
                             applicationLevel = 'country';
@@ -144,7 +139,6 @@ const createJainAadhar = asyncHandler(async (req, res) => {
                         status: 'active',
                         'location.country': 'India'
                     });
-                    
                     if (countrySangh) {
                         reviewingSanghId = countrySangh._id;
                         applicationLevel = 'country';
@@ -190,7 +184,6 @@ const createJainAadhar = asyncHandler(async (req, res) => {
             jainAadharData.userProfile = convertS3UrlToCDN(profileUrl);
         }
     }
-    
       const newJainAadhar = await JainAadhar.create(jainAadharData);
 
         // Update user's status
@@ -209,7 +202,6 @@ const getApplicationStatus = asyncHandler(async (req, res) => {
   try {
     const application = await JainAadhar.findOne({ userId: req.user._id })
       .select('-AadharCard');
-
     if (!application) {
       return errorResponse(res, 'No Jain Aadhar application found', 404);
     }
@@ -301,7 +293,6 @@ const getApplicationsForReview = asyncHandler(async (req, res) => {
             .populate('userId')
             .populate('reviewingSanghId', 'name level location')
             .sort('-createdAt');
-            
             return successResponse(res, applications, 'Applications retrieved successfully');
         }
 
@@ -313,11 +304,10 @@ const getApplicationsForReview = asyncHandler(async (req, res) => {
             }
 
             // Build location query based on president's authority
-            const locationQuery = { 
-                status: 'pending', 
-                applicationLevel: reviewerLevel 
+            const locationQuery = {
+                status: 'pending',
+                applicationLevel: reviewerLevel
             };
-            
             if (reviewerLevel === 'area') {
                 locationQuery['location.area'] = sangh.location.area;
                 locationQuery['location.city'] = sangh.location.city;
@@ -363,32 +353,26 @@ const reviewApplication = asyncHandler(async (req, res) => {
         console.log('Request params:', req.params);
         console.log('Reviewer Level:', reviewerLevel);
         console.log('User ID:', userId);
-        
         // Try to find application directly by string ID to check if it exists
         const allApplications = await JainAadhar.find({});
         console.log('Total applications in DB:', allApplications.length);
         console.log('Application IDs in DB:', allApplications.map(app => app._id.toString()));
-        
         const application = await JainAadhar.findById(appId);
         console.log('Application found:', application ? 'Yes' : 'No');
-        
     if (!application) {
       return errorResponse(res, 'Application not found', 404);
     }
-
-        // Prevent re-reviewing applications that are already approved or rejected
-        if (application.status !== 'pending') {
-            return errorResponse(res, `This application has already been ${application.status}. Cannot review again.`, 400);
-        }
-
-        // Verify reviewer's authority
-        let hasAuthority = false;
-        let reviewerSangh = null;
-        
+    // Prevent re-reviewing applications that are already approved or rejected
+    if (application.status !== 'pending') {
+        return errorResponse(res, `This application has already been ${application.status}. Cannot review again.`, 400);
+    }
+    // Verify reviewer's authority
+    let hasAuthority = false;
+    let reviewerSangh = null;
         // Superadmin can review any application
         if (reviewerLevel === 'superadmin') {
             hasAuthority = true;
-        } 
+        }
         // Admin with verify permissions can review any application
         else if (reviewerLevel === 'admin' && req.user.adminPermissions.includes('verify_jain_aadhar')) {
             hasAuthority = true;
@@ -420,13 +404,11 @@ const reviewApplication = asyncHandler(async (req, res) => {
             if (application.applicationLevel !== reviewerLevel) {
                 return errorResponse(res, `This application is not at ${reviewerLevel} level for review`, 403);
             }
-            
             // Get the reviewer's sangh details
             reviewerSangh = await HierarchicalSangh.findById(reviewerSanghId);
             if (!reviewerSangh) {
                 return errorResponse(res, 'Reviewer sangh not found', 404);
             }
-            
             // Verify location authority
             hasAuthority = verifyLocationAuthority(reviewerSangh, application);
         }
@@ -437,7 +419,6 @@ const reviewApplication = asyncHandler(async (req, res) => {
 
         // Update application
         application.status = status;
-        
         // Add review details to history
         application.reviewHistory.push({
             action: status,
@@ -447,7 +428,6 @@ const reviewApplication = asyncHandler(async (req, res) => {
       remarks,
             timestamp: new Date()
         });
-        
         // Update reviewedBy information
         application.reviewedBy = {
             userId: userId,
@@ -470,7 +450,6 @@ const reviewApplication = asyncHandler(async (req, res) => {
             city: application.location.city,
             district: application.location.district,
             state: application.location.state
-     
             });
         } else if (status === 'rejected') {
       await User.findByIdAndUpdate(application.userId, {
@@ -579,16 +558,13 @@ const getApplicationsByLevel = asyncHandler(async (req, res) => {
     try {
         const { level } = req.params;
         const { city, district, state, status } = req.query;
-        
         // Get user's Sangh role
-        const userRole = req.user.sanghRoles.find(role => 
+        const userRole = req.user.sanghRoles.find(role =>
             role.role === 'president' && role.level === level
         );
-
         if (!userRole) {
             return errorResponse(res, 'Not authorized to view applications at this level', 403);
         }
-
         // Build query based on level and location
         const query = {
             applicationLevel: level,
@@ -606,7 +582,6 @@ const getApplicationsByLevel = asyncHandler(async (req, res) => {
         } else if (level === 'state') {
             query['location.state'] = state;
         }
-
         const applications = await JainAadhar.find(query)
             .populate('userId', 'firstName lastName email phoneNumber')
             .sort('-createdAt');
@@ -622,20 +597,18 @@ const reviewApplicationByLevel = asyncHandler(async (req, res) => {
     try {
         const { applicationId } = req.params;
         const { status, remarks } = req.body;
-        
         const application = await JainAadhar.findById(applicationId);
         if (!application) {
             return errorResponse(res, 'Application not found', 404);
         }
-        
         // Prevent re-reviewing applications that are already approved or rejected
         if (application.status !== 'pending') {
             return errorResponse(res, `This application has already been ${application.status}. Cannot review again.`, 400);
         }
 
         // Verify reviewer's authority
-        const userRole = req.user.sanghRoles.find(role => 
-            role.role === 'president' && 
+        const userRole = req.user.sanghRoles.find(role =>
+            role.role === 'president' &&
             role.level === application.applicationLevel
         );
 
@@ -664,7 +637,6 @@ const reviewApplicationByLevel = asyncHandler(async (req, res) => {
         // If approved, generate Jain Aadhar number
         if (status === 'approved') {
             const jainAadharNumber = await generateJainAadharNumber();
-            
             // Update user's status and Jain Aadhar number
             await User.findByIdAndUpdate(application.userId, {
                 jainAadharStatus: 'verified',

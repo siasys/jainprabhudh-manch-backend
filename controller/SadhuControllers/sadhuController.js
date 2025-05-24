@@ -4,41 +4,38 @@ const User = require('../../model/UserRegistrationModels/userModel');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
 const { extractS3KeyFromUrl } = require('../../utils/s3Utils');
-
+const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
 // Submit new sadhu info
 const submitSadhuInfo = async (req, res) => {
     try {
         const sadhuData = { ...req.body };
         sadhuData.submittedBy = req.user._id;
-
         // Verify city Sangh exists
         const citySangh = await HierarchicalSangh.findOne({
             _id: sadhuData.citySanghId,
             level: 'city',
             status: 'active'
         });
-
         if (!citySangh) {
             return errorResponse(res, 'Invalid city Sangh selected', 400);
         }
-        
         // Handle file uploads
         if (req.files) {
             // Handle profile image
             if (req.files.entityPhoto) {
-                sadhuData.uploadImage = req.files.entityPhoto[0].location;
+                const s3Url = req.files.entityPhoto[0].location;
+                sadhuData.uploadImage = convertS3UrlToCDN(s3Url);
             }
-
             // Handle documents if any
             if (req.files.entityDocuments) {
-                sadhuData.documents = req.files.entityDocuments.map(doc => doc.location);
+                sadhuData.documents = req.files.entityDocuments.map(doc =>
+                    convertS3UrlToCDN(doc.location)
+                );
             }
         }
-
         const sadhu = new Sadhu(sadhuData);
         await sadhu.save();
-
         return successResponse(res, 'Sadhu information submitted successfully for review', sadhu);
     } catch (error) {
         return errorResponse(res, error.message);
