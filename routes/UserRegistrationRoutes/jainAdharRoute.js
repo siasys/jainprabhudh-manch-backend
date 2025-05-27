@@ -78,6 +78,18 @@ router.get(
   getAllApplications
 );
 router.get('/generate-card/:id', generateJainAadharCard);
+router.get('/verify/jain-shravak/:id', (req, res) => {
+  res.send(`
+    <html>
+      <head><title>Verification</title></head>
+      <body style="text-align:center; font-family:sans-serif; margin-top: 50px;">
+        <h1>Your Jain Shravak Card is Verified ✅</h1>
+        <p>ID: ${req.params.id}</p>
+      </body>
+    </html>
+  `);
+});
+
 // Admin application management
 // router.get(
 //   '/applications',

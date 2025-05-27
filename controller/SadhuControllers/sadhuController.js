@@ -8,39 +8,77 @@ const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
 // Submit new sadhu info
 const submitSadhuInfo = async (req, res) => {
-    try {
-        const sadhuData = { ...req.body };
-        sadhuData.submittedBy = req.user._id;
-        // Verify city Sangh exists
-        const citySangh = await HierarchicalSangh.findOne({
-            _id: sadhuData.citySanghId,
-            level: 'city',
-            status: 'active'
-        });
-        if (!citySangh) {
-            return errorResponse(res, 'Invalid city Sangh selected', 400);
-        }
-        // Handle file uploads
-        if (req.files) {
-            // Handle profile image
-            if (req.files.entityPhoto) {
-                const s3Url = req.files.entityPhoto[0].location;
-                sadhuData.uploadImage = convertS3UrlToCDN(s3Url);
-            }
-            // Handle documents if any
-            if (req.files.entityDocuments) {
-                sadhuData.documents = req.files.entityDocuments.map(doc =>
-                    convertS3UrlToCDN(doc.location)
-                );
-            }
-        }
-        const sadhu = new Sadhu(sadhuData);
-        await sadhu.save();
-        return successResponse(res, 'Sadhu information submitted successfully for review', sadhu);
-    } catch (error) {
-        return errorResponse(res, error.message);
+  try {
+    const sadhuData = { ...req.body };
+
+    // Parse nested JSON strings to objects
+    if (typeof sadhuData.mamaPaksh === 'string') {
+      try {
+        sadhuData.mamaPaksh = JSON.parse(sadhuData.mamaPaksh);
+      } catch (err) {
+        return errorResponse(res, 'Invalid mamaPaksh format');
+      }
     }
+
+    if (typeof sadhuData.dharmParivartan === 'string') {
+      try {
+        sadhuData.dharmParivartan = JSON.parse(sadhuData.dharmParivartan);
+      } catch (err) {
+        return errorResponse(res, 'Invalid dharmParivartan format');
+      }
+    }
+
+    if (typeof sadhuData.contactDetails === 'string') {
+      try {
+        sadhuData.contactDetails = JSON.parse(sadhuData.contactDetails);
+      } catch (err) {
+        return errorResponse(res, 'Invalid contactDetails format');
+      }
+    }
+
+    sadhuData.submittedBy = req.user._id;
+
+    // Parse upadhiList if present (you already have this)
+    if (req.body.upadhiList) {
+      try {
+        sadhuData.upadhiList = JSON.parse(req.body.upadhiList);
+      } catch (parseErr) {
+        return errorResponse(res, 'Invalid upadhiList format');
+      }
+    }
+
+    // Handle file uploads (as you already do)
+    if (req.files) {
+      if (req.files.entityPhoto) {
+        const s3Url = req.files.entityPhoto[0].location;
+        sadhuData.uploadImage = convertS3UrlToCDN(s3Url);
+      }
+      if (req.files.entityDocuments) {
+        sadhuData.documents = req.files.entityDocuments.map(doc =>
+          convertS3UrlToCDN(doc.location)
+        );
+      }
+    }
+
+    const sadhu = new Sadhu(sadhuData);
+    await sadhu.save();
+
+    const user = await User.findById(req.user._id);
+    if (!user.sadhuRoles) user.sadhuRoles = [];
+    user.sadhuRoles.push({
+      sadhuId: sadhu._id,
+      role: 'owner',
+    });
+    await user.save();
+
+    return successResponse(res, 'Sadhu information submitted successfully for review', sadhu);
+  } catch (error) {
+    return errorResponse(res, error.message);
+  }
 };
+
+
+
 
 // Review sadhu submission
 const reviewSadhuSubmission = async (req, res) => {
@@ -64,13 +102,11 @@ const reviewSadhuSubmission = async (req, res) => {
         if (status === 'approved') {
             // Find the user who submitted the sadhu application
             const submittedByUser = await User.findById(sadhu.submittedBy);
-            
             if (submittedByUser) {
                 // Add owner role to the user who submitted the application
                 if (!submittedByUser.sadhuRoles) {
                     submittedByUser.sadhuRoles = [];
                 }
-                
                 submittedByUser.sadhuRoles.push({
                     sadhuId: sadhu._id,
                     role: 'owner',
@@ -95,7 +131,6 @@ const updateSadhuProfile = async (req, res) => {
     try {
         const sadhu = req.sadhu;
         const updates = req.body;
-        
         // Handle file uploads
         if (req.files) {
             // Handle profile image update
@@ -168,12 +203,11 @@ const getPendingSadhuApplications = async (req, res) => {
 // Get all sadhus (public)
 const getAllSadhus = async (req, res) => {
     try {
-        const sadhus = await Sadhu.find({ 
+        const sadhus = await Sadhu.find({
             status: 'approved',
-            isActive: true 
+            isActive: true
         })
-        .select('-accessCredentials')
-        .populate('citySanghId', 'location');
+        .select('-accessCredentials');
 
         return successResponse(res, 'Sadhus retrieved successfully', sadhus);
     } catch (error) {
@@ -183,11 +217,10 @@ const getAllSadhus = async (req, res) => {
 // Get all sadhus (public)
 const getAllSadhu = async (req, res) => {
     try {
-        const sadhus = await Sadhu.find({ 
-           // isActive: true 
+        const sadhus = await Sadhu.find({
+           // isActive: true
         })
-        .select('-accessCredentials')  // Sirf accessCredentials exclude kiya hai
-        .populate('citySanghId', 'location'); // citySanghId ka sirf location fetch hoga
+        .select('-accessCredentials'); // citySanghId ka sirf location fetch hoga
 
         return successResponse(res, 'Sadhus retrieved successfully', sadhus);
     } catch (error) {
@@ -204,8 +237,7 @@ const getSadhuById = async (req, res) => {
             status: 'approved',
             isActive: true
         })
-        .select('-accessCredentials')
-        .populate('citySanghId', 'location');
+        .select('-accessCredentials');
         if (!sadhu) {
             return errorResponse(res, 'Sadhu not found', 404);
         }

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const upload = require('../../middlewares/upload');
-const {createGroupChat, getGroupDetails, getAllGroups, getAllGroupChats, sendGroupMessage, getGroupMessages, deleteGroupMessage, updateGroupDetails, updateGroupMessage, leaveGroup, updateGroupIcon, checkMembership, addMembers, updateGroupName, createOrFindGotraGroup, getAllGotraGroups, getUserGotraGroups } = require('../../controller/SocialMediaControllers/groupChatController');
+const {createGroupChat, getGroupDetails, getAllGroups, getAllGroupChats, sendGroupMessage, getGroupMessages, deleteGroupMessage, updateGroupDetails, updateGroupMessage, leaveGroup, updateGroupIcon, checkMembership, addMembers, updateGroupName, createOrFindGotraGroup, getAllGotraGroups, getUserGotraGroups, deleteGroupChat } = require('../../controller/SocialMediaControllers/groupChatController');
 const {authenticate} = require('../../middlewares/authMiddlewares')
 // Apply authentication to all routes
 router.use(authenticate);
@@ -21,6 +21,7 @@ router.get('/all-chats', getAllGroupChats);
 router.post('/send-message', upload.single('chatImage'), sendGroupMessage);
 // Get All Messages for a Group
 router.get('/messages/:groupId', getGroupMessages);
+router.delete('/delete/:groupId', deleteGroupChat);
 // Delete Group Message
 router.delete('/messages/:groupId/:messageId', deleteGroupMessage);
 // Update Group Details (Name, Image, Members)

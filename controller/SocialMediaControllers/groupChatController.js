@@ -356,6 +356,63 @@ exports.sendGroupMessage = async (req, res) => {
     return errorResponse(res, error.message, 500);
   }
 };
+// 2. Delete Group Chat
+exports.deleteGroupChat = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const userId = req.user.id; // Make sure you are using an auth middleware
+
+    if (!mongoose.Types.ObjectId.isValid(groupId)) {
+      return errorResponse(res, 400, "Invalid group ID.");
+    }
+
+    const group = await GroupChat.findById(groupId);
+
+    if (!group) {
+      return errorResponse(res, 404, "Group not found.");
+    }
+
+    // Check if user is creator or admin
+    const isAdmin = group.admins.map(id => id.toString()).includes(userId.toString());
+    const isCreator = group.creator.toString() === userId.toString();
+
+    if (!isAdmin && !isCreator) {
+      return errorResponse(res, 403, "Only creator or admins can delete the group.");
+    }
+
+    // Delete image from S3 if exists
+    if (group.groupImage) {
+      const imageKey = group.groupImage.split('/').pop(); // Assuming file name is at the end of the URL
+      const deleteCommand = new DeleteObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: `uploads/${imageKey}` // adjust if your S3 path differs
+      });
+
+      await s3Client.send(deleteCommand);
+      console.log("S3 image deleted.");
+    }
+
+    // Delete group from DB
+    await GroupChat.findByIdAndDelete(groupId);
+
+    // Notify members via socket
+    const io = getIo();
+    if (io) {
+      group.groupMembers.forEach(member => {
+        io.to(member.user.toString()).emit('groupDeleted', {
+          groupId,
+          message: `Group "${group.groupName}" has been deleted.`
+        });
+      });
+    }
+
+    return successResponse(res, null, "Group deleted successfully", 200);
+  } catch (error) {
+    console.error("Error deleting group:", error);
+    return errorResponse(res, 500, "Failed to delete group.");
+  }
+};
+
 exports.getGroupMessages = async (req, res) => {
   try {
     const { groupId } = req.params;

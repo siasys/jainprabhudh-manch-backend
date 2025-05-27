@@ -220,7 +220,7 @@ const getApplicationStatus = asyncHandler(async (req, res) => {
 const getAllApplications = asyncHandler(async (req, res) => {
   try {
     const applications = await JainAadhar.find()
-      .populate('userId', 'firstName lastName email')
+      .populate('userId', 'firstName lastName fullName email')
       .sort('-createdAt');
 
     return successResponse(res, applications, 'Applications retrieved successfully', 200, applications.length);

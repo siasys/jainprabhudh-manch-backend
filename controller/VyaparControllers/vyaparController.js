@@ -117,7 +117,6 @@ const reviewApplication = async (req, res) => {
         // Update application status
         vyapar.applicationStatus = status;
         vyapar.status = status === 'approved' ? 'active' : 'inactive';
-        
         // Add review notes
         vyapar.reviewNotes = {
             text: reviewNotes?.text || `Application ${status}`,

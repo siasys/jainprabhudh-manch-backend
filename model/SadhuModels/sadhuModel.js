@@ -8,6 +8,9 @@ const sadhuSchema = new mongoose.Schema({
     //     required: [true, 'Name is required'],
     //     trim: true
     // },
+    jainShravakNumber:{
+        type:String
+    },
     guruName: {
         type: String,
         required: [true, 'Guru name is required'],
@@ -97,13 +100,13 @@ const sadhuSchema = new mongoose.Schema({
     greatGrandfatherPlace: {
         type: String
     },
-    brotherName: {
-        type: String,
-        default: ''
+   brotherName: {
+    type: [String], // Array of strings
+    default: [],
     },
     sisterName: {
-        type: String,
-        default: ''
+    type: [String],
+    default: [],
     },
     qualification: {
         type: String,
@@ -143,6 +146,22 @@ const sadhuSchema = new mongoose.Schema({
         }
     },
     contactDetails: {
+          country: {
+            type: String,
+            default: ''
+        },
+        state: {
+            type: String,
+            default: ''
+        },
+        district: {
+            type: String,
+            default: ''
+        },
+        tehsil: {
+            type: String,
+            default: ''
+        },
         permanentAddress: {
             type: String,
             default: ''
@@ -172,16 +191,16 @@ const sadhuSchema = new mongoose.Schema({
     },
     
     // Review Information
-    reviewInfo: {
-        reviewedBy: {
-            cityPresidentId: {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: 'User'
-            },
-            reviewDate: Date,
-            comments: String
-        }
-    },
+    // reviewInfo: {
+    //     reviewedBy: {
+    //         cityPresidentId: {
+    //             type: mongoose.Schema.Types.ObjectId,
+    //             ref: 'User'
+    //         },
+    //         reviewDate: Date,
+    //         comments: String
+    //     }
+    // },
 
     // Submitted By
     submittedBy: {
@@ -191,16 +210,19 @@ const sadhuSchema = new mongoose.Schema({
     },
 
     // City Association
-    citySanghId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'HierarchicalSangh',
-        required: true
-    },
+    // citySanghId: {
+    //     type: mongoose.Schema.Types.ObjectId,
+    //     ref: 'HierarchicalSangh',
+    //     required: true
+    // },
 
     // Media
     photo: String,
     documents: [String],
-
+declarationText: {
+  type: String,
+  required: true
+},
     // Active Status
     status: {
         type: String,

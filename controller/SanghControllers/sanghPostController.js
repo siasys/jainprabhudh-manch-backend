@@ -57,7 +57,7 @@ const createSanghPost = asyncHandler(async (req, res) => {
 // Get posts by Sangh ID
 const getSanghPosts = asyncHandler(async (req, res) => {
   try {
-    const { sanghId } = req.params;  
+    const { sanghId } = req.params;
     const { postId } = req.query;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -108,43 +108,50 @@ const getSanghPosts = asyncHandler(async (req, res) => {
 
 // Get all Sangh posts for social feed
 const getAllSanghPosts = async (req, res) => {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-    const cacheKey = `sanghPosts:page:${page}:limit:${limit}`;
-    // Get all visible Sangh posts
-    const result = await getOrSetCache(cacheKey, async () => {
-      const posts = await SanghPost.find({ isHidden: false })
-        .populate('sanghId', 'name level location')
-        .populate('postedByUserId', 'firstName lastName fullName profilePicture')
-        .sort('-createdAt')
-        .skip(skip)
-        .limit(limit)
-        .lean();
-  
-      const total = await SanghPost.countDocuments({ isHidden: false });
-  
-      return {
-        posts,
-        pagination: {
-          total,
-          page,
-          pages: Math.ceil(total / limit)
-        }
-      };
-    }, 180);
-  
-    result.posts = result.posts.map(post => ({
-      ...post,
-      media: post.media.map(m => ({
-        ...m,
-        url: convertS3UrlToCDN(m.url)
-      }))
-    }));
-    
-  
-    return successResponse(res, result, 'Sangh posts retrieved successfully');
-  };
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+  const sanghId = req.query.sanghId; // 🔹 Get sanghId from query
+  const filter = { isHidden: false };
+
+  if (sanghId) {
+    filter.sanghId = sanghId;
+  }
+
+  const cacheKey = `sanghPosts:${sanghId || 'all'}:page:${page}:limit:${limit}`;
+
+  const result = await getOrSetCache(cacheKey, async () => {
+    const posts = await SanghPost.find(filter)
+      .populate('sanghId', 'name level location')
+      .populate('postedByUserId', 'firstName lastName fullName profilePicture')
+      .sort('-createdAt')
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const total = await SanghPost.countDocuments(filter);
+
+    return {
+      posts,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit)
+      }
+    };
+  }, 180);
+
+  result.posts = result.posts.map(post => ({
+    ...post,
+    media: post.media.map(m => ({
+      ...m,
+      url: convertS3UrlToCDN(m.url)
+    }))
+  }));
+
+  return successResponse(res, result, 'Sangh posts retrieved successfully');
+};
+
 // Toggle like on a Sangh post
 const toggleLikeSanghPost = asyncHandler(async (req, res) => {
   try {
