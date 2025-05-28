@@ -28,6 +28,12 @@ const officeBearerSchema = new mongoose.Schema({
     mobileNumber:{
         type:Number
     },
+    address:{
+     type: String,
+    },
+    pinCode:{
+        type:Number
+    },
     document: {
         type: String,
       //  required: true

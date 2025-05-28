@@ -5,7 +5,10 @@ const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
 const { extractS3KeyFromUrl } = require('../../utils/s3Utils');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
-
+const { createCanvas, loadImage } = require('canvas');
+const path = require('path');
+  const fs = require('fs');
+const { default: axios } = require('axios');
 // Helper Functions
 const formatFullName = (firstName, lastName) => {
     return lastName.toLowerCase() === 'jain' 
@@ -102,7 +105,9 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
                 name: formatFullName(officeBearers[role]?.firstName || "", officeBearers[role]?.lastName || ""),
                 jainAadharNumber: officeBearers[role]?.jainAadharNumber || "",
                 mobileNumber: officeBearers[role]?.mobileNumber || "",
-               document: req.files[`${role}JainAadhar`] ? convertS3UrlToCDN(req.files[`${role}JainAadhar`][0].location) : null,
+                address:officeBearers[role]?.address || "",
+                pinCode:officeBearers[role]?.pinCode || "",
+                document: req.files[`${role}JainAadhar`] ? convertS3UrlToCDN(req.files[`${role}JainAadhar`][0].location) : null,
                 photo: req.files[`${role}Photo`] ? convertS3UrlToCDN(req.files[`${role}Photo`][0].location) : null
             };
         }));
@@ -1058,6 +1063,8 @@ if (parentSangh) {
                 name: formattedName,
                 mobileNumber: bearer.mobileNumber,
                 jainAadharNumber: bearer.jainAadharNumber,
+                address: bearer.address,
+                pinCode: bearer.pinCode,
                 document: documentUrl,
                 photo: photoUrl,
                 appointmentDate: new Date(),
@@ -1349,7 +1356,220 @@ const updateSpecializedSangh = asyncHandler(async (req, res) => {
         return errorResponse(res, error.message, 500);
     }
 });
+const generateMemberCard = async (req, res) => {
+  try {
+    const { userId } = req.params;
 
+    // 1. Find sangh with user
+    const sangh = await HierarchicalSangh.findOne({
+      $or: [
+        { 'officeBearers.userId': userId },
+        { 'members.userId': userId }
+      ]
+    });
+
+    if (!sangh) return res.status(404).json({ message: 'User not found in any sangh.' });
+
+    // 2. Extract user from sangh
+    const user =
+      sangh.officeBearers.find(o => o.userId.toString() === userId) ||
+      sangh.members.find(m => m.userId.toString() === userId);
+
+    if (!user) return res.status(404).json({ message: 'User data not found.' });
+     function getRandomThreeDigitNumber() {
+      return Math.floor(100 + Math.random() * 900);
+    }
+
+    const level = sangh.level || 'unknown'; // level from sangh document
+    const randomNum = getRandomThreeDigitNumber();
+
+    const membershipNumber = `${level}/00${randomNum.toString().padStart(3, '0')}`;
+
+    // 3. Set canvas dimensions (same for both sides)
+    const width = 1011;
+    const height = 639;
+    const combinedCanvas = createCanvas(width, height * 2);
+    const ctx = combinedCanvas.getContext('2d');
+
+    // 4. Load templates
+    const frontTemplate = await loadImage(path.join(__dirname, '../../Public/member_front.jpg'));
+    const backTemplate = await loadImage(path.join(__dirname, '../../Public/member_back.jpg'));
+
+    // === FRONT ===
+    ctx.drawImage(frontTemplate, 0, 0, width, height);
+if (user.photo) {
+  try {
+    const response = await axios.get(user.photo, { responseType: 'arraybuffer' });
+    const imageBuffer = Buffer.from(response.data, 'binary');
+    const userPhoto = await loadImage(imageBuffer);
+    ctx.drawImage(userPhoto, 65, 180, 220, 260);
+  } catch (err) {
+    console.error('Error loading user photo:', err);
+  }
+}
+    ctx.fillStyle = 'black';
+    ctx.font = '26px Georgia';
+    ctx.fillText(`${user.firstName || ''} ${user.lastName || ''}`, 570, 196);
+    ctx.fillText(`${membershipNumber}`, 570, 260);
+    if (user.role) ctx.fillText(`${user.role}`, 570, 317);
+    if (user.jainAadharNumber) ctx.fillText(`${user.jainAadharNumber}`, 570, 380);
+// Bottom center text: Created By
+function getRandomFourDigitNumber() {
+  return Math.floor(1000 + Math.random() * 9000);
+}
+const createdByText = `Created By: ${sangh.level || 'unknown'}/JA${getRandomFourDigitNumber()}`;
+
+// Bold font and center alignment
+ctx.font = 'bold 28px Georgia';
+ctx.textAlign = 'center';
+ctx.fillStyle = 'black';
+
+// Adjust vertical position slightly higher (e.g., 70px from bottom)
+ctx.fillText(createdByText, width / 2, height - 90);
+// === BACK ===
+ctx.drawImage(backTemplate, 0, height, width, height);
+
+ctx.font = '26px Georgia';
+ctx.fillStyle = 'black';
+
+if (user.address) {
+  ctx.fillText(user.address, 320, height + 182);
+}
+
+if (user.pinCode) {
+  ctx.fillText(`${user.pinCode}`, 230, height + 210);
+}
+
+    // === RESPONSE ===
+    res.setHeader('Content-Type', 'image/jpeg');
+    combinedCanvas.createJPEGStream().pipe(res);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to generate member card', error: err.message });
+  }
+};
+const generateMembersCard = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const sangh = await HierarchicalSangh.findOne({
+      'members.userId': userId
+    });
+
+    if (!sangh) return res.status(404).json({ message: 'User not found in any sangh members.' });
+
+    const user = sangh.members.find(m => m.userId.toString() === userId);
+    if (!user) return res.status(404).json({ message: 'Member data not found.' });
+
+    // Generate 3-digit membership number
+    function getRandomThreeDigitNumber() {
+      return Math.floor(100 + Math.random() * 900);
+    }
+    const level = sangh.level || 'unknown';
+    const randomNum = getRandomThreeDigitNumber();
+    const membershipNumber = `${level}/00${randomNum.toString().padStart(3, '0')}`;
+
+    // Canvas setup
+    const width = 1011;
+    const height = 639;
+    const combinedCanvas = createCanvas(width, height * 2);
+    const ctx = combinedCanvas.getContext('2d');
+
+    const frontTemplate = await loadImage(path.join(__dirname, '../../Public/member_front.jpg'));
+    const backTemplate = await loadImage(path.join(__dirname, '../../Public/member_back.jpg'));
+
+    // === FRONT ===
+    ctx.drawImage(frontTemplate, 0, 0, width, height);
+
+    // Load photo
+    if (user.photo) {
+      try {
+        const response = await axios.get(user.photo, { responseType: 'arraybuffer' });
+        const imageBuffer = Buffer.from(response.data, 'binary');
+        const userPhoto = await loadImage(imageBuffer);
+        ctx.drawImage(userPhoto, 65, 180, 220, 260);
+      } catch (err) {
+        console.error('Error loading user photo:', err);
+      }
+    }
+
+    ctx.fillStyle = 'black';
+    ctx.font = '26px Georgia';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${user.firstName || ''} ${user.lastName || ''}`, 570, 196);
+    ctx.fillText(`${membershipNumber}`, 570, 260);
+    ctx.fillText(`${user.postMember}`, 570, 317); // Designation
+    if (user.jainAadharNumber) ctx.fillText(`${user.jainAadharNumber}`, 570, 380);
+
+    // Created By - bottom center
+    function getRandomFourDigitNumber() {
+      return Math.floor(1000 + Math.random() * 9000);
+    }
+    const createdByText = `Created By: ${level}/JA${getRandomFourDigitNumber()}`;
+
+    ctx.font = 'bold 28px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'black';
+    ctx.fillText(createdByText, width / 2, height - 90);
+
+    // === BACK ===
+    ctx.drawImage(backTemplate, 0, height, width, height);
+    ctx.font = '26px Georgia';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'black';
+
+    // Address handling - CORRECTED VERSION
+    console.log('User address:', user.address); // Debug log
+    console.log('Address type:', typeof user.address); // Debug log
+    
+    if (user.address && typeof user.address === 'object') {
+      // Make sure it's not an array and has the expected properties
+      if (!Array.isArray(user.address) && user.address.street !== undefined) {
+        const { street = '', city = '', district = '', state = '', pincode = '' } = user.address;
+        
+        const addressY = height + 182;
+        let currentY = addressY;
+        
+        // Only show non-empty fields
+        if (street && street.toString().trim()) {
+          ctx.fillText(`${street}`, 100, currentY);
+          currentY += 35;
+        }
+        
+        if (city && city.toString().trim()) {
+          ctx.fillText(`${city}`, 100, currentY);
+          currentY += 35;
+        }
+        
+        if (pincode && pincode.toString().trim()) {
+          ctx.fillText(`${pincode}`, 100, currentY);
+        }
+      } else {
+        console.log('Address object structure is invalid');
+        ctx.fillText('Address: Invalid Format', 100, height + 182);
+      }
+    } else {
+      console.log('Address is not an object or is null/undefined');
+      ctx.fillText('Address: Not Available', 100, height + 182);
+    }
+
+    // Add phone and email if available
+    let contactY = height + 350;
+    if (user.phoneNumber) {
+      ctx.fillText(`Phone: ${user.phoneNumber}`, 100, contactY);
+      contactY += 35;
+    }
+    if (user.email) {
+      ctx.fillText(`Email: ${user.email}`, 100, contactY);
+    }
+
+    res.setHeader('Content-Type', 'image/jpeg');
+    combinedCanvas.createJPEGStream().pipe(res);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to generate member card', error: err.message });
+  }
+};
 module.exports = {
     createHierarchicalSangh,
     getHierarchy,
@@ -1366,5 +1586,7 @@ module.exports = {
     getSpecializedSanghs,
     updateSpecializedSangh,
     checkOfficeBearerTerms,
-    getAllSanghs
+    getAllSanghs,
+    generateMemberCard,
+    generateMembersCard
 }; 

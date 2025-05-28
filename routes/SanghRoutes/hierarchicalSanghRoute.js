@@ -19,13 +19,15 @@ const {
     createSpecializedSangh,
     getSpecializedSanghs,
     updateSpecializedSangh,
-    getAllSanghs
+    getAllSanghs,
+    generateMemberCard,
+    generateMembersCard
 } = require('../../controller/SanghControllers/hierarchicalSanghController');
 
 const upload = require('../../middlewares/upload');
-const { generateMemberCard } = require('../../controller/SanghControllers/sanghCardController');
 
-router.get('/sangh/:userId', generateMemberCard);
+router.get('/generate-member-card/:userId', generateMemberCard);
+router.get('/generate-member-card/:userId', generateMembersCard);
 // Protect all routes
 router.use(authMiddleware);
 
