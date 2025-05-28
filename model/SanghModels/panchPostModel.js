@@ -24,9 +24,6 @@ const panchPostSchema = new mongoose.Schema({
   },
   caption: {
     type: String,
-    required: true,
-    trim: true,
-    maxlength: [2000, 'Content cannot exceed 2000 characters']
   },
   media: [{
     url: {

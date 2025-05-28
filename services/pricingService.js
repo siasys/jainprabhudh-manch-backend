@@ -2,10 +2,9 @@ const PricingConfig = require('../model/PaymentModels/pricingConfigModel');
 
 // Default prices (fallback if no config exists)
 const DEFAULT_PRICES = {
-    vyapar: 599 * 100, // ₹999 in paise
-    biodata: 249 * 100  // ₹499 in paise
+    vyapar: 1001 * 100, // ₹1001 in paise
+    biodata: 501 * 100  // ₹501 in paise
 };
-
 /**
  * Get current price for an entity type
  * @param {string} entityType - The type of entity (vyapar, biodata)

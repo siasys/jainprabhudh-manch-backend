@@ -7,8 +7,8 @@ const User = require('../../model/UserRegistrationModels/userModel');
 
 // Constants for payment amounts
 const PAYMENT_AMOUNTS = {
-    vyapar: 1000 * 100, // ₹1000 in paise
-    biodata: 500 * 100, // ₹500 in paise
+    vyapar: 1001 * 100, // ₹1000 in paise
+    biodata: 501 * 100, // ₹500 in paise
     sangh: 1999 * 100,
     panch: 499 * 100,
     tirth: 1499 * 100,

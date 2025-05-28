@@ -603,10 +603,8 @@ const addSanghMember = asyncHandler(async (req, res) => {
         }
         // Check if it's a bulk operation or single member addition
         const isBulkOperation = req.body.members && Array.isArray(req.body.members);
-        
         if (isBulkOperation) {
             const { members } = req.body;
-            
             if (members.length === 0) {
                 return errorResponse(res, 'Members array cannot be empty', 400);
             }
@@ -614,7 +612,6 @@ const addSanghMember = asyncHandler(async (req, res) => {
             if (members.length > MAX_BULK_MEMBERS) {
                 return errorResponse(res, `Cannot add more than ${MAX_BULK_MEMBERS} members at once`, 400);
             }
-            
             const results = {
                 success: [],
                 failed: []
@@ -631,9 +628,9 @@ const addSanghMember = asyncHandler(async (req, res) => {
                 }
 
                 try {
-                    const user = await User.findOne({ 
-                        jainAadharNumber: member.jainAadharNumber, 
-                        jainAadharStatus: 'verified' 
+                    const user = await User.findOne({
+                        jainAadharNumber: member.jainAadharNumber,
+                        jainAadharStatus: 'verified'
                     });
 
                     if (!user) {
@@ -660,6 +657,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
                         jainAadharNumber: member.jainAadharNumber,
                         email: member.email || user.email,
                         phoneNumber: member.phoneNumber || user.phoneNumber,
+                        postMember: member.postMember,
                         address: {
                             ...member.address,
                             city: member.address?.city || user.city,
@@ -712,7 +710,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             }, `Added ${results.success.length} members successfully, ${results.failed.length} failed`);
         } 
         else {
-            const { firstName, lastName, jainAadharNumber, email, phoneNumber, address } = req.body;
+            const { firstName, lastName, jainAadharNumber, email, phoneNumber, address, postMember } = req.body;
 
             if (!firstName || !lastName || !jainAadharNumber) {
                 return errorResponse(res, 'Missing required fields', 400);
@@ -739,6 +737,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
                 jainAadharNumber,
                 email: email || user.email,
                 phoneNumber: phoneNumber || user.phoneNumber,
+                postMember,
                 address: {
                     ...address,
                     city: address?.city || user.city,

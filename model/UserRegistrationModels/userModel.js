@@ -107,7 +107,7 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: function() {
         const date = new Date();
-        date.setMonth(date.getMonth() + 1);
+        date.setMonth(date.getMonth() + 3);
         return date;
       }
     },
@@ -262,15 +262,15 @@ userSchema.pre('save', hashPassword);
 userSchema.methods.isPasswordMatched = isPasswordMatched;
 
 // Update indexes to match schema changes
-userSchema.index({ phoneNumber: 1 }); 
-userSchema.index({ jainAadharNumber: 1 }, { sparse: true }); 
+userSchema.index({ phoneNumber: 1 });
+userSchema.index({ jainAadharNumber: 1 }, { sparse: true });
 userSchema.index({ jainAadharStatus: 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ createdAt: -1 });
 
 // Add compound indexes for common query patterns
-userSchema.index({ role: 1, createdAt: -1 }); 
-userSchema.index({ jainAadharStatus: 1, createdAt: -1 }); 
+userSchema.index({ role: 1, createdAt: -1 });
+userSchema.index({ jainAadharStatus: 1, createdAt: -1 });
 
 userSchema.methods.incrementLoginAttempts = async function() {
     this.loginAttempts += 1;

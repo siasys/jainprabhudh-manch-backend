@@ -75,6 +75,9 @@ const memberSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    postMember: {
+        type: String,
+    },
     email: String,
     phoneNumber: String,
     document: String,

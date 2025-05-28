@@ -25,9 +25,7 @@ const createPanchPost = asyncHandler(async (req, res) => {
     const panchMemberData = await User.findById(panchMember);
     if (!panchMemberData) return errorResponse(res, 'Panch Member not found', 404);
     console.log("Fetched User Data:", panchMemberData);
-    const firstName = panchMemberData.firstName || 'Unknown'; 
-    const lastName = panchMemberData.lastName || '';
-    const postedByName = `${firstName} ${lastName}`.trim();
+    const postedByName = panchMemberData.fullName || 'Unknown';
     const postedProfilePicture = panchMemberData.profilePicture || '';
     let mediaFiles = [];
     if (req.files?.media) {
