@@ -51,9 +51,20 @@ const sanghPostSchema = new mongoose.Schema({
   },
   caption: {
     type: String,
-    required: true,
-    trim: true,
     maxlength: [2000, 'Content cannot exceed 2000 characters']
+  },
+   textPost: {
+    type: String,
+    trim: true,
+    maxlength: [5000, 'Text post cannot exceed 5000 characters'],
+    required: function () {
+      return this.postType === 'text';
+    }
+  },
+  postType: {
+    type: String,
+    enum: ['media', 'text'],
+    default: 'media'
   },
   media: [{
     url: {

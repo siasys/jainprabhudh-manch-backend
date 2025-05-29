@@ -15,44 +15,65 @@ const createSanghPost = asyncHandler(async (req, res) => {
     const sanghId = req.params.sanghId;
     const userId = req.user._id;
     const officeBearerRole = req.officeBearerRole;
-    const { caption } = req.body;
-    
-    // Validate content
-    if (!caption) {
-      return errorResponse(res, 'caption is required', 400);
+    const { caption, textPost, postType } = req.body;
+
+    // Basic validation
+    if (!postType || !['media', 'text'].includes(postType)) {
+      return errorResponse(res, 'Invalid or missing postType', 400);
     }
-    
-    // Process uploaded media
+
+    // Validate fields based on postType
+    if (postType === 'media' && !caption) {
+      return errorResponse(res, 'Caption is required for media post', 400);
+    }
+
+    if (postType === 'text' && !textPost) {
+      return errorResponse(res, 'TextPost is required for text post', 400);
+    }
+
+    // Process media files (only for media post)
     let mediaFiles = [];
-    if (req.files && req.files.media) {
+    if (postType === 'media' && req.files && req.files.media) {
       mediaFiles = req.files.media.map(file => ({
         url: convertS3UrlToCDN(file.location),
         type: file.mimetype.startsWith('image/') ? 'image' : 'video'
       }));
     }
-    
-    // Create the post
-    const post = await SanghPost.create({
+
+    // Create the post object dynamically
+    const postData = {
       sanghId,
       postedByUserId: userId,
       postedByRole: officeBearerRole,
-      caption,
-      media: mediaFiles
-    });
-    
-    // Populate Sangh and user details for response
+      postType,
+      media: mediaFiles,
+    };
+
+    if (postType === 'media') {
+      postData.caption = caption;
+    } else if (postType === 'text') {
+      postData.textPost = textPost;
+    }
+
+    const post = await SanghPost.create(postData);
+
+    // Populate for response
     const populatedPost = await SanghPost.findById(post._id)
       .populate('sanghId', 'name level location')
       .populate('postedByUserId', 'firstName lastName fullName profilePicture');
-      await invalidateCache(`sanghPosts:page:1:limit:10`);
-      await invalidatePattern(`sanghPosts:${sanghId}:*`);
-      await invalidatePattern('allSanghPosts:*');
-      await invalidateCache(`sangh:${sanghId}:stats`);
+
+    // Invalidate cache
+    await invalidateCache(`sanghPosts:page:1:limit:10`);
+    await invalidatePattern(`sanghPosts:${sanghId}:*`);
+    await invalidatePattern('allSanghPosts:*');
+    await invalidateCache(`sangh:${sanghId}:stats`);
+
     return successResponse(res, populatedPost, 'Post created successfully', 201);
   } catch (error) {
     return errorResponse(res, error.message, 500);
   }
 });
+
 
 // Get posts by Sangh ID
 const getSanghPosts = asyncHandler(async (req, res) => {
@@ -78,7 +99,6 @@ const getSanghPosts = asyncHandler(async (req, res) => {
     .populate('postedByUserId', 'firstName lastName fullName profilePicture')
     .populate('comments.user', 'firstName lastName fullName profilePicture')
     .sort('-createdAt')
-    .skip(skip)
     .limit(limit);
     
     const total = await SanghPost.countDocuments({ 
