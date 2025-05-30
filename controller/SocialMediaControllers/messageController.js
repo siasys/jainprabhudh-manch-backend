@@ -273,8 +273,8 @@ exports.getMessages = async (req, res) => {
         { sender: receiver, receiver: sender },
       ],
     }).sort({ createdAt: 1 })
-    .populate('sender', 'firstName lastName profilePicture')
-    .populate('receiver', 'firstName lastName profilePicture');
+    .populate('sender', 'firstName lastName fullName profilePicture')
+    .populate('receiver', 'firstName lastName fullName profilePicture');
 
     // Mark messages as read
     await Message.updateMany(

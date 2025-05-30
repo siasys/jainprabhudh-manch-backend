@@ -36,7 +36,7 @@ const createJainAadhar = asyncHandler(async (req, res) => {
         // Default to city level if city is provided
         if (location.city && location.district) {
             applicationLevel = 'city';
-        } 
+        }
         // If no city but district is provided, route to district level
         else if (!location.city && location.district) {
             applicationLevel = 'district';
@@ -263,7 +263,7 @@ const getApplicationsForReview = asyncHandler(async (req, res) => {
             
             return successResponse(res, applications, 'Applications retrieved successfully');
         }
-        
+
         // For admin with verify permissions - can review all pending applications
         if (reviewerLevel === 'admin') {
             const applications = await JainAadhar.find({
@@ -302,7 +302,6 @@ const getApplicationsForReview = asyncHandler(async (req, res) => {
             if (!sangh) {
                 return errorResponse(res, 'Sangh not found', 404);
             }
-
             // Build location query based on president's authority
             const locationQuery = {
                 status: 'pending',

@@ -8,7 +8,7 @@ const { body, param, query } = require('express-validator');
 router.use(authMiddleware);
 
 // Create suggestion/complaint with validation
-router.post('/', 
+router.post('/',
   [
     body('type').isIn(['suggestion', 'complaint']).withMessage('Type must be either suggestion or complaint'),
     body('subject').notEmpty().withMessage('Subject is required')
