@@ -344,7 +344,38 @@ exports.getAllMessages = async (req, res) => {
     res.status(500).json({ message: 'Error fetching messages', error });
   }
 };
+exports.getConversation = async (req, res) => {
+  try {
+    const userId = req.params.userId;
 
+    // Get all messages involving the user
+    const messages = await Message.find({
+      $or: [{ sender: userId }, { receiver: userId }]
+    })
+    .sort({ createdAt: -1 }) // latest first
+    .populate('sender', 'fullName profilePicture')
+    .populate('receiver', 'fullName profilePicture');
+
+    const conversationMap = new Map();
+
+    // Loop through messages to get latest per conversation
+    messages.forEach(msg => {
+      const otherUser = msg.sender._id.toString() === userId
+        ? msg.receiver._id.toString()
+        : msg.sender._id.toString();
+
+      if (!conversationMap.has(otherUser)) {
+        conversationMap.set(otherUser, msg);
+      }
+    });
+
+    const recentChats = Array.from(conversationMap.values());
+
+    return successResponse(res, recentChats, 'Recent chats fetched', 200);
+  } catch (err) {
+    return errorResponse(res, 'Failed to fetch recent chats', 500, err);
+  }
+};
 exports.getConversations = async (req, res) => {
   try {
     const userId = req.params.userId;
