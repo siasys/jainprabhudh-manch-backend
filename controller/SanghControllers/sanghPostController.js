@@ -222,7 +222,6 @@ const commentOnSanghPost = asyncHandler(async (req, res) => {
     // Populate user details in the comment
     const populatedPost = await SanghPost.findById(postId)
       .populate('comments.user', 'firstName lastName fullName profilePicture');
-    
       const populatedComment = populatedPost.comments[populatedPost.comments.length - 1];     
     return successResponse(res, populatedComment, 'Comment added successfully');
   } catch (error) {

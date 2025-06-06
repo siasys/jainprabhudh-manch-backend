@@ -72,9 +72,8 @@ const getAllStories = asyncHandler(async (req, res) => {
         // Fetch only stories from the last 24 hours
         const stories = await Story.find({
             createdAt: { $gte: twentyFourHoursAgo }
-        }).populate("userId", "profilePicture firstName lastName");
+        }).populate("userId", "profilePicture firstName lastName fullName");
       //  console.log("Fetched Stories:", stories);
-      
         res.status(200).json({
             success: true,
             count: stories.length,
@@ -99,7 +98,7 @@ const getStoriesByUser = asyncHandler(async (req, res) => {
         const stories = await Story.find({
             userId,
             createdAt: { $gte: twentyFourHoursAgo }
-        }).populate("userId", "profilePicture firstName lastName");
+        }).populate("userId", "profilePicture firstName lastName fullName");
 
         if (!stories.length) {
             return errorResponse(res, 'No active stories found for this user', 404);

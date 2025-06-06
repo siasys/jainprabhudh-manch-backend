@@ -16,6 +16,8 @@ const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 const { extractS3KeyFromUrl } = require('../../utils/s3Utils');
 const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
 const redisClient = require('../../config/redisClient')
+const Report = require('../../model/SocialMediaModels/Report')
+
 // Create a post
 // const createPost = asyncHandler(async (req, res) => {
 //   const { caption, image, userId } = req.body;
@@ -450,19 +452,26 @@ const unlikePost = asyncHandler(async (req, res) => {
 
 const deletePost = asyncHandler(async (req, res) => {
   const { postId } = req.params;
-  const { userId } = req.body;
+  const { userId } = req.query;
+
   const post = await Post.findById(postId);
   if (!post) {
     return res.status(404).json({ error: 'Post not found' });
   }
-  if (post.user.toString() !== userId.toString()) {
-    return res.status(403).json({ error: 'Unauthorized to delete this post' });
-  }
+
   const user = await User.findById(userId);
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
-  // Delete media files from S3 bucket
+
+  const isOwner = post.user.toString() === userId.toString();
+  const isSuperAdmin = user.role === 'superadmin';
+
+  if (!isOwner && !isSuperAdmin) {
+    return res.status(403).json({ error: 'Unauthorized to delete this post' });
+  }
+
+  // Delete media from S3 (if required)
   if (post.media && post.media.length > 0) {
     const deletePromises = post.media.map(async (mediaItem) => {
       try {
@@ -473,25 +482,32 @@ const deletePost = asyncHandler(async (req, res) => {
             Key: key
           };
           await s3Client.send(new DeleteObjectCommand(deleteParams));
-          console.log(`Successfully deleted file from S3: ${key}`);
         }
-      } catch (error) {
-        console.error(`Error deleting file from S3: ${mediaItem.url}`, error);
-        // Continue with post deletion even if S3 deletion fails
+      } catch (err) {
+        console.error('Error deleting from S3:', err);
       }
     });
-    // Wait for all S3 delete operations to complete
     await Promise.all(deletePromises);
   }
-  user.posts = user.posts.filter((id) => id.toString() !== postId.toString());
+
+  // ✅ Delete related reports
+  await Report.deleteMany({ postId: postId });
+
+  // ✅ Remove postId from user's posts list
+  user.posts = user.posts.filter(id => id.toString() !== postId.toString());
   await user.save();
+
+  // ✅ Delete post
   await post.deleteOne();
+
+  // ✅ Clear cache (optional if used)
   await invalidateCache(`post:${postId}`);
-  (`userPosts:${userId}:*`);
   await invalidateCache('combinedFeed:*');
-  await invalidateCache('combinedFeed:firstPage:limit:10');
-  res.json({ message: 'Post deleted successfully' });
+
+  res.json({ message: 'Post and related reports deleted successfully' });
 });
+
+
 
 const editPost = asyncHandler(async (req, res) => {
   const { userId, caption, image } = req.body;

@@ -52,9 +52,11 @@ const paymentRoute = require('./routes/SanghRoutes/paymentRoutes');
 const contactUsRoutes = require('./routes/UserRegistrationRoutes/contactUsRoutes');
 const foundationPaymentRoutes = require('./routes/Foundation/foundationPaymentRoutes')
 const bailorRoutes = require('./routes/Bailors/bailors');
-const jainPratibhaRoutes = require('./routes/Jain Prathibha/jainPratibhaRoutes')
-const jainHostalRoutes = require('./routes/JainHostal/jainHostalRoutes')
-const jainFoodRoutes = require('./routes/JainFood/jainFoodRoutes')
+const jainPratibhaRoutes = require('./routes/Jain Prathibha/jainPratibhaRoutes');
+const jainHostalRoutes = require('./routes/JainHostal/jainHostalRoutes');
+const jainFoodRoutes = require('./routes/JainFood/jainFoodRoutes');
+const reportRoutes = require('./routes/SocialMediaRoutes/reportRoutes');
+
 app.set('trust proxy',1)
 // connect to databse
 dbConnect();
@@ -144,7 +146,9 @@ app.use('/api/jainhostal', jainHostalRoutes);
 // jain Food
 app.use('/api/jainFood', jainFoodRoutes);
 // Foundation Payment
-app.use('/api/payment',foundationPaymentRoutes)
+app.use('/api/payment', foundationPaymentRoutes);
+// report pot
+app.use('/api/report', reportRoutes);
 // Admin API routes
 app.use("/api/admin", adminRouter);
 
