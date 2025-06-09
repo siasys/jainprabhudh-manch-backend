@@ -3,7 +3,7 @@ const User = require('../../model/UserRegistrationModels/userModel');
 const asyncHandler = require("express-async-handler");
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
-
+const StoryReport = require('../../model/SocialMediaModels/StoryReport')
 // Create Story
 const createStory = asyncHandler(async (req, res) => {
     try {
@@ -74,6 +74,7 @@ const getAllStories = asyncHandler(async (req, res) => {
             createdAt: { $gte: twentyFourHoursAgo }
         }).populate("userId", "profilePicture firstName lastName fullName");
       //  console.log("Fetched Stories:", stories);
+      
         res.status(200).json({
             success: true,
             count: stories.length,
@@ -155,66 +156,69 @@ const deleteStory = asyncHandler(async (req, res) => {
 });
 // delete story on media
 const deleteStoryMedia = asyncHandler(async (req, res) => {
-    try {
-        const { storyId } = req.params;
-        const userId = req.user._id;
-        const { mediaUrl } = req.body; 
+  try {
+    const { storyId } = req.params;
+    const userId = req.user._id;
+    const userRole = req.user.role;
+    const { mediaUrl } = req.body;
 
-        const normalizedMediaUrl = decodeURIComponent(mediaUrl).trim();
-        console.log("Received URL:", normalizedMediaUrl);
-        // Verify story ownership
-        const story = await Story.findOne({
-            _id: storyId,
-            userId: userId // Ensure authenticated user owns the story
-        });
+    const normalizedMediaUrl = decodeURIComponent(mediaUrl).trim();
 
-        if (!story) {
-            return res.status(404).json({
-                success: false,
-                message: "Story not found or unauthorized"
-            });
-        }
-
-        // Filter out the media URL that needs to be deleted
-        const updatedMedia = story.media.filter(url => url.trim() !== normalizedMediaUrl);
-        console.log("Updated media:", updatedMedia);
-
-
-        if (updatedMedia.length === 0) {
-            // If no media left, delete entire story document
-            await Story.findByIdAndDelete(storyId);
-
-            // Remove story reference from User
-            await User.findByIdAndUpdate(userId, {
-                $pull: { story: storyId }
-            });
-
-            return res.json({
-                success: true,
-                message: "Story deleted successfully"
-            });
-        }
-
-        // Update media array if some media items remain
-        story.media = updatedMedia;
-        story.markModified('media');
-        await story.save();
-
-        res.json({
-            success: true,
-            message: "Media deleted successfully",
-            data: story
-        });
-
-    } catch (error) {
-        console.error("Error deleting story media:", error);
-        res.status(500).json({
-            success: false,
-            message: "Error deleting story media",
-            error: error.message
-        });
+    const story = await Story.findById(storyId);
+    if (!story) {
+      return res.status(404).json({
+        success: false,
+        message: "Story not found"
+      });
     }
+
+    if (!story.userId.equals(userId) && userRole !== 'superadmin') {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to delete this story"
+      });
+    }
+
+    const updatedMedia = story.media.filter(url => url.trim() !== normalizedMediaUrl);
+
+    if (updatedMedia.length === 0) {
+      // Delete entire story
+      await Story.findByIdAndDelete(storyId);
+
+      // Remove story reference from User
+      await User.findByIdAndUpdate(story.userId, {
+        $pull: { story: storyId }
+      });
+
+      // Delete related story reports
+      await StoryReport.deleteMany({ storyId: storyId });
+
+      return res.json({
+        success: true,
+        message: "Story and related reports deleted successfully"
+      });
+    }
+
+    story.media = updatedMedia;
+    story.markModified('media');
+    await story.save();
+
+    res.json({
+      success: true,
+      message: "Media deleted successfully",
+      data: story
+    });
+
+  } catch (error) {
+    console.error("Error deleting story media:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error deleting story media",
+      error: error.message
+    });
+  }
 });
+
 
 module.exports = {
     createStory,

@@ -11,5 +11,5 @@ router.get('/all', jainPratibhaController.getAllPosts);
 
 // POST /api/jainpratibha/like/:postId
 router.post('/like/:postId', jainPratibhaController.toggleLike);
-
+router.delete('/:postId', jainPratibhaController.deletePost);
 module.exports = router;

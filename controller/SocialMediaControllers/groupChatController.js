@@ -83,9 +83,9 @@ exports.getGroupDetails = async (req, res) => {
     }
 
     const group = await GroupChat.findById(groupId)
-      .populate("groupMembers.user", "firstName lastName profilePicture")
-      .populate('creator', 'firstName lastName profilePicture')
-      .populate('admins', 'firstName lastName profilePicture');
+      .populate("groupMembers.user", "firstName lastName fullName profilePicture")
+      .populate('creator', 'firstName lastName fullName profilePicture')
+      .populate('admins', 'firstName lastName fullName profilePicture');
 
     if (!group) {
       return res.status(404).json({ message: "Group not found." });
@@ -192,8 +192,8 @@ exports.getAllGroups = async (req, res) => {
       'groupMembers.user': userId,
       isGotraGroup: false
     })
-    .populate('groupMembers.user', 'firstName lastName profilePicture')
-    .populate('creator', 'firstName lastName profilePicture');
+    .populate('groupMembers.user', 'firstName fullName lastName profilePicture')
+    .populate('creator', 'firstName lastName fullName profilePicture');
 
     // Convert groupImage URL to CDN if it exists in each group
     groups.forEach(group => {
@@ -217,8 +217,8 @@ exports.getUserGotraGroups = async (req, res) => {
       isGotraGroup: true, 
       "groupMembers.user": userId
     })
-    .populate("groupMembers.user", "firstName lastName profilePicture")
-    .populate("creator", "firstName lastName profilePicture");
+    .populate("groupMembers.user", "firstName lastName fullName profilePicture")
+    .populate("creator", "firstName lastName fullName profilePicture");
     res.status(200).json({ success: true, gotraGroups });
   } catch (error) {
     console.error("Error fetching user Gotra Groups:", error);
@@ -230,8 +230,8 @@ exports.getUserGotraGroups = async (req, res) => {
 exports.getAllGroupChats = async (req, res) => {
   try {
     const groups = await GroupChat.find()
-    .populate('groupMembers.user', 'firstName lastName profilePicture')    
-    .populate('creator', 'firstName lastName profilePicture');
+    .populate('groupMembers.user', 'firstName lastName fullName profilePicture')    
+    .populate('creator', 'firstName lastName fullName profilePicture');
     res.status(200).json(groups);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -243,7 +243,7 @@ exports.sendGroupMessage = async (req, res) => {
   try {
     const { groupId, sender, message } = req.body;
     const group = await GroupChat.findById(groupId)
-    .populate('groupMembers.user', 'firstName lastName profilePicture');
+    .populate('groupMembers.user', 'firstName lastName fullName profilePicture');
     if (!group) {
       return res.status(404).json({ message: "Group not found" });
     }
@@ -424,11 +424,11 @@ exports.getGroupMessages = async (req, res) => {
     const group = await GroupChat.findById(groupId)
       .populate({
         path: 'groupMessages.sender',
-        select: 'firstName lastName profilePicture'
+        select: 'firstName lastName fullName profilePicture'
       })
       .populate({
         path: 'groupMessages.readBy.user',
-        select: 'firstName lastName profilePicture' // ✅ Populate readBy.user
+        select: 'firstName lastName fullName profilePicture' // ✅ Populate readBy.user
       })
       .slice('groupMessages', [skip, parseInt(limit)]);
 

@@ -80,3 +80,27 @@ exports.toggleLike = async (req, res) => {
     res.status(500).json({ error: 'Failed to toggle like' });
   }
 };
+exports.deletePost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const loggedInUserId = req.user._id;
+    const userRole = req.user.role;
+
+    const post = await JainPratibha.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    // ✅ Only owner or superadmin can delete
+    if (!post.userId.equals(loggedInUserId) && userRole !== 'superadmin') {
+      return res.status(403).json({ message: 'You are not authorized to delete this post' });
+    }
+
+    await JainPratibha.findByIdAndDelete(postId);
+
+    res.json({ message: 'Post deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting post:', error);
+    res.status(500).json({ message: 'Server error while deleting post' });
+  }
+};

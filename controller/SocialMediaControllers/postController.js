@@ -425,7 +425,20 @@ const toggleLike = [
     });
   }),
 ];
+const getLikedUsers = asyncHandler(async (req, res) => {
+  const { postId } = req.params;
 
+  const post = await Post.findById(postId).populate({
+    path: 'likes',
+    select: 'fullName profilePicture', // only needed fields
+  });
+
+  if (!post) {
+    return res.status(404).json({ message: 'Post not found' });
+  }
+
+  res.status(200).json({ users: post.likes });
+});
 // Unlike a post
 const unlikePost = asyncHandler(async (req, res) => {
   const { postId } = req.params;
@@ -947,5 +960,6 @@ module.exports = {
   hidePost,
   unhidePost,
   getCombinedFeed,
-  getCombinedFeedOptimized
+  getCombinedFeedOptimized,
+  getLikedUsers
 };

@@ -1,5 +1,5 @@
 // controllers/messageController.js
-const Message = require('../../model/SocialMediaModels/messageModel');
+const { Message, encrypt, decrypt } = require('../../model/SocialMediaModels/messageModel');
 const User = require('../../model/UserRegistrationModels/userModel');
 const Conversation = require('../../model/SocialMediaModels/conversationModel')
 const mongoose = require('mongoose');
@@ -110,6 +110,102 @@ exports.createMessage = async (req, res) => {
       return errorResponse(res, 'Error sending message', 500, error.message);
     }
   };
+// DELETE /messages/clear/:receiverId
+exports.clearAllMessagesBetweenUsers = async (req, res) => {
+  try {
+    const senderId = req.user._id;
+    const receiverId = req.params.receiverId;
+
+    if (!receiverId) {
+      return res.status(400).json({ message: 'Receiver ID is required' });
+    }
+
+    const messages = await Message.find({
+      $or: [
+        { sender: senderId, receiver: receiverId },
+        { sender: receiverId, receiver: senderId }
+      ]
+    });
+
+    // Delete any attachments from S3
+    for (const msg of messages) {
+      if (msg.attachments && msg.attachments.length > 0) {
+        for (const attachment of msg.attachments) {
+          if (attachment.url) {
+            const key = attachment.url.split('.com/')[1];
+            await s3Client.send(new DeleteObjectCommand({
+              Bucket: process.env.AWS_BUCKET_NAME,
+              Key: key
+            }));
+          }
+        }
+      }
+    }
+
+    // Delete the messages from database
+    await Message.deleteMany({
+      $or: [
+        { sender: senderId, receiver: receiverId },
+        { sender: receiverId, receiver: senderId }
+      ]
+    });
+
+    // Notify receiver via socket (optional)
+    const io = getIo();
+    io.to(receiverId.toString()).emit('allMessagesCleared', { senderId });
+
+    res.status(200).json({ message: 'All messages between users cleared successfully' });
+  } catch (error) {
+    console.error('Error clearing messages:', error);
+    res.status(500).json({ message: 'Error clearing messages', error: error.message });
+  }
+};
+// PATCH /messages/block-unblock
+exports.blockUnblockUser = async (req, res) => {
+  try {
+    const userId = req.user._id; // logged in user
+    const { targetUserId, action } = req.body; // target user id and action = 'block' or 'unblock'
+
+    if (!targetUserId || !['block', 'unblock'].includes(action)) {
+      return res.status(400).json({ message: 'targetUserId and valid action (block/unblock) are required.' });
+    }
+
+    // Convert to ObjectId if needed
+    const userObjId = userId;
+    const targetObjId = targetUserId;
+
+    if (action === 'block') {
+      // Update messages where user is sender => set isBlockedBySender = true
+      await Message.updateMany(
+        { sender: userObjId, receiver: targetObjId },
+        { $set: { isBlockedBySender: true } }
+      );
+
+      // Update messages where user is receiver => set isBlockedByReceiver = true
+      await Message.updateMany(
+        { sender: targetObjId, receiver: userObjId },
+        { $set: { isBlockedByReceiver: true } }
+      );
+
+    } else if (action === 'unblock') {
+      // Set blocked flags false
+      await Message.updateMany(
+        { sender: userObjId, receiver: targetObjId },
+        { $set: { isBlockedBySender: false } }
+      );
+
+      await Message.updateMany(
+        { sender: targetObjId, receiver: userObjId },
+        { $set: { isBlockedByReceiver: false } }
+      );
+    }
+
+    return res.status(200).json({ message: `${action} successful.` });
+  } catch (error) {
+    console.error('Block/Unblock error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
 
 // Get messages between sender and receiver
 // exports.getMessages = async (req, res) => {

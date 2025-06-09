@@ -135,6 +135,14 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+      isBlockedBySender: {
+    type: Boolean,
+    default: false
+  },
+  isBlockedByReceiver: {
+    type: Boolean,
+    default: false
+  },
     deletedAt: Date,
     // For reply feature
     replyTo: {
@@ -194,5 +202,8 @@ messageSchema.virtual('decryptedMessage').get(function() {
   return this.message ? decrypt(this.message) : '';
 });
 
-
-module.exports = mongoose.model('Message', messageSchema);
+module.exports = {
+  Message: mongoose.model('Message', messageSchema),
+  encrypt,
+  decrypt
+};
