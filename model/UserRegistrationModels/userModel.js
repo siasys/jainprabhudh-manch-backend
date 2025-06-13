@@ -34,6 +34,11 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    tempEmailChange: {
+  email: String,
+  code: String,
+  expiresAt: Date,
+},
     verificationCode: {
       code: String,
       expiresAt: Date
@@ -77,7 +82,6 @@ const userSchema = new mongoose.Schema(
     },
     bio: {
       type: String,
-      maxlength: [200, 'Bio cannot exceed 200 characters'],
     },
     privacy: {
       type: String,

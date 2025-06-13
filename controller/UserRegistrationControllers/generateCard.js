@@ -15,11 +15,13 @@ const generateJainAadharCard = async (req, res) => {
     if (!application) {
       return res.status(404).json({ message: 'Application not found' });
     }
+const GAP_BETWEEN_CARDS = 40;
 
     const width = 1011, height = 639;
-    const combinedCanvas = createCanvas(width, height * 2);
+    const combinedCanvas = createCanvas(width, height * 2 + GAP_BETWEEN_CARDS);
     const ctx = combinedCanvas.getContext('2d');
-
+ctx.fillStyle = 'white';
+ctx.fillRect(0, 0, width, height * 2 + GAP_BETWEEN_CARDS);
     // === FRONT SIDE ===
     const frontTemplate = await loadImage(path.join(__dirname, '../../Public/shravak_front.jpeg'));
     ctx.drawImage(frontTemplate, 0, 0, width, height);
@@ -47,7 +49,8 @@ const generateJainAadharCard = async (req, res) => {
 
     // === BACK SIDE ===
     const backTemplate = await loadImage(path.join(__dirname, '../../Public/Shravak_back.jpeg'));
-    ctx.drawImage(backTemplate, 0, height, width, height);
+    ctx.drawImage(backTemplate, 0, height + GAP_BETWEEN_CARDS, width, height);
+
 
     ctx.fillStyle = 'black';
     ctx.font = '26px Georgia';

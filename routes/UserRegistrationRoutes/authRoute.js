@@ -15,7 +15,11 @@ const {
     resendVerificationCode,
     requestPasswordReset,
     resetPassword,
-    sendVerificationCode
+    sendVerificationCode,
+    getAllCities,
+    sendChangeEmailOtp,
+    verifyChangeEmail,
+    changePassword
 } = require('../../controller/UserRegistrationControllers/userController');
 const { authMiddleware, checkAccess } = require('../../middlewares/authMiddlewares');
 const upload = require('../../middlewares/upload');
@@ -59,6 +63,7 @@ router.post('/verification-email',sendVerificationCode)
 router.post('/verify-email', verifyEmail);
 router.post('/resend-code', resendVerificationCode);
 
+router.get('/cities', getAllCities);
 // Password reset
 router.post('/request-password-reset', requestPasswordReset);
 router.post('/reset-password', resetPassword);
@@ -67,10 +72,13 @@ router.use(authMiddleware);
 router.post('/logout', logoutUser);
 // router.use(checkAccess);
 router.get('/', getAllUsers);
+router.post('/send-change-email-otp', sendChangeEmailOtp);
+router.post('/verify-change-email', verifyChangeEmail);
 // Search users endpoint for suggestion/complaint recipient selection
 router.get('/search', searchUsers);
 router.get('/:id', getUserById);
 router.put('/:id', updateUserById);
+router.post('/change-password', changePassword); 
 router.put('/update-privacy/:id', updatePrivacy);
 router.post('/upload-profile-picture', authMiddleware,
 upload.single('profilePicture'),uploadProfilePicture);

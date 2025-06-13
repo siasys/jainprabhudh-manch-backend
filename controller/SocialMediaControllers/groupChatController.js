@@ -124,8 +124,7 @@ exports.createOrFindGotraGroup = async (req, res) => {
 
     // Check if group already exists
     let existingGroup = await GroupChat.findOne({ groupName: new RegExp(`^${gotra} Group$`, 'i') });
-
-    let groupImage = req.file ? req.file.location : "https://jainprabhutmanch-bucket.s3.ap-south-1.amazonaws.com/groupchaticon/JainGorupChatDefaultImage.png";
+    let groupImage = req.file ? req.file.location : null;
 
     if (existingGroup) {
       // check existing group
@@ -188,26 +187,46 @@ exports.getAllGroups = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const groups = await GroupChat.find({
+    // ✅ Fetch all non-gotra groups where user is a member
+    const normalGroups = await GroupChat.find({
       'groupMembers.user': userId,
       isGotraGroup: false
     })
     .populate('groupMembers.user', 'firstName fullName lastName profilePicture')
     .populate('creator', 'firstName lastName fullName profilePicture');
 
-    // Convert groupImage URL to CDN if it exists in each group
-    groups.forEach(group => {
+    // ✅ Fetch gotra group (either user is member OR creator)
+    const gotraGroup = await GroupChat.findOne({
+      isGotraGroup: true,
+      $or: [
+        { 'groupMembers.user': userId },
+        { creator: userId }
+      ]
+    })
+    .populate('groupMembers.user', 'firstName fullName lastName profilePicture')
+    .populate('creator', 'firstName lastName fullName profilePicture');
+
+    // ✅ CDN convert
+    normalGroups.forEach(group => {
       if (group.groupImage) {
         group.groupImage = convertS3UrlToCDN(group.groupImage);
       }
     });
 
-    res.status(200).json({ groups });
+    if (gotraGroup && gotraGroup.groupImage) {
+      gotraGroup.groupImage = convertS3UrlToCDN(gotraGroup.groupImage);
+    }
+
+    const allGroups = [...normalGroups];
+    if (gotraGroup) allGroups.push(gotraGroup);
+
+    res.status(200).json({ groups: allGroups });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message });
   }
 };
+
 
 // Fetch All Gotra Groups
 exports.getUserGotraGroups = async (req, res) => {
@@ -319,10 +338,8 @@ exports.sendGroupMessage = async (req, res) => {
     const io = getIo();
     if (io) {
       console.log(`Emitting new group message to room group:${groupId}`);
-      
       // Emit to the group room
       io.to(`group:${groupId}`).emit('newGroupMessage', messageData);
-      
       // Also emit individually to ensure delivery
       group.groupMembers.forEach(member => {
         const memberId = member.user._id.toString();
@@ -360,7 +377,7 @@ exports.sendGroupMessage = async (req, res) => {
 exports.deleteGroupChat = async (req, res) => {
   try {
     const { groupId } = req.params;
-    const userId = req.user.id; // Make sure you are using an auth middleware
+    const userId = req.user.id;
 
     if (!mongoose.Types.ObjectId.isValid(groupId)) {
       return errorResponse(res, 400, "Invalid group ID.");
@@ -385,7 +402,7 @@ exports.deleteGroupChat = async (req, res) => {
       const imageKey = group.groupImage.split('/').pop(); // Assuming file name is at the end of the URL
       const deleteCommand = new DeleteObjectCommand({
         Bucket: process.env.AWS_BUCKET_NAME,
-        Key: `uploads/${imageKey}` // adjust if your S3 path differs
+        Key: `uploads/${imageKey}`
       });
 
       await s3Client.send(deleteCommand);
@@ -553,35 +570,49 @@ exports.deleteGroupMessage = async (req, res) => {
 // 6. Update Group Message
 exports.updateGroupMessage = async (req, res) => {
   try {
-    const { groupId } = req.params;
-    const { groupName } = req.body;
+    const { groupId, messageId } = req.params;
+    const { message } = req.body;
     const userId = req.user._id;
-    const group = await GroupChat.findById(groupId);
-    if (!group) return res.status(404).json({ message: 'Group not found' });
-    // Check if user is admin
-    if (!group.admins.includes(userId)) {
-      return res.status(403).json({ message: "Only admins can update group details" });
+
+    if (!message || message.trim() === '') {
+      return res.status(400).json({ message: "Message content is required" });
     }
-    if (groupName) group.groupName = groupName;
-    if (req.file) {
-      group.groupImage = req.file.location;
+
+    // Find group where message exists and user is the sender
+    const group = await GroupChat.findOneAndUpdate(
+      {
+        _id: groupId,
+        "groupMessages._id": messageId,
+        "groupMessages.sender": userId
+      },
+      {
+        $set: {
+          "groupMessages.$.message": message,
+          "groupMessages.$.edited": true
+        }
+      },
+      { new: true }
+    );
+
+    if (!group) {
+      return res.status(404).json({ message: "Message not found or unauthorized" });
     }
-    await group.save();
-  // Notify group members about update
-  const io = getIo();
-  group.groupMembers.forEach(member => {
-    io.to(member.user.toString()).emit('groupUpdated', {
-      groupId,
-      groupName: group.groupName,
-      groupImage: group.groupImage,
-      description: group.description
+
+    // Emit update via socket
+    const io = getIo();
+    io.to(groupId).emit('messageEdited', {
+      messageId,
+      updatedMessage: message
     });
-  });
-    res.status(200).json({ message: 'Message updated successfully' });
+
+    res.status(200).json({ message: "Message updated successfully", groupId, messageId, updatedMessage: message });
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
+
+
 // Update Group Details (Name, Image, Members)
 exports.updateGroupDetails = async (req, res) => {
   try {
@@ -892,4 +923,25 @@ exports.updateGroupName = async (req, res) => {
   } catch (error) {
     return errorResponse(res, error.message, 500);
   }
+};
+// Promote a group member to admin
+exports.makeAdmin = async (req, res) => {
+  const { groupId } = req.params;
+  const { targetUserId } = req.body;
+  const currentUserId = req.user._id;
+
+  const group = await GroupChat.findById(groupId);
+  const isCurrentUserAdmin = group.admins.includes(currentUserId);
+  if (!isCurrentUserAdmin) return res.status(403).send("Not authorized");
+
+  // Update role
+  const member = group.groupMembers.find(m => m.user.toString() === targetUserId);
+  if (member) member.role = 'admin';
+
+  if (!group.admins.includes(targetUserId)) {
+    group.admins.push(targetUserId);
+  }
+
+  await group.save();
+  return res.status(200).send("User promoted to admin");
 };
