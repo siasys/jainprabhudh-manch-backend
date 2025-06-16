@@ -1,20 +1,28 @@
 const { convertS3UrlToCDN } = require('../utils/s3Utils');
 const GovtYojana = require("../model/govtYojanaModel");
 
+
+const MAX_FILE_SIZE_MB = 15;
+
 exports.createYojana = async (req, res) => {
   try {
-    const { yojanaName, userId } = req.body;
-    const image = req.file ? convertS3UrlToCDN(req.file.location) : null; // ✅ CDN conversion
-
-    if (!yojanaName || !image || !userId) {
-      return res.status(400).json({ message: "Name, Image, and User ID are required" });
+    const { yojanaName, userId, caption } = req.body;
+    if (!req.file) {
+      return res.status(400).json({ message: "PDF file is required" });
     }
-
-    const newYojana = new GovtYojana({ yojanaName, image, userId });
+    const fileSizeInMB = req.file.size / (1024 * 1024);
+    if (fileSizeInMB > MAX_FILE_SIZE_MB) {
+      return res.status(400).json({ message: "File size should not exceed 15MB" });
+    }
+    const fileUrl = convertS3UrlToCDN(req.file.location); // CDN conversion if using S3
+    if (!yojanaName || !fileUrl || !userId) {
+      return res.status(400).json({ message: "Name, File, and User ID are required" });
+    }
+    const newYojana = new GovtYojana({ yojanaName, fileUrl, userId,caption });
     await newYojana.save();
-
     res.status(201).json({ message: "Yojana created successfully", newYojana });
   } catch (error) {
+    console.error("❌ Error in createYojana:", error);
     res.status(500).json({ message: "Server Error", error });
   }
 };

@@ -14,5 +14,6 @@ router.put('/like/:id', jainFoodController.toggleLikePost);
 
 // Unlike a post
 router.put('/unlike/:id', jainFoodController.unlikePost);
+router.delete('/:id', jainFoodController.deletePost);
 
 module.exports = router;

@@ -183,32 +183,36 @@ const vyavahikBiodataSchema = new mongoose.Schema(
     mamaGotra: {
       type: String,
     },
-    pariwarInfo: {
-      fatherName: {
-        type: String,
-      },
-      fatherOccupation: {
-        type: String,
-      },
-      motherName: {
-        type: String,
-      },
-      motherOccupation: {
-        type: String,
-      },
-      brotherName: {
-        type: String,
-      },
-      brotherOccupation: {
-        type: String,
-      },
-      sisterName: {
-        type: String,
-      },
-      sisterOccupation: {
-        type: String,
-      },
+  pariwarInfo: {
+  fatherName: {
+    type: String,
+    trim: true,
+  },
+  fatherOccupation: {
+    type: String,
+    trim: true,
+  },
+  motherName: {
+    type: String,
+    trim: true,
+  },
+  motherOccupation: {
+    type: String,
+    trim: true,
+  },
+  brothers: [
+    {
+      name: { type: String, trim: true },
+      occupation: { type: String, trim: true },
     },
+  ],
+  sisters: [
+    {
+      name: { type: String, trim: true },
+      occupation: { type: String, trim: true },
+    },
+  ],
+}
   },
   { timestamps: true }
 );

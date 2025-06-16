@@ -72,9 +72,17 @@ const userSchema = new mongoose.Schema(
       required: [true, 'Password is required'],
       minlength: [8, 'Password must be at least 8 characters long'],
     },
-    city: {
-      type: String,
-      required: [true, 'City is required'],
+      location: {
+      country: {
+        type: String,
+        default: 'India',
+      },
+      state: {
+        type: String,
+      },
+      city: {
+        type: String,
+      }
     },
     profilePicture: {
       type: String,

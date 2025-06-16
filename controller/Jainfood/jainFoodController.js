@@ -122,3 +122,19 @@ exports.unlikePost = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+exports.deletePost = async (req, res) => {
+  try {
+    const postId = req.params.id;
+
+    const deletedPost = await JainFood.findByIdAndDelete(postId);
+
+    if (!deletedPost) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    res.status(200).json({ message: 'Post deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting JainFood post:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};

@@ -19,7 +19,8 @@ const {
     getAllCities,
     sendChangeEmailOtp,
     verifyChangeEmail,
-    changePassword
+    changePassword,
+    getCitiesByState
 } = require('../../controller/UserRegistrationControllers/userController');
 const { authMiddleware, checkAccess } = require('../../middlewares/authMiddlewares');
 const upload = require('../../middlewares/upload');
@@ -63,7 +64,8 @@ router.post('/verification-email',sendVerificationCode)
 router.post('/verify-email', verifyEmail);
 router.post('/resend-code', resendVerificationCode);
 
-router.get('/cities', getAllCities);
+//router.get('/cities', getAllCities);
+router.get('/location', getCitiesByState);
 // Password reset
 router.post('/request-password-reset', requestPasswordReset);
 router.post('/reset-password', resetPassword);

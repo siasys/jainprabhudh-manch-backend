@@ -24,7 +24,6 @@ const userValidation = {
     //   .withMessage('Password must contain at least 8 characters, one uppercase, one lowercase, one number, and one special character'),
     //body('birthDate').isISO8601().withMessage('Invalid date format'),
     body('gender').isIn(['Male', 'Female', 'Other']).withMessage('Invalid gender value'),
-    body('city').notEmpty().trim().escape(),
   ],
   login: [
     check('fullName')

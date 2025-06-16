@@ -38,9 +38,14 @@ exports.getNotifications = async (req, res) => {
       .sort({ createdAt: -1 })
       .populate({
         path: "senderId",
-        select: "firstName lastName fullName profilePicture", // Sirf yahi fields chahiye
+        select: "firstName lastName fullName profilePicture",
+      })
+      .populate({
+        path: "postId",
+        select: "media",
       });
-      res.status(200).json({ success: true, notifications });
+
+    res.status(200).json({ success: true, notifications });
   } catch (error) {
     console.error("Error fetching notifications:", error);
     res.status(500).json({ success: false, message: "Failed to fetch notifications" });

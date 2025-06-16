@@ -5,7 +5,7 @@ const upload = require('../../middlewares/upload');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { body, validationResult, param, query } = require('express-validator');
 const Notification = require('../../model/SocialMediaModels/notificationModel')
-const { getIo } = require('../../websocket/socket')
+const { getIo } = require('../../websocket/socket');
 const SanghPost = require('../../model/SanghModels/sanghPostModel');
 const PanchPost = require('../../model/SanghModels/panchPostModel');
 const VyaparPost = require('../../model/VyaparModels/vyaparPostModel');
@@ -399,6 +399,7 @@ const toggleLike = [
         senderId: userId,
         receiverId: post.user._id,
         type: 'like',
+        postId: postId, 
       });
     } else {
       // Like add karein
@@ -409,6 +410,7 @@ const toggleLike = [
         receiverId: post.user._id, // Fix: user ka _id lena zaroori hai
         type: 'like',
        message:`${user.firstName} ${user.lastName} liked your post.`,
+         postId: postId,
       });
       await notification.save();
       // Socket notification send karein
@@ -616,6 +618,7 @@ const addComment = async (req, res) => {
       receiverId: post.user,
       type: 'comment',
      message: `${user.firstName} ${user.lastName} commented on your post.`,
+       postId: postId,
     });
     await notification.save();
     // Emit the notification event to the receiver
@@ -657,6 +660,7 @@ const addReply = async (req, res) => {
       receiverId: comment.user,
       type: 'reply',
       message: `${user.firstName} ${user.lastName} replied to your comment.`
+      
     });
     await notification.save();
     // Emit the notification event to the receiver

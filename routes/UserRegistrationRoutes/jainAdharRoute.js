@@ -13,7 +13,8 @@ const {
   getVerifiedMembers,
   getApplicationsForReview,
   editJainAadhar,
-  checkExistingApplication
+  checkExistingApplication,
+  verifyJainAadhar
 } = require('../../controller/UserRegistrationControllers/jainAdharController');
 const { authMiddleware, canReviewJainAadhar } = require('../../middlewares/authMiddlewares');
 const { canEditJainAadhar } = require('../../middlewares/jainAadharEditPermissions');
@@ -62,6 +63,7 @@ router.get(
   statusCheckLimiter,
   getApplicationStatus
 );
+router.get('/verify/:jainAadharNumber', verifyJainAadhar);
 // Admin/Superadmin routes (require review permissions)
 router.use(canReviewJainAadhar);
 
@@ -78,18 +80,41 @@ router.get(
   getAllApplications
 );
 router.get('/generate-card/:id', generateJainAadharCard);
-router.get('/verify/jain-shravak/:id', (req, res) => {
-  res.send(`
-    <html>
-      <head><title>Verification</title></head>
-      <body style="text-align:center; font-family:sans-serif; margin-top: 50px;">
-        <h1>Your Jain Shravak Card is Verified ✅</h1>
-        <p>ID: ${req.params.id}</p>
-      </body>
-    </html>
-  `);
-});
+router.get('/verify/jain-shravak/:id', async (req, res) => {
+  try {
+    const application = await JainAadhar.findById(req.params.id);
+    const user = await User.findById(application?.userId);
 
+    if (!application || !user) {
+      return res.status(404).send(`<h2 style="text-align:center;color:red">Verification Failed ❌</h2>`);
+    }
+
+    res.send(`
+      <html>
+        <head><title>Card Verification</title></head>
+        <body style="text-align:center; font-family:sans-serif; margin-top: 40px;">
+          <h1>Your Jain Shravak Card is Verified ✅</h1>
+          <h3 style="margin-bottom: 40px;">Below are your card details:</h3>
+
+          <div style="display:inline-block; text-align:left; font-size:18px; line-height:1.6;">
+            <p><strong>Name:</strong> ${application.name || 'N/A'}</p>
+            <p><strong>Father/Husband Name:</strong> ${application.pitaOrpatiName || 'N/A'}</p>
+            <p><strong>Date of Birth:</strong> ${application.dob || 'N/A'}</p>
+            <p><strong>Mul Jain:</strong> ${application.mulJain || 'N/A'}</p>
+            <p><strong>Panth:</strong> ${application.panth || 'N/A'}</p>
+            <p><strong>Sub Caste:</strong> ${application.subCaste || 'N/A'}</p>
+            <p><strong>Gotra:</strong> ${application.gotra || 'N/A'}</p>
+            <p><strong>City:</strong> ${application.location?.city || 'N/A'}</p>
+            <p><strong>Jain Aadhar Number:</strong> ${user?.jainAadharNumber || 'N/A'}</p>
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error("Verification Error:", err.message);
+    res.status(500).send(`<h2 style="text-align:center;color:red">Server Error. Please try again.</h2>`);
+  }
+});
 // Admin application management
 // router.get(
 //   '/applications',

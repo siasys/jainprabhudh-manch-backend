@@ -197,6 +197,29 @@ const createJainAadhar = asyncHandler(async (req, res) => {
         return errorResponse(res, error.message, 500);
     }
 });
+
+const verifyJainAadhar = async (req, res) => {
+  try {
+    const jainAadhar = req.params.jainAadharNumber.trim();
+    const record = await JainAadhar.findOne({ jainAadharNumber: jainAadhar });
+    
+    if (!record) {
+      return res.status(404).json({ success: false, message: 'Jain Aadhar not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      user: {
+        name: record.name,
+        userId: record.userId,
+      }
+    });
+  } catch (error) {
+    console.error('Jain Aadhar verify error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
 // Get application status
 const getApplicationStatus = asyncHandler(async (req, res) => {
   try {
@@ -727,5 +750,6 @@ module.exports = {
   reviewApplicationByLevel,
   getVerifiedMembers,
   editJainAadhar,
-  checkExistingApplication
+  checkExistingApplication,
+  verifyJainAadhar
 };

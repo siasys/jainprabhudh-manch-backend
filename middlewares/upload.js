@@ -227,7 +227,7 @@ module.exports.jainGranthUpload = upload.fields([
   { name: 'jainGranth', maxCount: 1 },
   { name: 'jainGranthImage', maxCount: 1 }
 ]);
-module.exports.govtYojanaUpload = upload.single('image');
+module.exports.govtYojanaUpload = upload.single('file');
 module.exports.optimizeGroupIcon = optimizeImage;
 // Add Sangathan document upload configuration
 module.exports.sangathanDocs = upload.fields([
