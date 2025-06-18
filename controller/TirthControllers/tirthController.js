@@ -26,7 +26,7 @@ const submitTirthApplication = async (req, res) => {
         console.log("Received Body:", req.body);
 
         const {
-            name, userId, tirthType, tirthShetra, otherTirthShetra,
+            type, name, userId, tirthType, tirthShetra, otherTirthShetra,
             regionName, mulPratima, description, location, citySanghId,
             managerName, facilities, prabandhInputs, transport,
             nearestCity, nearestTirth, regionHistory, projects,
@@ -68,6 +68,7 @@ const submitTirthApplication = async (req, res) => {
         }
 
         const tirth = new Tirth({
+            type,
             name,
             tirthType,
             tirthShetra,

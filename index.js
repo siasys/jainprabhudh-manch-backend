@@ -56,6 +56,7 @@ const jainPratibhaRoutes = require('./routes/Jain Prathibha/jainPratibhaRoutes')
 const jainHostalRoutes = require('./routes/JainHostal/jainHostalRoutes');
 const jainFoodRoutes = require('./routes/JainFood/jainFoodRoutes');
 const reportRoutes = require('./routes/SocialMediaRoutes/reportRoutes');
+const blockRoutes = require('./routes/Block User/blockRoutes');
 
 app.set('trust proxy',1)
 // connect to databse
@@ -149,6 +150,8 @@ app.use('/api/jainFood', jainFoodRoutes);
 app.use('/api/payment', foundationPaymentRoutes);
 // report pot
 app.use('/api/report', reportRoutes);
+// block user
+app.use('/api/block', blockRoutes);
 // Admin API routes
 app.use("/api/admin", adminRouter);
 

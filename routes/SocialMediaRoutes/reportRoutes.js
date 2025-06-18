@@ -5,11 +5,10 @@ const reportController = require('../../controller/SocialMediaControllers/report
 const { authMiddleware } = require('../../middlewares/authMiddlewares');
 
 router.use(authMiddleware);
-// Create Report
 router.post('/', reportController.createReport);
-
-// Get All Reports (admin access)
 router.get('/', reportController.getAllReports);
+router.get('/my', reportController.getMyReports);
+router.get('/:id', reportController.getReportById);
 router.post('/story-report', reportController.createStoryReport);
 router.get('/story-report', reportController.getAllStoryReports);
 module.exports = router;

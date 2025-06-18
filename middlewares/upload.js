@@ -39,6 +39,8 @@ const getS3Folder = (fieldname, req) => {
   switch(fieldname) {
     case 'profilePicture':
       return 'profile-pictures/';
+    case 'coverPicture':
+      return 'cover-pictures/';
     case 'bailorImage':
       return 'bailors/images/';
     case 'jainPrathibha':
@@ -182,7 +184,7 @@ const handleMulterError = (err, req, res, next) => {
 };
 // Add this to the multer configuration
 const optimizeImage = async (req, res, next) => {
-  if (!req.file || !['profilePicture', 'chatImage','groupImage', 'groupIcon', 'image', 'media'].includes(req.file.fieldname)) return next();
+  if (!req.file || !['profilePicture','coverPicture', 'chatImage','groupImage', 'groupIcon', 'image', 'media'].includes(req.file.fieldname)) return next();
 
   try {
     const optimized = await sharp(req.file.buffer)

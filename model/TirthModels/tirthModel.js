@@ -2,6 +2,9 @@ const mongoose = require('mongoose');
 const crypto = require('crypto');
 
 const tirthSchema = new mongoose.Schema({
+    type:{
+    type: String,
+    },
     name: {
         type: String,
         required: true,

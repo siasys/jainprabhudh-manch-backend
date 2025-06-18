@@ -79,7 +79,11 @@ router.post('/verify-change-email', verifyChangeEmail);
 // Search users endpoint for suggestion/complaint recipient selection
 router.get('/search', searchUsers);
 router.get('/:id', getUserById);
-router.put('/:id', updateUserById);
+router.put('/:id', upload.fields([
+    { name: 'profilePicture', maxCount: 1 },
+    { name: 'coverPicture', maxCount: 1 }
+  ]),
+  updateUserById);
 router.post('/change-password', changePassword); 
 router.put('/update-privacy/:id', updatePrivacy);
 router.post('/upload-profile-picture', authMiddleware,

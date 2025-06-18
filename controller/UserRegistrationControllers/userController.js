@@ -1,5 +1,6 @@
 
 const User = require("../../model/UserRegistrationModels/userModel");
+const Block = require('../../model/Block User/Block')
 const asyncHandler = require("express-async-handler");
 const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
@@ -466,52 +467,68 @@ const loginUser = [
     }
 })
 ];
-// Enhanced user search with pagination and filters
+
 const getAllUsers = asyncHandler(async (req, res) => {
-    const { search, city, gender, role, page = 1, limit = 10 } = req.query;
+  const { search, city, gender, role, page = 1, limit = 10 } = req.query;
+  const currentUserId = req.user._id;
 
-    let query = {};
-    
-    // Search Query
-    if (search) {
-        const searchRegex = new RegExp(search, 'i');
-        query.$or = [
-            { firstName: searchRegex },
-            { lastName: searchRegex },
-            { fullName: searchRegex },
-            { city: searchRegex }
-        ];
+  let query = {};
+
+  // Search
+  if (search) {
+    const searchRegex = new RegExp(search, 'i');
+    query.$or = [
+      { firstName: searchRegex },
+      { lastName: searchRegex },
+      { fullName: searchRegex },
+      { city: searchRegex }
+    ];
+  }
+
+  // City, Gender, Role filters
+  if (city) query.city = new RegExp(city, 'i');
+  if (gender) query.gender = gender;
+  if (role) query.role = role;
+
+  // ✅ Block logic: get all users I blocked or who blocked me
+  const blockedRelations = await Block.find({
+    $or: [
+      { blocker: currentUserId },
+      { blocked: currentUserId },
+    ]
+  });
+
+  // Get IDs to exclude
+  const blockedUserIds = blockedRelations.map(rel => (
+    rel.blocker.toString() === currentUserId.toString()
+      ? rel.blocked.toString()
+      : rel.blocker.toString()
+  ));
+
+  // Add condition to exclude those users
+  query._id = { $nin: [...blockedUserIds, currentUserId] }; // also exclude self
+
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const users = await User.find(query)
+    .select('-password -__v')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(parseInt(limit));
+
+  const total = await User.countDocuments(query);
+
+  users.forEach(user => {
+    if (user.profilePicture) {
+      user.profilePicture = convertS3UrlToCDN(user.profilePicture);
     }
+  });
 
-    // City Filter
-    if (city) query.city = new RegExp(city, 'i');
-    
-    // Gender Filter
-    if (gender) query.gender = gender;
-    
-    // Role Filter
-    if (role) query.role = role;
-
-    console.log("Final Query:", query);
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const users = await User.find(query)
-        .select('-password -__v')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit));
-
-    const total = await User.countDocuments(query);
-    users.forEach(user => {
-        if (user.profilePicture) {
-            user.profilePicture = convertS3UrlToCDN(user.profilePicture);
-        }
-    });
-    res.json({
-        users: users || [],
-        totalUsers: total,
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(total / parseInt(limit))
-    });
+  res.json({
+    users: users || [],
+    totalUsers: total,
+    currentPage: parseInt(page),
+    totalPages: Math.ceil(total / parseInt(limit)),
+  });
 });
 
 
@@ -569,52 +586,66 @@ const changePassword = asyncHandler(async (req, res) => {
 
 // Enhanced user update with validation
 const updateUserById = asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const updates = req.body;
-    const newProfilePicture = req.file ? convertS3UrlToCDN(req.file.location) : null;  // ✅ AWS S3 image URL
+  const { id } = req.params;
+  const updates = req.body;
 
-    if (!req.user || !req.user._id) {
-        return res.status(401).json({ error: 'Unauthorized: No valid token' });
+  const files = req.files || {}; // ✅ Fix added here
+
+  const newProfilePicture = files.profilePicture?.[0]
+    ? convertS3UrlToCDN(files.profilePicture[0].location)
+    : null;
+
+  const newCoverPicture = files.coverPicture?.[0]
+    ? convertS3UrlToCDN(files.coverPicture[0].location)
+    : null;
+
+  if (!req.user || !req.user._id) {
+    return res.status(401).json({ error: 'Unauthorized: No valid token' });
+  }
+
+  if (req.user._id.toString() !== id) {
+    return res.status(403).json({ error: 'Forbidden: You can only update your own profile' });
+  }
+
+  delete updates.password;
+  delete updates.token;
+
+  const user = await User.findById(id);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  // ✅ Delete Old Profile Picture from S3 If New One is Uploaded
+  if (newProfilePicture && user.profilePicture?.startsWith("https")) {
+    const oldImageKey = user.profilePicture.split('/').pop(); 
+    const params = { Bucket: process.env.AWS_S3_BUCKET_NAME, Key: oldImageKey };
+    try {
+      await s3.deleteObject(params).promise();
+      console.log('✅ Old profile picture deleted from S3:', oldImageKey);
+    } catch (error) {
+      console.error('❌ Error deleting old profile picture:', error);
     }
+  }
 
-    if (req.user._id.toString() !== id) {
-        return res.status(403).json({ error: 'Forbidden: You can only update your own profile' });
-    }
+  // ✅ Update User Document with New Data
+  const updatedUser = await User.findByIdAndUpdate(
+    id,
+    {
+      $set: {
+        ...updates,
+        ...(newProfilePicture && { profilePicture: newProfilePicture }),
+        ...(newCoverPicture && { coverPicture: newCoverPicture }), // ✅ working now
+      },
+    },
+    { new: true, runValidators: true }
+  ).select('-password -__v');
 
-    delete updates.password;
-    delete updates.token;
-
-    const user = await User.findById(id);
-    if (!user) {
-        return res.status(404).json({ error: 'User not found' });
-    }
-
-    // ✅ Delete Old Profile Picture from S3 If New One is Uploaded
-    if (newProfilePicture && user.profilePicture && user.profilePicture.startsWith("https")) {
-        const oldImageKey = user.profilePicture.split('/').pop(); 
-        const params = { Bucket: process.env.AWS_S3_BUCKET_NAME, Key: oldImageKey };
-        try {
-            await s3.deleteObject(params).promise();
-            console.log('✅ Old profile picture deleted from S3:', oldImageKey);
-        } catch (error) {
-            console.error('❌ Error deleting old profile picture:', error);
-        }
-    }
-
-    // ✅ Update User Document with New Data
-    const updatedUser = await User.findByIdAndUpdate(
-        id,
-        { $set: { ...updates, ...(newProfilePicture && { profilePicture: newProfilePicture }) } },
-        { new: true, runValidators: true }
-    ).select('-password -__v');
-
-    res.json({
-        success: true,
-        message: 'Profile updated successfully',
-        data: updatedUser
-    });
+  res.json({
+    success: true,
+    message: 'Profile updated successfully',
+    data: updatedUser
+  });
 });
-
 
 
 // Enhanced privacy settings

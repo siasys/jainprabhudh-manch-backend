@@ -21,7 +21,8 @@ const {
     updateSpecializedSangh,
     getAllSanghs,
     generateMemberCard,
-    generateMembersCard
+    generateMembersCard,
+    getUserByJainAadhar
 } = require('../../controller/SanghControllers/hierarchicalSanghController');
 
 const upload = require('../../middlewares/upload');
@@ -55,6 +56,7 @@ router.get('/hierarchy/:id', getHierarchy
 router.get('/search',
     getSanghsByLevelAndLocation
 );
+router.get('/user/by-jain-aadhar/:jainAadharNumber', getUserByJainAadhar);
 
 // Get child Sanghs
 router.get('/children/:id', validateSanghAccess, getChildSanghs);

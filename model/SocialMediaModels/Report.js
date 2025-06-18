@@ -1,4 +1,3 @@
-// models/Report.js
 const mongoose = require('mongoose');
 
 const reportSchema = new mongoose.Schema(
@@ -6,16 +5,26 @@ const reportSchema = new mongoose.Schema(
     postId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Post',
-      required: true,
+      default: null, // 👈 Optional: if reporting an account
     },
     reportedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
     },
+    reportedUser: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+     reportType: {
+      type: String,
+      enum: ['A specific post', 'Something about this account'],
+      required: true,
+    },
     reason: {
       type: String,
-      maxlength: 500,
+      required: true,
     },
     status: {
       type: String,
