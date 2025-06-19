@@ -1,3 +1,4 @@
+const expressAsyncHandler = require('express-async-handler');
 const Notification = require('../../model/SocialMediaModels/notificationModel');
 const {getIo}  = require('../../websocket/socket');
 
@@ -38,7 +39,7 @@ exports.getNotifications = async (req, res) => {
       .sort({ createdAt: -1 })
       .populate({
         path: "senderId",
-        select: "firstName lastName fullName profilePicture",
+        select: "firstName lastName fullName profilePicture privacy",
       })
       .populate({
         path: "postId",
@@ -71,3 +72,28 @@ exports.markAllNotificationsRead = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to mark notifications as read' });
   }
 };
+exports.rejectFollowRequest = expressAsyncHandler(async (req, res) => {
+  const { followerId, followingId } = req.body;
+
+  const existingRequest = await Friendship.findOne({
+    follower: followerId,
+    following: followingId,
+    followStatus: 'following',
+  });
+
+  if (!existingRequest) {
+    return res.status(404).json({
+      success: false,
+      message: 'No pending follow request found.',
+    });
+  }
+
+  // ✅ Convert to 'following'
+  existingRequest.followStatus = 'following';
+  await existingRequest.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Follow request converted to following.',
+  });
+});

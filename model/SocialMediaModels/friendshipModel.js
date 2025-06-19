@@ -15,7 +15,7 @@ const friendshipSchema = new mongoose.Schema(
     },
     followStatus: {
       type: String,
-      enum: ['follow', 'following', 'unfollow','rejected'],
+      enum: ['follow', 'following', 'unfollow','pending'],
       default: 'follow',
     },
   },

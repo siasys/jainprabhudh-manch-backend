@@ -6,7 +6,9 @@ const {
     getFollowing, 
     checkFollowStatus, 
     acceptFollowRequest, 
-    getFollowRequests
+    getFollowRequests,
+    getFollowStatus,
+    rejectFollowRequest
 } = require('../../controller/SocialMediaControllers/friendshipController');
 const { authMiddleware } = require('../../middlewares/authMiddlewares')
 const rateLimit = require('express-rate-limit');
@@ -30,12 +32,16 @@ const followActionLimiter = rateLimit({
 router.post('/follow', followActionLimiter, followUser);
 // Unfollow a user
 router.post('/unfollow', followActionLimiter, unfollowUser);
+router.post('/reject', rejectFollowRequest);
+
 // Get all followers of a user
 router.get('/followers/:userId', getFollowers);
 // Get all users a user is following
 router.get('/following/:userId', getFollowing);
 //get follow request
-router.get('/follow-requests/:userId',getFollowRequests)
+router.get('/follow-requests/:userId',getFollowRequests);
+router.get('/status/:followerId/:followingId', getFollowStatus);
+
 // Check follow status
 router.post('/follow-status', checkFollowStatus);
 // Accept a follow request

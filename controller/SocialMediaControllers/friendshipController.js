@@ -2,10 +2,11 @@ const Friendship = require('../../model/SocialMediaModels/friendshipModel');
 const asyncHandler = require('express-async-handler');
 const Notification = require('../../model/SocialMediaModels/notificationModel');
 const User = require('../../model/UserRegistrationModels/userModel');
+const expressAsyncHandler = require('express-async-handler');
 
 // Follow a user (Modified with User Model Friends Array)
 const followUser = asyncHandler(async (req, res) => {
-    const { followerId, followingId } = req.body;
+    const { followerId, followingId, followStatus } = req.body;
     // Check if the friendship already exists
     const existingFriendship = await Friendship.findOne({ follower: followerId, following: followingId });
     if (existingFriendship) {
@@ -15,7 +16,7 @@ const followUser = asyncHandler(async (req, res) => {
     const newFriendship = await Friendship.create({
         follower: followerId,
         following: followingId,
-        followStatus: 'following'
+       followStatus: followStatus || 'following'
     });
     // Add following user to follower's friends list
     await User.findByIdAndUpdate(followerId, {
@@ -33,6 +34,15 @@ const getFollowRequests = asyncHandler(async (req, res) => {
     const requests = await Friendship.find({ following: userId, followStatus: 'following' })
         .populate('follower', 'firstName lastName fullName profilePicture');
     res.json({ success: true, requests });
+});
+// Get Follow Status Between Two Users
+const getFollowStatus = asyncHandler(async (req, res) => {
+    const { followerId, followingId } = req.params;
+    const friendship = await Friendship.findOne({ follower: followerId, following: followingId });
+    if (!friendship) {
+        return res.json({ followStatus: 'none' });
+    }
+    res.json({ followStatus: friendship.followStatus });
 });
 
 // Unfollow a user
@@ -90,7 +100,7 @@ const getFollowers = asyncHandler(async (req, res) => {
                 lastName: f.follower.lastName,
                 fullName: f.follower.fullName,
                 profilePicture: f.follower.profilePicture,
-                followStatus: "following"
+                followStatus: f.followStatus
             }))
         });
     } catch (error) {
@@ -135,17 +145,49 @@ const checkFollowStatus = asyncHandler(async (req, res) => {
 // Accept a follow request
 const acceptFollowRequest = asyncHandler(async (req, res) => {
     const { followerId, followingId } = req.body;
+
     const updatedFriendship = await Friendship.findOneAndUpdate(
-        { follower: followerId, following: followingId, status: 'pending' },
-        { status: 'accepted' },
+        { follower: followerId, following: followingId, followStatus: 'pending' },
+        { followStatus: 'following' },
         { new: true }
     );
     if (!updatedFriendship) {
         return res.status(404).json({ message: 'Follow request not found or already accepted' });
     }
+    await User.findByIdAndUpdate(followerId, {
+        $addToSet: { friends: followingId }
+    });
+    await User.findByIdAndUpdate(followingId, {
+        $addToSet: { friends: followerId }
+    });
     res.status(200).json({ message: 'Follow request accepted', friendship: updatedFriendship });
 });
+const rejectFollowRequest = expressAsyncHandler(async (req, res) => {
+  const { followerId, followingId } = req.body;
 
+  // ✅ Find the existing request with 'pending' status
+  const existingRequest = await Friendship.findOne({
+    follower: followerId,
+    following: followingId,
+    followStatus: 'pending',
+  });
+
+  if (!existingRequest) {
+    return res.status(404).json({
+      success: false,
+      message: 'No pending follow request found.',
+    });
+  }
+
+  // ✅ Convert followStatus to 'following'
+  existingRequest.followStatus = 'following';
+  await existingRequest.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Follow request rejected, now marked as following.',
+  });
+});
 module.exports = {
     followUser,
     getFollowRequests,
@@ -154,4 +196,6 @@ module.exports = {
     getFollowing,
     checkFollowStatus,
     acceptFollowRequest,
+    getFollowStatus,
+    rejectFollowRequest
 };

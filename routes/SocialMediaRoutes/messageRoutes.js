@@ -1,6 +1,6 @@
 // routes/messageRoutes.js
 const express = require('express');
-const { createMessage, getAllMessages, getMessageById, getMessages, getUnreadMessagesCount, deleteMessagesBySenderId, updateMessagesBySenderId, deleteMessageById, sendImageMessage, updateMessageById, getConversations, getConversation, clearAllMessagesBetweenUsers, blockUnblockUser } = require('../../controller/SocialMediaControllers/messageController');
+const { createMessage, getAllMessages, getMessageById, getMessages, getUnreadMessagesCount, deleteMessagesBySenderId, updateMessagesBySenderId, deleteMessageById, sendImageMessage, updateMessageById, getConversations, getConversation, clearAllMessagesBetweenUsers, blockUnblockUser, broadcastMessage } = require('../../controller/SocialMediaControllers/messageController');
 const {authenticate} = require('../../middlewares/authMiddlewares')
 const upload = require('../../middlewares/upload');
 const { param } = require('express-validator');
@@ -14,6 +14,7 @@ router.post('/create', createMessage);
 router.get('/',getMessages)
 // Send an image message
 router.post('/send-image', upload.single('chatImage'), sendImageMessage);
+router.post('/broadcast', broadcastMessage)
 // Get all messages for a user
 router.get('/:userId', getAllMessages);
 router.get('/conversation/:userId', getConversation);

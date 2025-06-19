@@ -672,3 +672,31 @@ exports.sendImageMessage = async (req, res) => {
     });
   }
 };
+exports.broadcastMessage = async (req, res) => {
+  const { senderId, users, message, media } = req.body;
+
+  try {
+    // ✅ Ensure users is an array of user objects or IDs
+    const userList = Array.isArray(users) ? users : [];
+
+    const messages = userList
+      .filter(u => (typeof u === 'string' ? u !== senderId : u._id !== senderId))
+      .map(user => {
+        const receiverId = typeof user === 'string' ? user : user._id;
+        return {
+          sender: senderId,
+          receiver: receiverId,
+          message,
+          media,
+          createdAt: new Date(),
+        };
+      });
+
+    await Message.insertMany(messages);
+
+    res.status(200).json({ success: true, message: 'Broadcasted to all users' });
+  } catch (error) {
+    console.error('Broadcast Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to broadcast' });
+  }
+};
