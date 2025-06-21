@@ -660,15 +660,15 @@ exports.sendImageMessage = async (req, res) => {
         profilePicture: senderUser.profilePicture
       }
     });
-    res.status(201).json({ 
-      message: 'Image sent successfully', 
-      data: newMessage 
+    res.status(201).json({
+      message: 'Image sent successfully',
+      data: newMessage
     });
   } catch (error) {
     console.error('Error sending image:', error);
-    res.status(500).json({ 
-      message: 'Error sending image', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Error sending image',
+      error: error.message
     });
   }
 };

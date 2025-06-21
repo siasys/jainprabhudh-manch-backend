@@ -370,14 +370,14 @@ const reviewApplication = asyncHandler(async (req, res) => {
         const reviewerLevel = req.reviewerLevel;
         const reviewerSanghId = req.reviewerSanghId;
 
-        console.log('Review Application Debug:');
-        console.log('Application ID:', appId);
-        console.log('Request params:', req.params);
-        console.log('Reviewer Level:', reviewerLevel);
-        console.log('User ID:', userId);
+        // console.log('Review Application Debug:');
+        // console.log('Application ID:', appId);
+        // console.log('Request params:', req.params);
+        // console.log('Reviewer Level:', reviewerLevel);
+        // console.log('User ID:', userId);
         // Try to find application directly by string ID to check if it exists
         const allApplications = await JainAadhar.find({});
-        console.log('Total applications in DB:', allApplications.length);
+        //console.log('Total applications in DB:', allApplications.length);
         console.log('Application IDs in DB:', allApplications.map(app => app._id.toString()));
         const application = await JainAadhar.findById(appId);
         console.log('Application found:', application ? 'Yes' : 'No');

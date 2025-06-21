@@ -1,5 +1,6 @@
 const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
 const User = require('../../model/UserRegistrationModels/userModel');
+const JainAadharApplication = require('../../model/UserRegistrationModels/jainAadharModel');
 const asyncHandler = require('express-async-handler');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
@@ -611,10 +612,10 @@ const addSanghMember = asyncHandler(async (req, res) => {
     try {
         const sangh = req.sangh;
         const MAX_BULK_MEMBERS = 50;
-        if (sangh) {
-            console.log('Sangh type:', sangh.sanghType);
-            console.log('Sangh name:', sangh.name);
-        }
+        // if (sangh) {
+        //     console.log('Sangh type:', sangh.sanghType);
+        //     console.log('Sangh name:', sangh.name);
+        // }
         if (sangh && !sangh.save) {
             sangh = await HierarchicalSangh.findById(sangh._id);
             if (!sangh) {
@@ -646,13 +647,11 @@ const addSanghMember = asyncHandler(async (req, res) => {
                     });
                     continue;
                 }
-
                 try {
                     const user = await User.findOne({
-                        jainAadharNumber: member.jainAadharNumber,
-                        jainAadharStatus: 'verified'
-                    });
-
+                    jainAadharNumber: member.jainAadharNumber,
+                    jainAadharStatus: 'verified'
+                    }).populate('jainAadharApplication');
                     if (!user) {
                         results.failed.push({
                             jainAadharNumber: member.jainAadharNumber,
@@ -669,6 +668,8 @@ const addSanghMember = asyncHandler(async (req, res) => {
                         continue;
                     }
 
+                const location = user?.jainAadharApplication?.location || {};
+                  //console.log(jainAadharLocation)
                     const newMember = {
                         userId: user._id,
                         firstName: member.firstName,
@@ -679,16 +680,17 @@ const addSanghMember = asyncHandler(async (req, res) => {
                         phoneNumber: member.phoneNumber || user.phoneNumber,
                         postMember: member.postMember,
                         address: {
-                            ...member.address,
-                            city: member.address?.city || user.city,
-                            district: member.address?.district || user.district,
-                            state: member.address?.state || user.state
+                        street: location.address || '',
+                        city: location.city || '',
+                        district: location.district || '',
+                        state: location.state || '',
+                        pincode: location.pinCode || ''
                         },
                         addedBy: req.user._id,
                         addedAt: new Date(),
                         status: 'active'
                     };
-
+                    console.log(newMember)
                     sangh.members.push(newMember);
                     results.success.push({
                         jainAadharNumber: member.jainAadharNumber,
@@ -714,11 +716,9 @@ const addSanghMember = asyncHandler(async (req, res) => {
                     });
                 }
             }
-
             if (results.success.length > 0) {
                 await sangh.save();
             }
-
             return successResponse(res, {
                 sangh: {
                     _id: sangh._id,
@@ -728,26 +728,23 @@ const addSanghMember = asyncHandler(async (req, res) => {
                 },
                 results
             }, `Added ${results.success.length} members successfully, ${results.failed.length} failed`);
-        } 
+        }
         else {
             const { firstName, lastName, jainAadharNumber, email, phoneNumber, address, postMember } = req.body;
-
             if (!firstName || !lastName || !jainAadharNumber) {
                 return errorResponse(res, 'Missing required fields', 400);
             }
-
-            const user = await User.findOne({ 
-                jainAadharNumber, 
-                jainAadharStatus: 'verified' 
-            });
-
+           const user = await User.findOne({
+            jainAadharNumber,
+            jainAadharStatus: 'verified'
+            }).populate('jainAadharApplication');
             if (!user) {
                 return errorResponse(res, 'Invalid or unverified Jain Aadhar number', 400);
             }
-
             if (sangh.members.some(m => m.jainAadharNumber === jainAadharNumber)) {
                 return errorResponse(res, 'Already a member of this Sangh', 400);
             }
+            const location = user?.jainAadharApplication?.location || {};
 
             const newMember = {
                 userId: user._id,
@@ -759,10 +756,11 @@ const addSanghMember = asyncHandler(async (req, res) => {
                 phoneNumber: phoneNumber || user.phoneNumber,
                 postMember,
                 address: {
-                    ...address,
-                    city: address?.city || user.city,
-                    district: address?.district || user.district,
-                    state: address?.state || user.state
+                    street: location.address || '',
+                    city: location.city || '',
+                    district: location.district || '',
+                    state: location.state || '',
+                    pincode: location.pinCode || ''
                 },
                 addedBy: req.user._id,
                 addedAt: new Date(),
@@ -783,7 +781,6 @@ const addSanghMember = asyncHandler(async (req, res) => {
             });
 
             await sangh.save();
-
             return successResponse(res, {
                 member: newMember,
                 sangh: {
@@ -804,25 +801,20 @@ const addSanghMember = asyncHandler(async (req, res) => {
 const removeSanghMember = asyncHandler(async (req, res) => {
     try {
         const { sanghId, memberId } = req.params;
-
         const sangh = await HierarchicalSangh.findById(sanghId);
         if (!sangh) {
             return errorResponse(res, 'Sangh not found', 404);
         }
-
         // For city Sanghs, maintain minimum 3 members
         if (sangh.level === 'city' && sangh.members.length <= 3) {
             return errorResponse(res, 'City Sangh must maintain at least 3 members', 400);
         }
-
         const memberToRemove = sangh.members.find(
             member => member._id.toString() === memberId
         );
-
         if (!memberToRemove) {
             return errorResponse(res, 'Member not found', 404);
         }
-
         // Remove member's role from User document
         await User.findByIdAndUpdate(memberToRemove.userId, {
             $pull: {
@@ -831,11 +823,9 @@ const removeSanghMember = asyncHandler(async (req, res) => {
                 }
             }
         });
-
         sangh.members = sangh.members.filter(
             member => member._id.toString() !== memberId
         );
-
         await sangh.save();
         return successResponse(res, sangh, 'Member removed successfully');
     } catch (error) {

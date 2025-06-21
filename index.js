@@ -57,6 +57,7 @@ const jainHostalRoutes = require('./routes/JainHostal/jainHostalRoutes');
 const jainFoodRoutes = require('./routes/JainFood/jainFoodRoutes');
 const reportRoutes = require('./routes/SocialMediaRoutes/reportRoutes');
 const blockRoutes = require('./routes/Block User/blockRoutes');
+const deleteAccountRoutes = require('./routes/Account delete/deleteAccountRoutes');
 
 app.set('trust proxy',1)
 // connect to databse
@@ -154,7 +155,7 @@ app.use('/api/report', reportRoutes);
 app.use('/api/block', blockRoutes);
 // Admin API routes
 app.use("/api/admin", adminRouter);
-
+app.use('/api', deleteAccountRoutes);
 // Error handling
 app.use(notFound);
 app.use(errorHandler);

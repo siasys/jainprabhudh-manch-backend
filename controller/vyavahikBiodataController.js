@@ -1,4 +1,5 @@
 const VyavahikBiodata = require('../model/VyavahikBiodata');
+const JainAadhar = require('../model/UserRegistrationModels/jainAadharModel');
 // Create API
 const createBiodata = async (req, res) => {
   try {

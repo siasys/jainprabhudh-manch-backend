@@ -11,6 +11,9 @@ const jainAadharSchema = new mongoose.Schema(
     promoterId:{
       type:String
     },
+    jainAadharNumber:{
+      type:String
+    },
     name: { type: String },
     pitaOrpatiName: { type: String },
     gender:{type:String},
