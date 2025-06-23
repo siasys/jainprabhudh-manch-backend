@@ -5,9 +5,9 @@ module.exports = {
   "Kadapa", "Kakinada", "Kurnool", "Machilipatnam", "Nagarjunakoṇḍa", "Rajahmundry", "Srikakulam",
   "Tirupati", "Vijayawada", "Visakhapatnam", "Vizianagaram", "Yemmiganur"
 ],
-"Arunachal Pradesh": [
-  "Itanagar"
-],
+
+"Arunachal Pradesh": ["Itanagar"],
+
 "Assam": [
   "Dhuburi", "Dibrugarh", "Dispur", "Guwahati", "Jorhat", "Nagaon", "Sivasagar", "Silchar", "Tezpur", "Tinsukia"
 ],
@@ -31,7 +31,7 @@ module.exports = {
 ],
 
 "Delhi": [
-  "Delhi", "New Delhi"
+"Delhi", "New Delhi"
 ],
 
 "Goa": [
@@ -78,7 +78,7 @@ module.exports = {
   "Kargil", "Leh"
 ],
 
-  "Madhya Pradesh": ["Balaghat", "Barwani", "Betul", "Bharhut", "Bhind", "Bhojpur", "Bhopal", "Burhanpur", "Chhatarpur", "Chhindwara", "Damoh", "Datia", "Dewas", "Dhar", "Dr. Ambedkar Nagar (Mhow)", "Guna", "Gwalior",
+"Madhya Pradesh": ["Balaghat", "Barwani", "Betul", "Bharhut", "Bhind", "Bhojpur", "Bhopal", "Burhanpur", "Chhatarpur", "Chhindwara", "Damoh", "Datia", "Dewas", "Dhar", "Dr. Ambedkar Nagar (Mhow)", "Guna", "Gwalior",
     "Hoshangabad", "Indore", "Itarsi", "Jabalpur", "Jhabua", "Khajuraho", "Khandwa", "Khargone", "Maheshwar",
     "Mandla", "Mandsaur", "Morena", "Murwara", "Narsimhapur", "Narsinghgarh", "Narwar", "Neemuch", "Nowgong",
     "Orchha", "Panna", "Raisen", "Rajgarh", "Ratlam", "Rewa", "Sagar", "Sarangpur", "Satna", "Sehore", "Seoni",

@@ -16,68 +16,98 @@ const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 const { extractS3KeyFromUrl } = require('../../utils/s3Utils');
 const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
 const redisClient = require('../../config/redisClient')
-const Report = require('../../model/SocialMediaModels/Report')
-
-// Create a post
-// const createPost = asyncHandler(async (req, res) => {
-//   const { caption, image, userId } = req.body;
-//   if (!userId) {
-//     return res.status(400).json({ error: 'User ID is required' });
-//   }
-//   const post = await Post.create({ user: userId, caption, image });
-//   const user = await User.findById(userId);
-//   if (!user) {
-//     return res.status(404).json({ error: 'User not found' });
-//   }
-//   user.posts.push(post._id);
-//   await user.save();
-//   res.status(201).json(post);
-// });
+const Report = require('../../model/SocialMediaModels/Report');
+const Hashtag = require('../../model/SocialMediaModels/Hashtag');
 
 const createPost = [
   upload.postMediaUpload,
-  body('caption').optional().isString().isLength({ max: 500 }).withMessage('Caption must be a string with a maximum length of 500 characters'),
-  body('userId').notEmpty().isMongoId().withMessage('User ID is required and must be a valid Mongo ID'),
+  body('caption').optional().isString().isLength({ max: 500 }),
+  body('userId').notEmpty().isMongoId(),
+  body('hashtags')
+    .optional()
+    .custom(value => {
+      try {
+        const parsed = JSON.parse(value);
+        if (!Array.isArray(parsed)) throw new Error();
+        return true;
+      } catch {
+        throw new Error('Hashtags must be a JSON array');
+      }
+    }),
+
   asyncHandler(async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { caption, userId } = req.body;
+    const { caption, userId, hashtags } = req.body;
+    const parsedHashtags = hashtags ? JSON.parse(hashtags) : [];
+
     const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
     const media = [];
-    if (req.files) {
-      if (req.files.image) {
-        req.files.image.forEach(file => {
-          media.push({
-            url: convertS3UrlToCDN(file.location),
-            type: 'image'
-          });
-        });
-      }
-      if (req.files.video) {
-        req.files.video.forEach(file => {
-          media.push({
-            url: convertS3UrlToCDN(file.location),
-            type: 'video'
-          });
-        });
-      }
+    if (req.files?.image) {
+      req.files.image.forEach(file => {
+        media.push({ url: convertS3UrlToCDN(file.location), type: 'image' });
+      });
     }
+    if (req.files?.video) {
+      req.files.video.forEach(file => {
+        media.push({ url: convertS3UrlToCDN(file.location), type: 'video' });
+      });
+    }
+
+    // Save or update hashtags
+    for (const tag of parsedHashtags) {
+      await Hashtag.findOneAndUpdate(
+        { name: tag.toLowerCase() },
+        { $inc: { count: 1 } },
+        { upsert: true, new: true }
+      );
+    }
+
     const postType = media.length > 0 ? 'media' : 'text';
-    const post = await Post.create({ user: userId, caption, media, postType });
+
+    const post = await Post.create({
+      user: userId,
+      caption,
+      media,
+      postType,
+      hashtags: parsedHashtags
+    });
+
     user.posts.push(post._id);
     await user.save();
-    await invalidateCache('combinedFeed:*'); // Invalidate all feed variations
+
+    await invalidateCache('combinedFeed:*');
     await invalidateCache('combinedFeed:firstPage:limit:10');
+
     res.status(201).json(post);
   })
 ];
+
+const searchHashtags = async (req, res) => {
+  try {
+    const query = req.query.q;
+    if (!query || query.trim() === '') {
+      return res.status(400).json({ message: 'Query parameter `q` is required' });
+    }
+
+    const hashtags = await Hashtag.find({
+      name: { $regex: `^${query.toLowerCase()}`, $options: 'i' }
+    })
+    .sort({ count: -1 }) // most popular first
+    .limit(10); // limit to top 10 suggestions
+
+    res.json(hashtags);
+  } catch (err) {
+    console.error('Hashtag search error:', err);
+    res.status(500).json({ message: 'Server error while searching hashtags' });
+  }
+};
+
 const getPostsByUser = asyncHandler(async (req, res) => {
   const { userId } = req.body;
   if (!userId) {
@@ -950,6 +980,7 @@ const getCombinedFeedOptimized = asyncHandler(async (req, res) => {
 
 module.exports = {
   createPost,
+  searchHashtags,
   getAllPosts,
   toggleLike,
   unlikePost,

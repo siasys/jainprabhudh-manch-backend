@@ -123,7 +123,7 @@ const getFollowing = asyncHandler(async (req, res) => {
                 lastName: f.following.lastName,
                 fullName: f.following.fullName,
                 profilePicture: f.following.profilePicture,
-                followStatus: "following" 
+                 followStatus: f.followStatus
             }))
         });
     } catch (error) {

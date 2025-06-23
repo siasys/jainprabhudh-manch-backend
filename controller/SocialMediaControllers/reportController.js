@@ -32,7 +32,7 @@ exports.getAllReports = async (req, res) => {
   try {
     const reports = await Report.find()
       .populate('reportedBy', 'fullName email profilePicture')
-      .populate('postId', 'caption media')
+      .populate('postId', 'caption media postType')
       .populate('reportedUser', 'fullName email profilePicture')
       .sort({ createdAt: -1 });
 
@@ -47,7 +47,7 @@ exports.getReportById = async (req, res) => {
   try {
     const report = await Report.findById(req.params.id)
       .populate('reportedBy', 'fullName email')
-      .populate('postId', 'caption media')
+      .populate('postId', 'caption media postType')
       .populate('reportedUser', 'fullName email');
 
     if (!report) {
@@ -64,7 +64,7 @@ exports.getReportById = async (req, res) => {
 exports.getMyReports = async (req, res) => {
   try {
     const reports = await Report.find({ reportedBy: req.user._id })
-      .populate('postId', 'caption media')
+      .populate('postId', 'caption media postType')
       .populate('reportedUser', 'fullName email profilePicture')
       .sort({ createdAt: -1 });
 

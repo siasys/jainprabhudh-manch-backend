@@ -1,5 +1,5 @@
 const express = require('express');
-const { createPost, getAllPosts, likePost, unlikePost, deletePost, getPostsByUser, getPostById, addComment, addReply, toggleLike, getReplies, editPost, hidePost, unhidePost, getCombinedFeed, getCombinedFeedOptimized, getLikedUsers } = require('../../controller/SocialMediaControllers/postController');
+const { createPost, getAllPosts, likePost, unlikePost, deletePost, getPostsByUser, getPostById, addComment, addReply, toggleLike, getReplies, editPost, hidePost, unhidePost, getCombinedFeed, getCombinedFeedOptimized, getLikedUsers, searchHashtags } = require('../../controller/SocialMediaControllers/postController');
 const { authMiddleware } = require('../../middlewares/authMiddlewares');
 const rateLimit = require('express-rate-limit');
 
@@ -21,7 +21,7 @@ const postCreationLimiter = rateLimit({
 router.post('/create', createPost, postCreationLimiter); // Create a post without authentication
 router.get('/', getAllPosts);
 router.get('/combined-feed', getCombinedFeed);
-
+router.get('/hashtags/search', searchHashtags);
 // Get optimized combined feed with cursor-based pagination
 router.get('/combined-feed-optimized', getCombinedFeedOptimized);
 

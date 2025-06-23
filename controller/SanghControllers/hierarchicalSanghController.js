@@ -151,7 +151,6 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
         // }
         // Validate office bearers
        // await validateOfficeBearers(officeBearers);
-      
         // Validate hierarchy level before creation
         const parentSangh = parentSanghId ? await HierarchicalSangh.findById(parentSanghId) : null;
         if (parentSangh) {
