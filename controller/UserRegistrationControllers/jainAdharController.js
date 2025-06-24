@@ -8,13 +8,13 @@ const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
 // Check if user has existing application
-const checkExistingApplication = asyncHandler(async (req, res, next) => {
-  const existingApplication = await JainAadhar.findOne({ userId: req.user._id, status: { $in: ['pending', 'approved'] } });
-  if (existingApplication) {
-    return errorResponse(res, 'You already have a pending or approved Jain Aadhar application', 400);
-  }
-  next();
-});
+// const checkExistingApplication = asyncHandler(async (req, res, next) => {
+//   const existingApplication = await JainAadhar.findOne({ userId: req.user._id, status: { $in: ['pending', 'approved'] } });
+//   if (existingApplication) {
+//     return errorResponse(res, 'You already have a pending or approved Jain Aadhar application', 400);
+//   }
+//   next();
+// });
 // Determine application level based on location
 const determineApplicationLevel = (location) => {
     if (location.area) return 'area';
@@ -155,6 +155,7 @@ const createJainAadhar = asyncHandler(async (req, res) => {
       const jainAadharData = {
         ...req.body,
         userId: req.user._id,
+        createdBy: req.user._id,
             applicationLevel,
             reviewingSanghId,
             status: 'pending',
@@ -162,7 +163,6 @@ const createJainAadhar = asyncHandler(async (req, res) => {
                 country: location.country || 'India',
                 state: location.state || '',
                 district: location.district || '',
-                city: location.city || '',
                 address: location.address || '',
                 pinCode: location.pinCode || '',
             },
@@ -750,6 +750,5 @@ module.exports = {
   reviewApplicationByLevel,
   getVerifiedMembers,
   editJainAadhar,
-  checkExistingApplication,
   verifyJainAadhar
 };

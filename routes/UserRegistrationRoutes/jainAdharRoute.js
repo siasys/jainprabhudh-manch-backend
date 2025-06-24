@@ -13,7 +13,7 @@ const {
   getVerifiedMembers,
   getApplicationsForReview,
   editJainAadhar,
-  checkExistingApplication,
+  //checkExistingApplication,
   verifyJainAadhar
 } = require('../../controller/UserRegistrationControllers/jainAdharController');
 const { authMiddleware, canReviewJainAadhar } = require('../../middlewares/authMiddlewares');
@@ -54,7 +54,7 @@ router.post(
   '/apply',
   // applicationLimiter,
   upload.jainAadharDocs,
-  checkExistingApplication,
+  //checkExistingApplication,
   createJainAadhar
 );
 
@@ -80,12 +80,13 @@ router.get(
   getAllApplications
 );
 router.get('/generate-card/:id', generateJainAadharCard);
-router.get('/verify/jain-shravak/:id', async (req, res) => {
+router.get('/verify/jain-shravak/:jainAadharNumber', async (req, res) => {
   try {
-    const application = await JainAadhar.findById(req.params.id);
-    const user = await User.findById(application?.userId);
+    const { jainAadharNumber } = req.params;
 
-    if (!application || !user) {
+    const application = await JainAadhar.findOne({ jainAadharNumber });
+
+    if (!application) {
       return res.status(404).send(`<h2 style="text-align:center;color:red">Verification Failed ❌</h2>`);
     }
 
@@ -105,7 +106,7 @@ router.get('/verify/jain-shravak/:id', async (req, res) => {
             <p><strong>Sub Caste:</strong> ${application.subCaste || 'N/A'}</p>
             <p><strong>Gotra:</strong> ${application.gotra || 'N/A'}</p>
             <p><strong>City:</strong> ${application.location?.city || 'N/A'}</p>
-            <p><strong>Jain Aadhar Number:</strong> ${user?.jainAadharNumber || 'N/A'}</p>
+            <p><strong>Jain Aadhar Number:</strong> ${application.jainAadharNumber || 'N/A'}</p>
           </div>
         </body>
       </html>
@@ -115,6 +116,7 @@ router.get('/verify/jain-shravak/:id', async (req, res) => {
     res.status(500).send(`<h2 style="text-align:center;color:red">Server Error. Please try again.</h2>`);
   }
 });
+
 // Admin application management
 // router.get(
 //   '/applications',

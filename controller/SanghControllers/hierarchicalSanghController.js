@@ -75,18 +75,18 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
          // If creating a specialized Sangh, ensure it inherits the type from parent
          let resolvedSanghType = sanghType;
          let parentMainSanghId = null;
- 
+
          if (parentSanghId) {
              const parentSangh = await HierarchicalSangh.findById(parentSanghId);
             //  if (!parentSangh) {
             //      return errorResponse(res, 'Parent Sangh not found', 404);
             //  }
- 
+
              // If parent is specialized, child must be the same type
              if (parentSangh.sanghType !== 'main') {
                  resolvedSanghType = parentSangh.sanghType;
              }
- 
+
              // Track the top-level main Sangh for specialized Sanghs
              if (resolvedSanghType !== 'main') {
                  parentMainSanghId = parentSangh.parentMainSangh || parentSangh._id;
@@ -97,17 +97,43 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
              return errorResponse(res, 'All office bearer details are required', 400);
          }
          const formattedOfficeBearers = await Promise.all(['president', 'secretary', 'treasurer'].map(async role => {
-            const user = await User.findOne({ jainAadharNumber: officeBearers[role].jainAadharNumber });
+           const jainAadharNumber = officeBearers[role]?.jainAadharNumber;
+
+            let firstName = "";
+            let lastName = "";
+            let mobileNumber = "";
+            let address = "";
+            let pinCode = "";
+
+            let user = null;
+             if (jainAadharNumber) {
+                user = await User.findOne({ jainAadharNumber });
+                const jainAadhar = await JainAadharApplication.findOne({ jainAadharNumber });
+
+                if (jainAadhar) {
+                // Name split logic
+                const fullName = jainAadhar.name || "";
+                const nameParts = fullName.trim().split(" ");
+                firstName = nameParts[0] || "";
+                lastName = nameParts.slice(1).join(" ") || "";
+
+                // Contact and Location
+                mobileNumber = jainAadhar.contactDetails?.number || "";
+                address = jainAadhar.location?.address || "";
+                pinCode = jainAadhar.location?.pinCode || "";
+                }
+            }
+
             return {
                 role,
                 userId: user ? user._id : null,
-                firstName: officeBearers[role]?.firstName || "",
-                lastName: officeBearers[role]?.lastName || "",
-                name: formatFullName(officeBearers[role]?.firstName || "", officeBearers[role]?.lastName || ""),
-                jainAadharNumber: officeBearers[role]?.jainAadharNumber || "",
-                mobileNumber: officeBearers[role]?.mobileNumber || "",
-                address:officeBearers[role]?.address || "",
-                pinCode:officeBearers[role]?.pinCode || "",
+                firstName,
+                lastName,
+                 name: `${firstName} ${lastName}`.trim(),
+                   jainAadharNumber: jainAadharNumber || "",
+                mobileNumber,
+                address,
+                pinCode,
                 document: req.files[`${role}JainAadhar`] ? convertS3UrlToCDN(req.files[`${role}JainAadhar`][0].location) : null,
                 photo: req.files[`${role}Photo`] ? convertS3UrlToCDN(req.files[`${role}Photo`][0].location) : null
             };

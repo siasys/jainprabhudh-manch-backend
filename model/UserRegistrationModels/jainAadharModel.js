@@ -100,6 +100,11 @@ const jainAadharSchema = new mongoose.Schema(
       enum: ['pending', 'approved','rejected'],
       default: 'pending',
     },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
     // New fields for level-specific review
     applicationLevel: {
       type: String,
@@ -149,7 +154,6 @@ location: {
   country: { type: String, required: true, default: 'India' },
   state: String,
   district: String,
-  city: String,
   address: String,
   pinCode: String
 }
