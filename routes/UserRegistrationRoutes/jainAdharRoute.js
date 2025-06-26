@@ -14,7 +14,9 @@ const {
   getApplicationsForReview,
   editJainAadhar,
   //checkExistingApplication,
-  verifyJainAadhar
+  verifyJainAadhar,
+  getApplicationsReview,
+  reviewBySanghPresident
 } = require('../../controller/UserRegistrationControllers/jainAdharController');
 const { authMiddleware, canReviewJainAadhar } = require('../../middlewares/authMiddlewares');
 const { canEditJainAadhar } = require('../../middlewares/jainAadharEditPermissions');
@@ -79,6 +81,7 @@ router.get(
   ],
   getAllApplications
 );
+router.get('/applications', getApplicationsReview);
 router.get('/generate-card/:id', generateJainAadharCard);
 router.get('/verify/jain-shravak/:jainAadharNumber', async (req, res) => {
   try {
@@ -166,6 +169,11 @@ router.put(
   ],
   reviewApplication
 );
+router.put(
+  '/applications/:applicationId/review-by-president',
+  reviewBySanghPresident
+);
+
 // Edit Jain Aadhar application - for authorized reviewers
 router.put(
   '/applications/:applicationId/edit',

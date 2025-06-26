@@ -301,32 +301,42 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
 });
 
 const getAllSangh = asyncHandler(async (req, res) => {
-    try {
-        const sanghs = await HierarchicalSangh.find();
+  try {
+    const { district, state, city } = req.query;
 
-        if (!sanghs.length) {
-            return errorResponse(res, 'No Sangh found', 404);
-        }
-
-        const updatedSanghs = sanghs.map((sangh) => {
-            const updatedOfficeBearers = sangh.officeBearers.map((bearer) => {
-                return {
-                    ...bearer,
-                    photo: bearer.photo ? convertS3UrlToCDN(bearer.photo) : null,
-                };
-            });
-
-            return {
-                ...sangh._doc, // _doc is needed to access plain object
-                officeBearers: updatedOfficeBearers,
-            };
-        });
-
-        return successResponse(res, updatedSanghs, 'All Sangh retrieved successfully');
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
+    const query = {};
+    if (district) {
+      query['location.district'] = district;
+      query['level'] = 'district'; // ✅ Only District level Sangh
     }
+    if (state) query['location.state'] = state;
+    if (city) query['location.city'] = city;
+
+    const sanghs = await HierarchicalSangh.find(query);
+
+    if (!sanghs.length) {
+      return errorResponse(res, 'No Sangh found', 404);
+    }
+
+    // Convert photo URLs to CDN
+    const updatedSanghs = sanghs.map((sangh) => {
+      const updatedOfficeBearers = sangh.officeBearers.map((bearer) => ({
+        ...bearer,
+        photo: bearer.photo ? convertS3UrlToCDN(bearer.photo) : null,
+      }));
+
+      return {
+        ...sangh._doc,
+        officeBearers: updatedOfficeBearers,
+      };
+    });
+
+    return successResponse(res, updatedSanghs, 'Filtered Sangh retrieved successfully');
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
 });
+
 
 const getAllSanghs = asyncHandler(async (req, res) => {
     try {
@@ -634,192 +644,177 @@ const getUserByJainAadhar = asyncHandler(async (req, res) => {
 
 // Add member(s) to Sangh
 const addSanghMember = asyncHandler(async (req, res) => {
-    try {
-        const sangh = req.sangh;
-        const MAX_BULK_MEMBERS = 50;
-        // if (sangh) {
-        //     console.log('Sangh type:', sangh.sanghType);
-        //     console.log('Sangh name:', sangh.name);
-        // }
-        if (sangh && !sangh.save) {
-            sangh = await HierarchicalSangh.findById(sangh._id);
-            if (!sangh) {
-                return errorResponse(res, 'Sangh not found', 404);
-            }
-        }
-        // Check if it's a bulk operation or single member addition
-        const isBulkOperation = req.body.members && Array.isArray(req.body.members);
-        if (isBulkOperation) {
-            const { members } = req.body;
-            if (members.length === 0) {
-                return errorResponse(res, 'Members array cannot be empty', 400);
-            }
+  try {
+    let sangh = req.sangh;
+    const MAX_BULK_MEMBERS = 50;
 
-            if (members.length > MAX_BULK_MEMBERS) {
-                return errorResponse(res, `Cannot add more than ${MAX_BULK_MEMBERS} members at once`, 400);
-            }
-            const results = {
-                success: [],
-                failed: []
-            };
-
-            // Validate all members first
-            for (const member of members) {
-                if (!member.firstName || !member.lastName || !member.jainAadharNumber) {
-                    results.failed.push({
-                        jainAadharNumber: member.jainAadharNumber || 'unknown',
-                        reason: 'Missing required fields'
-                    });
-                    continue;
-                }
-                try {
-                    const user = await User.findOne({
-                    jainAadharNumber: member.jainAadharNumber,
-                    jainAadharStatus: 'verified'
-                    }).populate('jainAadharApplication');
-                    if (!user) {
-                        results.failed.push({
-                            jainAadharNumber: member.jainAadharNumber,
-                            reason: 'Invalid or unverified Jain Aadhar number'
-                        });
-                        continue;
-                    }
-
-                    if (sangh.members.some(m => m.jainAadharNumber === member.jainAadharNumber)) {
-                        results.failed.push({
-                            jainAadharNumber: member.jainAadharNumber,
-                            reason: 'Already a member of this Sangh'
-                        });
-                        continue;
-                    }
-
-                const location = user?.jainAadharApplication?.location || {};
-                  //console.log(jainAadharLocation)
-                    const newMember = {
-                        userId: user._id,
-                        firstName: member.firstName,
-                        lastName: member.lastName,
-                        name: formatFullName(member.firstName, member.lastName),
-                        jainAadharNumber: member.jainAadharNumber,
-                        email: member.email || user.email,
-                        phoneNumber: member.phoneNumber || user.phoneNumber,
-                        postMember: member.postMember,
-                        address: {
-                        street: location.address || '',
-                        city: location.city || '',
-                        district: location.district || '',
-                        state: location.state || '',
-                        pincode: location.pinCode || ''
-                        },
-                        addedBy: req.user._id,
-                        addedAt: new Date(),
-                        status: 'active'
-                    };
-                    console.log(newMember)
-                    sangh.members.push(newMember);
-                    results.success.push({
-                        jainAadharNumber: member.jainAadharNumber,
-                        name: newMember.name
-                    });
-
-                    // Update user's Sangh roles
-                    await User.findByIdAndUpdate(user._id, {
-                        $push: {
-                            sanghRoles: {
-                                sanghId: sangh._id,
-                                role: 'member',
-                                level: sangh.level,
-                                sanghType: sangh.sanghType || 'main',
-                                addedAt: new Date()
-                            }
-                        }
-                    });
-                } catch (error) {
-                    results.failed.push({
-                        jainAadharNumber: member.jainAadharNumber,
-                        reason: error.message
-                    });
-                }
-            }
-            if (results.success.length > 0) {
-                await sangh.save();
-            }
-            return successResponse(res, {
-                sangh: {
-                    _id: sangh._id,
-                    name: sangh.name,
-                    level: sangh.level,
-                    totalMembers: sangh.members.length
-                },
-                results
-            }, `Added ${results.success.length} members successfully, ${results.failed.length} failed`);
-        }
-        else {
-            const { firstName, lastName, jainAadharNumber, email, phoneNumber, address, postMember } = req.body;
-            if (!firstName || !lastName || !jainAadharNumber) {
-                return errorResponse(res, 'Missing required fields', 400);
-            }
-           const user = await User.findOne({
-            jainAadharNumber,
-            jainAadharStatus: 'verified'
-            }).populate('jainAadharApplication');
-            if (!user) {
-                return errorResponse(res, 'Invalid or unverified Jain Aadhar number', 400);
-            }
-            if (sangh.members.some(m => m.jainAadharNumber === jainAadharNumber)) {
-                return errorResponse(res, 'Already a member of this Sangh', 400);
-            }
-            const location = user?.jainAadharApplication?.location || {};
-
-            const newMember = {
-                userId: user._id,
-                firstName,
-                lastName,
-                name: formatFullName(firstName, lastName),
-                jainAadharNumber,
-                email: email || user.email,
-                phoneNumber: phoneNumber || user.phoneNumber,
-                postMember,
-                address: {
-                    street: location.address || '',
-                    city: location.city || '',
-                    district: location.district || '',
-                    state: location.state || '',
-                    pincode: location.pinCode || ''
-                },
-                addedBy: req.user._id,
-                addedAt: new Date(),
-                status: 'active'
-            };
-            sangh.members.push(newMember);
-            // Update user's Sangh roles
-            await User.findByIdAndUpdate(user._id, {
-                $push: {
-                    sanghRoles: {
-                        sanghId: sangh._id,
-                        role: 'member',
-                        level: sangh.level,
-                        sanghType: sangh.sanghType || 'main',
-                        addedAt: new Date()
-                    }
-                }
-            });
-
-            await sangh.save();
-            return successResponse(res, {
-                member: newMember,
-                sangh: {
-                    _id: sangh._id,
-                    name: sangh.name,
-                    level: sangh.level,
-                    totalMembers: sangh.members.length
-                }
-            }, 'Member added successfully');
-        }
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
+    if (sangh && !sangh.save) {
+      sangh = await HierarchicalSangh.findById(sangh._id);
+      if (!sangh) return errorResponse(res, 'Sangh not found', 404);
     }
+
+    const isBulk = req.body.members && Array.isArray(req.body.members);
+
+    if (isBulk) {
+      const { members } = req.body;
+      if (members.length === 0)
+        return errorResponse(res, 'Members array cannot be empty', 400);
+
+      if (members.length > MAX_BULK_MEMBERS)
+        return errorResponse(res, `Cannot add more than ${MAX_BULK_MEMBERS} members at once`, 400);
+
+      const results = { success: [], failed: [] };
+
+      for (const member of members) {
+        if (!member.jainAadharNumber) {
+          results.failed.push({ jainAadharNumber: 'unknown', reason: 'Missing Jain Aadhar number' });
+          continue;
+        }
+
+        try {
+          const user = await User.findOne({
+            jainAadharNumber: member.jainAadharNumber,
+            jainAadharStatus: 'verified'
+          }).populate('jainAadharApplication');
+
+          if (!user) {
+            results.failed.push({
+              jainAadharNumber: member.jainAadharNumber,
+              reason: 'Invalid or unverified Jain Aadhar number'
+            });
+            continue;
+          }
+
+          if (sangh.members.some(m => m.jainAadharNumber === member.jainAadharNumber)) {
+            results.failed.push({
+              jainAadharNumber: member.jainAadharNumber,
+              reason: 'Already a member'
+            });
+            continue;
+          }
+
+          const location = user?.jainAadharApplication?.location || {};
+          const contact = user?.jainAadharApplication?.contactDetails || {};
+
+          const newMember = {
+            userId: user._id,
+            name: user?.jainAadharApplication?.name || 'Unknown',
+            jainAadharNumber: member.jainAadharNumber,
+            email: contact.email || user.email,
+            phoneNumber: contact.number || user.phoneNumber,
+            postMember: member.postMember || '',
+            address: {
+              street: location.address || '',
+              city: location.city || '',
+              district: location.district || '',
+              state: location.state || '',
+              pincode: location.pinCode || ''
+            },
+            addedBy: req.user._id,
+            addedAt: new Date(),
+            status: 'active'
+          };
+
+          sangh.members.push(newMember);
+          results.success.push({ jainAadharNumber: member.jainAadharNumber, name: newMember.name });
+
+          await User.findByIdAndUpdate(user._id, {
+            $push: {
+              sanghRoles: {
+                sanghId: sangh._id,
+                role: 'member',
+                level: sangh.level,
+                sanghType: sangh.sanghType || 'main',
+                addedAt: new Date()
+              }
+            }
+          });
+
+        } catch (error) {
+          results.failed.push({ jainAadharNumber: member.jainAadharNumber, reason: error.message });
+        }
+      }
+
+      if (results.success.length > 0) await sangh.save();
+
+      return successResponse(res, {
+        sangh: {
+          _id: sangh._id,
+          name: sangh.name,
+          level: sangh.level,
+          totalMembers: sangh.members.length
+        },
+        results
+      }, `Added ${results.success.length} members, ${results.failed.length} failed`);
+    }
+
+    // ======= SINGLE MEMBER ADDITION =======
+    const { jainAadharNumber, postMember } = req.body;
+
+    if (!jainAadharNumber) return errorResponse(res, 'Jain Aadhar number is required', 400);
+
+    const user = await User.findOne({
+      jainAadharNumber,
+      jainAadharStatus: 'verified'
+    }).populate('jainAadharApplication');
+
+    if (!user) return errorResponse(res, 'Invalid or unverified Jain Aadhar number', 400);
+
+    if (sangh.members.some(m => m.jainAadharNumber === jainAadharNumber))
+      return errorResponse(res, 'Already a member of this Sangh', 400);
+
+    const location = user?.jainAadharApplication?.location || {};
+    const contact = user?.jainAadharApplication?.contactDetails || {};
+
+    const newMember = {
+      userId: user._id,
+      name: user?.jainAadharApplication?.name || 'Unknown',
+      jainAadharNumber,
+      email: contact.email || user.email,
+      phoneNumber: contact.number || user.phoneNumber,
+      postMember: postMember || '',
+      address: {
+        street: location.address || '',
+        city: location.city || '',
+        district: location.district || '',
+        state: location.state || '',
+        pincode: location.pinCode || ''
+      },
+      addedBy: req.user._id,
+      addedAt: new Date(),
+      status: 'active'
+    };
+
+    sangh.members.push(newMember);
+
+    await User.findByIdAndUpdate(user._id, {
+      $push: {
+        sanghRoles: {
+          sanghId: sangh._id,
+          role: 'member',
+          level: sangh.level,
+          sanghType: sangh.sanghType || 'main',
+          addedAt: new Date()
+        }
+      }
+    });
+
+    await sangh.save();
+
+    return successResponse(res, {
+      member: newMember,
+      sangh: {
+        _id: sangh._id,
+        name: sangh.name,
+        level: sangh.level,
+        totalMembers: sangh.members.length
+      }
+    }, 'Member added successfully');
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
 });
+
 
 
 // Remove member from Sangh
@@ -1231,7 +1226,6 @@ const updateSpecializedSangh = asyncHandler(async (req, res) => {
                 if (officeBearers[role]) {
                     const bearer = officeBearers[role];
                     const currentBearer = sangh.officeBearers.find(b => b.role === role);
-                    
                     // If changing the office bearer
                     if (bearer.jainAadharNumber && bearer.jainAadharNumber !== currentBearer.jainAadharNumber) {
                         // Find the user by Jain Aadhar
