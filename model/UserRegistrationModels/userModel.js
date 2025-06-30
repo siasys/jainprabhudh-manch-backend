@@ -197,7 +197,7 @@ const userSchema = new mongoose.Schema(
       },
       level: {
         type: String,
-        enum: ['country', 'state', 'district', 'city', 'area']
+        enum: ['foundation','country', 'state', 'district', 'city', 'area']
       },
       sanghType: {
         type: String,
