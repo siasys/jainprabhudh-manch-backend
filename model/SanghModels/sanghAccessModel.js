@@ -16,7 +16,7 @@ const sanghAccessSchema = new mongoose.Schema({
     },
     level: {
         type: String,
-        enum: ['country', 'state', 'district', 'city', 'area'],
+        enum: ['foundation','country', 'state', 'district', 'city', 'area'],
         required: true
     },
     location: {
@@ -52,6 +52,7 @@ const sanghAccessSchema = new mongoose.Schema({
 sanghAccessSchema.pre('save', async function(next) {
     if (this.isNew && !this.accessId) {
         const prefix = {
+            foundation: 'FND',
             country: 'CNT',
             state: 'ST',
             district: 'DST',
@@ -70,6 +71,7 @@ sanghAccessSchema.pre('save', async function(next) {
 // Validate location based on level
 sanghAccessSchema.pre('save', function(next) {
     const requiredFields = {
+         foundation: [],
         area: ['country', 'state', 'district', 'city', 'area'],
         city: ['country', 'state', 'district', 'city'],
         district: ['country', 'state', 'district'],
