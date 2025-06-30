@@ -226,7 +226,9 @@ const checkSanghCreationPermission = asyncHandler(async (req, res, next) => {
         if (!presidentRole) {
             return errorResponse(res, 'You must be a Sangh president to create sub-Sanghs', 403);
         }
-
+         if (presidentRole.level === 'foundation') {
+            return next(); // Allow creating any sangh
+            }
         // Get the parent Sangh details
         const parentSangh = await HierarchicalSangh.findById(parentSanghId)
             .select('level sanghType')
@@ -242,7 +244,7 @@ const checkSanghCreationPermission = asyncHandler(async (req, res, next) => {
         }
 
         // Get the hierarchy levels in order
-        const levelHierarchy = ['country', 'state', 'district', 'city', 'area'];
+        const levelHierarchy = ['foundation', 'country', 'state', 'district', 'city', 'area'];
         const userLevelIndex = levelHierarchy.indexOf(presidentRole.level);
         const parentLevelIndex = levelHierarchy.indexOf(parentSangh.level);
         const targetLevelIndex = levelHierarchy.indexOf(level);
