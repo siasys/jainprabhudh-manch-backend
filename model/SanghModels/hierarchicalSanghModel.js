@@ -13,13 +13,9 @@ const officeBearerSchema = new mongoose.Schema({
         ref: 'User',
         //required: true
     },
-    firstName: {
+    name: {
         type: String,
         //required: true
-    },
-    lastName: {
-        type: String,
-       // required: true
     },
     jainAadharNumber: {
         type: String,
@@ -47,6 +43,11 @@ const officeBearerSchema = new mongoose.Schema({
         default: Date.now,
         required: true
     },
+    paymentStatus:{
+         type: String,
+        enum: ['pending', 'paid', 'overdue'],
+        default: 'pending'
+    },
     termEndDate: {
         type: Date,
         default: () => new Date(Date.now() + (2 * 365 * 24 * 60 * 60 * 1000)), // 2 years from appointment
@@ -65,14 +66,6 @@ const memberSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
-    // firstName: {
-    //     type: String,
-    //     required: true
-    // },
-    // lastName: {
-    //     type: String,
-    //     required: true
-    // },
     name: {
         type: String,
         required: true
@@ -87,7 +80,7 @@ const memberSchema = new mongoose.Schema({
     email: String,
     phoneNumber: String,
     document: String,
-    photo: String,
+    userImage: String,
     address: {
         street: String,
         city: String,

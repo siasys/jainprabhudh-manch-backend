@@ -112,10 +112,10 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
 
                 if (jainAadhar) {
                 // Name split logic
-                const fullName = jainAadhar.name || "";
-                const nameParts = fullName.trim().split(" ");
+                 const fullName = jainAadhar.name?.trim() || "";
+                const nameParts = fullName.split(" ");
                 firstName = nameParts[0] || "";
-                lastName = nameParts.slice(1).join(" ") || "";
+                lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
 
                 // Contact and Location
                 mobileNumber = jainAadhar.contactDetails?.number || "";
@@ -490,61 +490,60 @@ const getChildSanghs = asyncHandler(async (req, res) => {
 
 // Update Sangh
 const updateHierarchicalSangh = asyncHandler(async (req, res) => {
-    try {
-        const { id } = req.params;
-        const updates = req.body;
+  try {
+    const { id } = req.params;
+    const { role, name, mobileNumber, address, pinCode, paymentStatus } = req.body;
 
-        const sangh = await HierarchicalSangh.findById(id);
-        if (!sangh) {
-            return errorResponse(res, 'Sangh not found', 404);
-        }
+    if (!role) return errorResponse(res, 'Role is required', 400);
 
-        // Validate user's permission
-        const userRole = req.user.sanghRoles.find(role => 
-            role.sanghId.toString() === id && 
-            ['president', 'secretary'].includes(role.role)
-        );
+    const sangh = await HierarchicalSangh.findById(id);
+    if (!sangh) return errorResponse(res, 'Sangh not found', 404);
 
-        if (!userRole && req.user.role !== 'superadmin') {
-            return errorResponse(res, 'Not authorized to update this Sangh', 403);
-        }
+    // Only current user's role allowed
+    const userRole = req.user.sanghRoles.find(r =>
+      r.sanghId.toString() === id &&
+      r.role === role
+    );
 
-         // Handle document updates if files are provided
-         if (req.files) {
-            for (const role of ['president', 'secretary', 'treasurer']) {
-                if (req.files[`${role}JainAadhar`]) {
-                    const bearer = sangh.officeBearers.find(b => b.role === role);
-                    if (bearer?.document) {
-                        await deleteS3File(bearer.document);
-                    }
-                    updates[`officeBearers.$[elem].document`] = req.files[`${role}JainAadhar`][0].location;
-                }
-                if (req.files[`${role}Photo`]) {
-                    const bearer = sangh.officeBearers.find(b => b.role === role);
-                    if (bearer?.photo) {
-                        await deleteS3File(bearer.photo);
-                    }
-                    updates[`officeBearers.$[elem].photo`] = req.files[`${role}Photo`][0].location;
-                }
-            }
-        }
-        const updatedSangh = await HierarchicalSangh.findByIdAndUpdate(
-            id,
-            { $set: updates },
-            { 
-                new: true, 
-                runValidators: true,
-                arrayFilters: [{ 'elem.status': 'active' }]
-            }
-        ).populate('officeBearers.userId', 'name email phoneNumber');
-        return successResponse(res, updatedSangh, 'Sangh updated successfully');
-    } catch (error) {
-        if (req.files) {
-            await deleteS3Files(req.files);
-        }
-        return errorResponse(res, error.message, 500);
+    if (!userRole && req.user.role !== 'superadmin') {
+      return errorResponse(res, 'Not authorized to update this Sangh', 403);
     }
+
+    // Build update fields
+    const updateFields = {};
+    if (name) updateFields['officeBearers.$[elemTarget].name'] = name;
+    if (mobileNumber) updateFields['officeBearers.$[elemTarget].mobileNumber'] = mobileNumber;
+    if (address) updateFields['officeBearers.$[elemTarget].address'] = address;
+    if (pinCode) updateFields['officeBearers.$[elemTarget].pinCode'] = pinCode;
+    if (paymentStatus) updateFields['officeBearers.$[elemTarget].paymentStatus'] = paymentStatus;
+
+    if (req.files?.[`${role}Photo`]) {
+      const photo = convertS3UrlToCDN(req.files[`${role}Photo`][0].location);
+      updateFields['officeBearers.$[elemTarget].photo'] = photo;
+    }
+
+    if (req.files?.[`${role}JainAadhar`]) {
+      const document = convertS3UrlToCDN(req.files[`${role}JainAadhar`][0].location);
+      updateFields['officeBearers.$[elemTarget].document'] = document;
+    }
+
+    const updated = await HierarchicalSangh.findByIdAndUpdate(
+      id,
+      { $set: updateFields },
+      {
+        new: true,
+        runValidators: true,
+        arrayFilters: [{ 'elemTarget.role': role }],
+      }
+    ).populate('officeBearers.userId', 'name email phoneNumber');
+
+    return successResponse(res, updated, 'Updated successfully');
+  } catch (error) {
+    console.error(error);
+    return errorResponse(res, error.message, 500);
+  }
 });
+
 
 // Helper function to delete S3 file
 const deleteS3File = async (fileUrl) => {
@@ -645,13 +644,11 @@ const getUserByJainAadhar = asyncHandler(async (req, res) => {
 // Add member(s) to Sangh
 const addSanghMember = asyncHandler(async (req, res) => {
   try {
-    let sangh = req.sangh;
+    const sanghId = req.params.sanghId;
     const MAX_BULK_MEMBERS = 50;
 
-    if (sangh && !sangh.save) {
-      sangh = await HierarchicalSangh.findById(sangh._id);
-      if (!sangh) return errorResponse(res, 'Sangh not found', 404);
-    }
+     const sangh = await HierarchicalSangh.findById(sanghId);
+    if (!sangh) return errorResponse(res, 'Sangh not found', 404);
 
     const isBulk = req.body.members && Array.isArray(req.body.members);
 
@@ -695,7 +692,12 @@ const addSanghMember = asyncHandler(async (req, res) => {
 
           const location = user?.jainAadharApplication?.location || {};
           const contact = user?.jainAadharApplication?.contactDetails || {};
+         const rawImage =
+            (req.file?.location || req.file?.path) ||
+            user?.jainAadharApplication?.photo ||
+            user?.profileImage || '';
 
+            const userImage = rawImage ? convertS3UrlToCDN(rawImage) : '';
           const newMember = {
             userId: user._id,
             name: user?.jainAadharApplication?.name || 'Unknown',
@@ -703,6 +705,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             email: contact.email || user.email,
             phoneNumber: contact.number || user.phoneNumber,
             postMember: member.postMember || '',
+            userImage,
             address: {
               street: location.address || '',
               city: location.city || '',
@@ -765,7 +768,12 @@ const addSanghMember = asyncHandler(async (req, res) => {
 
     const location = user?.jainAadharApplication?.location || {};
     const contact = user?.jainAadharApplication?.contactDetails || {};
+    const rawImage =
+    (req.file?.location || req.file?.path) ||
+    user?.jainAadharApplication?.photo ||
+    user?.profileImage || '';
 
+    const userImage = rawImage ? convertS3UrlToCDN(rawImage) : '';
     const newMember = {
       userId: user._id,
       name: user?.jainAadharApplication?.name || 'Unknown',
@@ -773,6 +781,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
       email: contact.email || user.email,
       phoneNumber: contact.number || user.phoneNumber,
       postMember: postMember || '',
+      userImage,
       address: {
         street: location.address || '',
         city: location.city || '',
@@ -853,60 +862,109 @@ const removeSanghMember = asyncHandler(async (req, res) => {
     }
 });
 
+// // Update member details
+// const updateMemberDetails = asyncHandler(async (req, res) => {
+//     try {
+//         const { sanghId, memberId } = req.params;
+//         const updates = req.body;
+
+//         const sangh = await HierarchicalSangh.findById(sanghId);
+//         if (!sangh) {
+//             return errorResponse(res, 'Sangh not found', 404);
+//         }
+
+//         const memberIndex = sangh.members.findIndex(
+//             member => member._id.toString() === memberId
+//         );
+
+//         if (memberIndex === -1) {
+//             return errorResponse(res, 'Member not found', 404);
+//         }
+
+//         // Handle document updates if files are provided
+//         if (req.files) {
+//             if (req.files['memberPhoto']) {
+//                 // Delete old photo if exists
+//                 if (sangh.members[memberIndex].photo) {
+//                     await deleteS3File(sangh.members[memberIndex].photo);
+//                 }
+//                 updates.photo = req.files['memberPhoto'][0].location;
+//             }
+//         }
+
+//         // Update member details
+//         Object.assign(sangh.members[memberIndex], {
+//             ...sangh.members[memberIndex].toObject(),
+//             ...updates,
+//             name: updates.firstName && updates.lastName ? 
+//                 formatFullName(updates.firstName, updates.lastName) : 
+//                 sangh.members[memberIndex].name
+//         });
+
+//         await sangh.save();
+//         return successResponse(res, sangh, 'Member details updated successfully');
+//     } catch (error) {
+//         if (req.files) {
+//             await deleteS3Files(req.files);
+//         }
+//         return errorResponse(res, error.message, 500);
+//     }
+// });
+
 // Update member details
+
 const updateMemberDetails = asyncHandler(async (req, res) => {
-    try {
-        const { sanghId, memberId } = req.params;
-        const updates = req.body;
+  try {
+    const { sanghId, memberId } = req.params;
+    const updates = req.body;
 
-        const sangh = await HierarchicalSangh.findById(sanghId);
-        if (!sangh) {
-            return errorResponse(res, 'Sangh not found', 404);
-        }
-
-        const memberIndex = sangh.members.findIndex(
-            member => member._id.toString() === memberId
-        );
-
-        if (memberIndex === -1) {
-            return errorResponse(res, 'Member not found', 404);
-        }
-
-        // Handle document updates if files are provided
-        if (req.files) {
-            if (req.files['memberJainAadhar']) {
-                // Delete old document if exists
-                if (sangh.members[memberIndex].document) {
-                    await deleteS3File(sangh.members[memberIndex].document);
-                }
-                updates.document = req.files['memberJainAadhar'][0].location;
-            }
-            if (req.files['memberPhoto']) {
-                // Delete old photo if exists
-                if (sangh.members[memberIndex].photo) {
-                    await deleteS3File(sangh.members[memberIndex].photo);
-                }
-                updates.photo = req.files['memberPhoto'][0].location;
-            }
-        }
-
-        // Update member details
-        Object.assign(sangh.members[memberIndex], {
-            ...sangh.members[memberIndex].toObject(),
-            ...updates,
-            name: updates.firstName && updates.lastName ? 
-                formatFullName(updates.firstName, updates.lastName) : 
-                sangh.members[memberIndex].name
-        });
-
-        await sangh.save();
-        return successResponse(res, sangh, 'Member details updated successfully');
-    } catch (error) {
-        if (req.files) {
-            await deleteS3Files(req.files);
-        }
-        return errorResponse(res, error.message, 500);
+    const sangh = await HierarchicalSangh.findById(sanghId);
+    if (!sangh) {
+      return errorResponse(res, 'Sangh not found', 404);
     }
+
+    const memberIndex = sangh.members.findIndex(
+      (member) => member._id.toString() === memberId
+    );
+
+    if (memberIndex === -1) {
+      return errorResponse(res, 'Member not found', 404);
+    }
+
+    // ===  Handle photo update with CDN conversion ===
+    if (req.files && req.files['memberPhoto']) {
+      if (sangh.members[memberIndex].userImage) {
+        await deleteS3File(sangh.members[memberIndex].userImage);
+      }
+
+      const s3Url = req.files['memberPhoto'][0].location;
+      updates.userImage = convertS3UrlToCDN(s3Url);
+    }
+
+    // === Update address fields ===
+    sangh.members[memberIndex].address = {
+      ...sangh.members[memberIndex].address,
+      street: updates.street || sangh.members[memberIndex].address?.street,
+      district: updates.district || sangh.members[memberIndex].address?.district,
+      state: updates.state || sangh.members[memberIndex].address?.state,
+      pincode: updates.pincode || sangh.members[memberIndex].address?.pincode,
+    };
+
+    // ===  Update main fields ===
+    Object.assign(sangh.members[memberIndex], {
+      ...sangh.members[memberIndex].toObject(),
+      ...updates,
+      name: updates.name || sangh.members[memberIndex].name,
+    });
+
+    await sangh.save();
+    return successResponse(res, sangh, 'Member details updated successfully');
+  } catch (error) {
+    if (req.files) {
+      await deleteS3Files(req.files);
+    }
+    return errorResponse(res, error.message, 500);
+  }
 });
 
 // Get Sangh members

@@ -62,23 +62,10 @@ router.get('/user/by-jain-aadhar/:jainAadharNumber', getUserByJainAadhar);
 router.get('/children/:id', validateSanghAccess, getChildSanghs);
 
 // Update Sangh (Requires office bearer permission)
-router.patch('/update/:id', upload.sangathanDocs, updateHierarchicalSangh);
+router.put('/update/:id', upload.sangathanDocs, updateHierarchicalSangh);
 
 // Member management routes with updated permissions
-router.post('/:sanghId/members', 
-    (req, res, next) => {
-        if (req.user.role === 'superadmin') {
-            return next();
-        }
-        isOfficeBearer(req, res, next);
-    },
-    upload.fields([
-        { name: 'memberJainAadhar', maxCount: 1 },
-        { name: 'memberPhoto', maxCount: 1 }
-    ]),
-    validateSanghAccess,
-    addSanghMember
-);
+router.post('/:sanghId/members', upload.single('memberPhoto'), addSanghMember);
 
 router.delete('/:sanghId/members/:memberId', 
     isOfficeBearer,
@@ -87,12 +74,11 @@ router.delete('/:sanghId/members/:memberId',
 );
 
 router.put('/:sanghId/members/:memberId', 
-    isOfficeBearer,
+    //isOfficeBearer,
     upload.fields([
-        { name: 'memberJainAadhar', maxCount: 1 },
         { name: 'memberPhoto', maxCount: 1 }
     ]),
-    validateSanghAccess,
+    //validateSanghAccess,
     updateMemberDetails
 );
 
@@ -110,11 +96,12 @@ router.put('/area/:sanghId',
     canManageAreaSangh,
     updateHierarchicalSangh
 );
-router.post('/area/:sanghId/members',
-    authMiddleware,
-    canManageAreaSangh,
-    addSanghMember
-);
+// router.post('/area/:sanghId/members',
+//     authMiddleware,
+//     canManageAreaSangh,
+//     upload.memberPhoto,
+//     addSanghMember
+// );
 router.delete('/area/:sanghId/members/:memberId',
     authMiddleware,
     canManageAreaSangh,
@@ -175,4 +162,4 @@ router.put('/specialized/:sanghId/members/:memberId',
     ]),
     updateMemberDetails
 );
-module.exports = router; 
+module.exports = router;

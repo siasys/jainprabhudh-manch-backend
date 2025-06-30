@@ -25,30 +25,9 @@ const paymentSchema = new mongoose.Schema({
         default: 1100
     },
     currency: { type: String, default: "INR" },
-    distribution: {
-        city: {
-            sanghId: { type: mongoose.Schema.Types.ObjectId, ref: 'HierarchicalSangh' },
-            amount: { type: Number, default: 0 },
-            level: { type: String }
-        },
-        district: {
-            sanghId: { type: mongoose.Schema.Types.ObjectId, ref: 'HierarchicalSangh' },
-            amount: { type: Number, default: 0 },
-            level: { type: String }
-        },
-        state: {
-            sanghId: { type: mongoose.Schema.Types.ObjectId, ref: 'HierarchicalSangh' },
-            amount: { type: Number, default: 0 },
-            level: { type: String }
-        },
-        country: {
-            sanghId: { type: mongoose.Schema.Types.ObjectId, ref: 'HierarchicalSangh' },
-            amount: { type: Number, default: 0 },
-            level: { type: String }
-        },
-        foundation: {
-            amount: { type: Number, default: 0 }
-        }
+     foundationAccount: {
+    amount: { type: Number, default: 1100 },
+    accountId: { type: String },
     },
     paymentDate: {
         type: Date,

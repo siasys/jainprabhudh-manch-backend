@@ -91,6 +91,8 @@ const getS3Folder = (fieldname, req) => {
       return 'sangathan/panch/documents/';
     case 'profilePhoto':
       return 'sangathan/panch/photos/';
+    case 'memberPhoto':
+      return 'sangathan/members/photos/';
     case 'biodataImage':
       return 'biodata/images/'
     case 'jobPost':
@@ -240,6 +242,7 @@ module.exports.sangathanDocs = upload.fields([
   { name: 'secretaryPhoto', maxCount: 1 },
   { name: 'treasurerPhoto', maxCount: 1 }
 ]);
+module.exports.memberPhoto = upload.single('memberPhoto');
 // Add specific Panch document upload configuration for all 5 members
 module.exports.panchGroupDocs = upload.fields([
   { name: 'members[0].jainAadharPhoto', maxCount: 1 },
