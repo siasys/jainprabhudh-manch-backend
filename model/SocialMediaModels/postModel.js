@@ -7,6 +7,27 @@ const postSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+   type: {
+      type: String,
+      enum: ['sangh', 'panch', 'tirth', 'sadhu'],
+    },
+
+    sanghId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'HierarchicalSangh',
+    },
+    panchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Panch',
+    },
+    tirthId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Tirth',
+    },
+    sadhuId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Sadhu',
+    },
     caption: {
       type: String,
       maxlength: 500,
@@ -30,7 +51,7 @@ const postSchema = new mongoose.Schema(
     },
       hashtags: [{ type: String }],
     emoji: {
-    type: String, 
+    type: String,
     default: "",
   },
     likes: [

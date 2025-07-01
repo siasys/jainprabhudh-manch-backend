@@ -135,7 +135,8 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
                 address,
                 pinCode,
                 document: req.files[`${role}JainAadhar`] ? convertS3UrlToCDN(req.files[`${role}JainAadhar`][0].location) : null,
-                photo: req.files[`${role}Photo`] ? convertS3UrlToCDN(req.files[`${role}Photo`][0].location) : null
+                photo: req.files[`${role}Photo`] ? convertS3UrlToCDN(req.files[`${role}Photo`][0].location) : null,
+                description: officeBearers[role]?.description || ""
             };
         }));
         // Validate location hierarchy based on level
@@ -516,7 +517,7 @@ const updateHierarchicalSangh = asyncHandler(async (req, res) => {
     if (address) updateFields['officeBearers.$[elemTarget].address'] = address;
     if (pinCode) updateFields['officeBearers.$[elemTarget].pinCode'] = pinCode;
     if (paymentStatus) updateFields['officeBearers.$[elemTarget].paymentStatus'] = paymentStatus;
-
+    if (req.body.description) updateFields['officeBearers.$[elemTarget].description'] = req.body.description;
     if (req.files?.[`${role}Photo`]) {
       const photo = convertS3UrlToCDN(req.files[`${role}Photo`][0].location);
       updateFields['officeBearers.$[elemTarget].photo'] = photo;

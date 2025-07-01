@@ -22,11 +22,10 @@ const paymentSchema = new mongoose.Schema({
 },
     amountCollected: {
         type: Number,
-        default: 1100
     },
     currency: { type: String, default: "INR" },
-     foundationAccount: {
-    amount: { type: Number, default: 1100 },
+    foundationAccount: {
+    amount: { type: Number },
     accountId: { type: String },
     },
     paymentDate: {

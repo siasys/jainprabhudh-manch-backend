@@ -98,10 +98,17 @@ const verifyPayment = asyncHandler(async (req, res) => {
     };
 
     const payment = await Payment.findOneAndUpdate(
-      { transactionId: razorpay_order_id },
-      { status: 'paid', distribution },
-      { new: true }
-    );
+  { transactionId: razorpay_order_id },
+  {
+    status: 'paid',
+    foundationAccount: {
+      amount: amount,
+      accountId: 'foundation' // Optional: if applicable
+    }
+  },
+  { new: true }
+);
+
 
     if (!payment) {
       return res.status(404).json({ success: false, message: "Payment record not found" });
@@ -128,5 +135,118 @@ const verifyPayment = asyncHandler(async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error during payment verification", error: error.message });
   }
 });
+const createOfficeBearerOrder = asyncHandler(async (req, res) => {
+  const { sanghId, memberId, role } = req.body;
 
-module.exports = { createOrder, verifyPayment };
+  if (!sanghId || !memberId || !role) {
+    return res.status(400).json({ success: false, message: "sanghId, userId and role are required" });
+  }
+  const userId = memberId;
+
+  const sangh = await HierarchicalSangh.findById(sanghId);
+  if (!sangh) {
+    return res.status(404).json({ success: false, message: "Sangh not found" });
+  }
+
+  const amount = getAmountByLevel(sangh.level);
+  const receipt = `office_${userId.substring(0, 10)}_${Date.now()}`;
+
+  const options = {
+    amount: amount * 100,
+    currency: "INR",
+    receipt
+  };
+
+  const order = await razorpay.orders.create(options);
+
+  const payment = new Payment({
+    transactionId: order.id,
+    sanghId,
+    memberId: userId, // Keeping same field for simplicity
+    amountCollected: amount,
+    currency: "INR",
+    status: "pending",
+    role: role,
+    type: "officeBearer"  // optional for clarity
+  });
+
+  await payment.save();
+
+  res.status(200).json({
+    success: true,
+    orderId: order.id,
+    amount: order.amount,
+    currency: order.currency,
+    sanghId,
+    userId
+  });
+});
+
+const verifyOfficeBearerPayment = asyncHandler(async (req, res) => {
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, sanghId, memberId, role } = req.body;
+  const userId = memberId;
+  const body = razorpay_order_id + "|" + razorpay_payment_id;
+  const expectedSignature = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+    .update(body.toString())
+    .digest('hex');
+
+  if (expectedSignature !== razorpay_signature) {
+    await Payment.findOneAndUpdate(
+      { transactionId: razorpay_order_id },
+      { status: 'overdue' }
+    );
+    return res.status(400).json({ success: false, message: "Invalid signature" });
+  }
+
+  const sangh = await HierarchicalSangh.findById(sanghId);
+  if (!sangh) {
+    return res.status(404).json({ success: false, message: "Sangh not found" });
+  }
+
+  const amount = getAmountByLevel(sangh.level);
+  const distribution = { foundation: { amount } };
+
+const payment = await Payment.findOneAndUpdate(
+  { transactionId: razorpay_order_id },
+  {
+    status: 'paid',
+    foundationAccount: {
+      amount: amount,
+      accountId: 'foundation' // Optional
+    }
+  },
+  { new: true }
+);
+
+  // Update paymentStatus in officeBearers array
+  const updatedSangh = await HierarchicalSangh.findOneAndUpdate(
+    {
+      _id: sanghId,
+      officeBearers: {
+        $elemMatch: {
+          userId: new mongoose.Types.ObjectId(userId),
+          role: role
+        }
+      }
+    },
+    {
+      $set: {
+        "officeBearers.$.paymentStatus": "paid"
+      }
+    },
+    { new: true }
+  );
+
+  if (!updatedSangh) {
+    return res.status(404).json({ success: false, message: "Office bearer not found in Sangh" });
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Office bearer payment verified",
+    data: payment
+  });
+});
+
+
+module.exports = { createOrder, verifyPayment,createOfficeBearerOrder ,verifyOfficeBearerPayment  };

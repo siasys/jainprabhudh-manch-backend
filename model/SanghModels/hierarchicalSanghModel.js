@@ -57,7 +57,11 @@ const officeBearerSchema = new mongoose.Schema({
         type: String,
         enum: ['active', 'inactive'],
         default: 'active'
-    }
+    },
+      description: {
+    type: String,
+    default: ''
+  }
 });
 
 const memberSchema = new mongoose.Schema({
@@ -161,6 +165,8 @@ const hierarchicalSanghSchema = new mongoose.Schema({
         default: Date.now
     },
     description: String,
+    coverImgae: String,
+    sanghImage: String,
     contact: {
         email: String,
         phone: String,
