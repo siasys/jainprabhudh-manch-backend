@@ -246,10 +246,11 @@ module.exports.sangathanDocs = upload.fields([
   { name: 'secretaryPhoto', maxCount: 1 },
   { name: 'treasurerPhoto', maxCount: 1 },
   { name: 'treasurerPhoto', maxCount: 1 },
+  { name: 'coverImage', maxCount: 1 },
+  { name: 'sanghImage', maxCount: 1 },
 ]);
 module.exports.memberPhoto = upload.single('memberPhoto');
-module.exports.sanghImage = upload.single('sanghImage');
-module.exports.coverImage = upload.single('coverImage');
+
 // Add specific Panch document upload configuration for all 5 members
 module.exports.panchGroupDocs = upload.fields([
   { name: 'members[0].jainAadharPhoto', maxCount: 1 },

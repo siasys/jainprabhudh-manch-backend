@@ -46,6 +46,8 @@ const validateOfficeBearers = async (officeBearers) => {
 };
 // Create new Sangh
 const createHierarchicalSangh = asyncHandler(async (req, res) => {
+    const coverImage = req.files?.coverImage ? convertS3UrlToCDN(req.files.coverImage[0].location) : null;
+const sanghImage = req.files?.sanghImage ? convertS3UrlToCDN(req.files.sanghImage[0].location) : null;
     try {
         const {
             name,
@@ -202,7 +204,9 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             socialMedia,
             sanghType: resolvedSanghType,
             parentMainSangh: parentMainSanghId,
-            createdBy: req.user._id
+            createdBy: req.user._id,
+            coverImage,
+            sanghImage
         });
         // console.log("Saved Sangh:", sangh);
         // console.log("Assigning parentSangh:", parentSanghId);
@@ -487,6 +491,50 @@ const getChildSanghs = asyncHandler(async (req, res) => {
     } catch (error) {
         return errorResponse(res, error.message, 500);
     }
+});
+const updateSanghById = asyncHandler(async (req, res) => {
+  const sanghId = req.params.id;
+
+  try {
+    const existingSangh = await HierarchicalSangh.findById(sanghId);
+    if (!existingSangh) {
+      return errorResponse(res, 'Sangh not found', 404);
+    }
+
+    // ✅ Optional uploaded images
+    const coverImage =
+      req.files?.coverImage && req.files.coverImage.length > 0
+        ? convertS3UrlToCDN(req.files.coverImage[0].location)
+        : existingSangh.coverImage;
+
+    const sanghImage =
+      req.files?.sanghImage && req.files.sanghImage.length > 0
+        ? convertS3UrlToCDN(req.files.sanghImage[0].location)
+        : existingSangh.sanghImage;
+
+    // ✅ Fields to update
+    const fieldsToUpdate = {
+      name: req.body.name ?? existingSangh.name,
+      description: req.body.description ?? existingSangh.description,
+      contact: req.body.contact ?? existingSangh.contact,
+      socialMedia: req.body.socialMedia ?? existingSangh.socialMedia,
+      coverImage,
+      sanghImage,
+    };
+
+    const updatedSangh = await HierarchicalSangh.findByIdAndUpdate(
+      sanghId,
+      { $set: fieldsToUpdate },
+      { new: true }
+    );
+
+    return successResponse(res, updatedSangh, 'Sangh updated successfully');
+  } catch (error) {
+    if (req.files) {
+      await deleteS3Files(req.files); // Optional cleanup
+    }
+    return errorResponse(res, error.message || 'Something went wrong', 500);
+  }
 });
 
 // Update Sangh
@@ -1653,9 +1701,55 @@ const generateMembersCard = async (req, res) => {
     res.status(500).json({ message: 'Failed to generate member card', error: err.message });
   }
 };
+
+// POST /api/hierarchical-sangh/:sanghId/follow
+const followSangh = asyncHandler(async (req, res) => {
+  const { sanghId } = req.params;
+  const userId = req.user._id; // assuming auth middleware sets this
+
+  const sangh = await HierarchicalSangh.findById(sanghId);
+  if (!sangh) {
+    return res.status(404).json({ message: 'Sangh not found' });
+  }
+
+  if (sangh.followers.includes(userId)) {
+    return res.status(400).json({ message: 'Already following' });
+  }
+
+  // Add user to sangh's followers
+  sangh.followers.push(userId);
+  await sangh.save();
+
+  // ✅ ALSO: Add sanghId to user's `followedSanghs` (or `friends` if you insist)
+  await User.findByIdAndUpdate(userId, {
+    $addToSet: { followedSanghs: sanghId }
+  });
+
+  res.status(200).json({
+    message: 'Followed successfully',
+    followersCount: sangh.followers.length
+  });
+});
+
+const unfollowSangh = asyncHandler(async (req, res) => {
+  const { sanghId } = req.params;
+  const userId = req.user._id;
+
+  const sangh = await HierarchicalSangh.findById(sanghId);
+  if (!sangh) return res.status(404).json({ message: 'Sangh not found' });
+
+  sangh.followers = sangh.followers.filter(id => id.toString() !== userId.toString());
+  await sangh.save();
+
+  res.status(200).json({ message: 'Unfollowed successfully', followersCount: sangh.followers.length });
+});
+
 module.exports = {
     createHierarchicalSangh,
     getHierarchy,
+    updateSanghById,
+    unfollowSangh,
+    followSangh,
     getUserByJainAadhar,
     getAllSangh,
     getSanghsByLevelAndLocation,

@@ -66,6 +66,15 @@ const postSchema = new mongoose.Schema(
           type: mongoose.Schema.Types.ObjectId,
           ref: 'User',
         },
+          sanghId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'HierarchicalSangh',
+          default: null,
+        },
+        isSangh: {
+          type: Boolean,
+          default: false,
+        },
         text: {
           type: String,
           maxlength: 300,
@@ -93,6 +102,9 @@ const postSchema = new mongoose.Schema(
               type: mongoose.Schema.Types.ObjectId,
               ref: 'User',
             },
+             isSangh: { type: Boolean, default: false },
+            sanghId: { type: mongoose.Schema.Types.ObjectId, ref: 'HierarchicalSangh', default: null },
+           
             text: {
               type: String,
               maxlength: 300,

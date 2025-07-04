@@ -22,7 +22,10 @@ const {
     getAllSanghs,
     generateMemberCard,
     generateMembersCard,
-    getUserByJainAadhar
+    getUserByJainAadhar,
+    updateSanghById,
+    unfollowSangh,
+    followSangh
 } = require('../../controller/SanghControllers/hierarchicalSanghController');
 
 const upload = require('../../middlewares/upload');
@@ -42,6 +45,8 @@ router.post('/create', upload.sangathanDocs, checkSanghCreationPermission,
     },
     createHierarchicalSangh
 );
+router.post('/:sanghId/follow', followSangh);
+router.post('/:sanghId/unfollow', unfollowSangh);
     // Get all Sangh
     router.get('/sangh/all', getAllSangh);
   // Get all Sangh
@@ -60,6 +65,8 @@ router.get('/user/by-jain-aadhar/:jainAadharNumber', getUserByJainAadhar);
 
 // Get child Sanghs
 router.get('/children/:id', validateSanghAccess, getChildSanghs);
+router.put('/update-sangh/:id', upload.sangathanDocs, updateSanghById);
+
 
 // Update Sangh (Requires office bearer permission)
 router.put('/update/:id', upload.sangathanDocs, updateHierarchicalSangh);

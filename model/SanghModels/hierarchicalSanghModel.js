@@ -165,7 +165,7 @@ const hierarchicalSanghSchema = new mongoose.Schema({
         default: Date.now
     },
     description: String,
-    coverImgae: String,
+    coverImage: String,
     sanghImage: String,
     contact: {
         email: String,
@@ -197,7 +197,20 @@ const hierarchicalSanghSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'HierarchicalSangh',
         default: null
-    }
+    },
+    followers: [
+  {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }
+],
+ posts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Post',
+        default: 0,
+      },
+    ],
 }, {
     timestamps: true
 });

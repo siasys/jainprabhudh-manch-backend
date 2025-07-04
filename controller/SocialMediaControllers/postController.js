@@ -18,6 +18,7 @@ const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
 const redisClient = require('../../config/redisClient')
 const Report = require('../../model/SocialMediaModels/Report');
 const Hashtag = require('../../model/SocialMediaModels/Hashtag');
+const Sangh = require('../../model/SanghModels/hierarchicalSanghModel'); // ✅ correct relative path use karein
 
 const createPost = [
   upload.postMediaUpload,
@@ -41,7 +42,7 @@ const createPost = [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { caption, userId, hashtags } = req.body;
+    const { caption, userId, hashtags,type, refId } = req.body;
     const parsedHashtags = hashtags ? JSON.parse(hashtags) : [];
 
     const user = await User.findById(userId);
@@ -67,20 +68,33 @@ const createPost = [
         { upsert: true, new: true }
       );
     }
-
     const postType = media.length > 0 ? 'media' : 'text';
-
-    const post = await Post.create({
+     const postData = {
       user: userId,
       caption,
       media,
       postType,
-      hashtags: parsedHashtags
+      hashtags: parsedHashtags,
+      type
+    };
+
+    // Add refId to corresponding field
+    if (type === 'sangh') postData.sanghId = refId;
+    else if (type === 'panch') postData.panchId = refId;
+    else if (type === 'sadhu') postData.sadhuId = refId;
+    else if (type === 'vyapar') postData.vyaparId = refId;
+
+    const post = await Post.create(postData);
+    if (!type) {
+      user.posts.push(post._id);
+      await user.save();
+    } else {
+        if (type === 'sangh') {
+    await Sangh.findByIdAndUpdate(refId, {
+      $push: { posts: post._id },
     });
-
-    user.posts.push(post._id);
-    await user.save();
-
+    }
+  }
     await invalidateCache('combinedFeed:*');
     await invalidateCache('combinedFeed:firstPage:limit:10');
 
@@ -116,6 +130,7 @@ const getPostsByUser = asyncHandler(async (req, res) => {
   const posts = await getOrSetCache(cacheKey, async () => {
     return await Post.find({ user: userId })
       .populate('user', 'firstName lastName fullName profilePicture')
+      .populate('sanghId', 'name sanghImage')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -138,7 +153,7 @@ const getPostsByUser = asyncHandler(async (req, res) => {
 
 const getPostById = asyncHandler(async (req, res) => {
   const { postId } = req.params;
-  const userId = req.user.id; // Logged-in user ID
+  const userId = req.user.id;
 
   const user = await User.findById(userId);
   if (!user) {
@@ -147,11 +162,12 @@ const getPostById = asyncHandler(async (req, res) => {
   if (!postId) {
     return res.status(400).json({ error: 'Post ID is required' });
   }
+
   await redisClient.del(`post:${postId}`);
-  // filter hata diya aur postId se direct search kar rahe hain
+
   const post = await getOrSetCache(`post:${postId}`, async () => {
-    return await Post.findById(postId)
-      .populate('user', 'firstName lastName fullName profilePicture postType')
+    let query = Post.findById(postId)
+      .populate('user', 'firstName lastName fullName profilePicture')
       .populate({
         path: 'comments.user',
         select: 'firstName lastName fullName profilePicture',
@@ -161,7 +177,16 @@ const getPostById = asyncHandler(async (req, res) => {
         model: 'User',
         select: 'firstName lastName fullName profilePicture',
       });
-  }, 3600); 
+
+    // 🔁 Type-wise populate
+    query = query
+      .populate('sanghId', 'name sanghImage')
+      // .populate('panchId', 'name image')
+      // .populate('sadhuId', 'fullName profilePicture')
+      // .populate('vyaparId', 'businessName logo');
+
+    return await query;
+  }, 3600);
 
   if (!post) {
     return res.status(404).json({ error: 'Post not found' });
@@ -195,6 +220,8 @@ const getPostById = asyncHandler(async (req, res) => {
     userId: post.user?._id,
     userName: post.user?.fullName,
     profilePicture: post.user?.profilePicture,
+    type: post.type || null,
+    sanghId: post.sanghId || null,
     createdAt: post.createdAt,
   });
 });
@@ -279,6 +306,7 @@ const getAllPosts = async (req, res) => {
       ...timeCondition
     })
       .populate('user', 'firstName lastName fullName profilePicture friends')
+      .populate('sanghId', 'name sanghImage')
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
@@ -308,6 +336,7 @@ const getAllPosts = async (req, res) => {
         ...timeCondition
       })
         .populate('user', 'firstName lastName fullName profilePicture friends')
+          .populate('sanghId', 'name sanghImage')
         .sort({ createdAt: -1 })
         .limit(remainingLimitAfterFollowed)
         .lean();
@@ -541,7 +570,12 @@ const deletePost = asyncHandler(async (req, res) => {
   // ✅ Remove postId from user's posts list
   user.posts = user.posts.filter(id => id.toString() !== postId.toString());
   await user.save();
-
+    if (post.type === 'sangh' && post.sanghId) {
+    await Sangh.updateOne(
+      { _id: post.sanghId },
+      { $pull: { posts: post._id } }
+    );
+  }
   // ✅ Delete post
   await post.deleteOne();
 

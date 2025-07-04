@@ -93,6 +93,7 @@ const groupChatSchema = new mongoose.Schema({
     required: true,
   },
   gotraGroupName: { type: String, default: null },
+  sanghGroupName: { type: String, default: null },
   groupImage:{
     type:String
   },

@@ -10,7 +10,6 @@ exports.createReport = async (req, res) => {
     if (!reportType || !reason) {
       return res.status(400).json({ message: "Report type and reason are required." });
     }
-
     const report = new Report({
       postId: postId || null,
       reportedUser: reportedUser || null,
@@ -18,9 +17,7 @@ exports.createReport = async (req, res) => {
       reportType,
       reason,
     });
-
     await report.save();
-
     res.status(201).json({ success: true, message: "Report submitted successfully.", report });
   } catch (error) {
     console.error("Create Report Error:", error);
@@ -35,7 +32,6 @@ exports.getAllReports = async (req, res) => {
       .populate('postId', 'caption media postType')
       .populate('reportedUser', 'fullName email profilePicture')
       .sort({ createdAt: -1 });
-
     res.status(200).json({ success: true, reports });
   } catch (error) {
     console.error("Get All Reports Error:", error);
@@ -49,7 +45,6 @@ exports.getReportById = async (req, res) => {
       .populate('reportedBy', 'fullName email')
       .populate('postId', 'caption media postType')
       .populate('reportedUser', 'fullName email');
-
     if (!report) {
       return res.status(404).json({ success: false, message: "Report not found." });
     }

@@ -6,7 +6,7 @@ const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const JainAadhar = require('../../model/UserRegistrationModels/jainAadharModel')
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
-
+const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel')
 // 1. Create Group Chat
 exports.createGroupChat = async (req, res) => {
   try {
@@ -179,6 +179,80 @@ exports.createOrFindGotraGroup = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message });
+  }
+};
+
+exports.createOrFindHierarchicalSanghGroup = async (req, res) => {
+  try {
+    const { sanghId } = req.body;
+
+    const sangh = await HierarchicalSangh.findById(sanghId);
+    if (!sangh) return res.status(404).json({ message: "Sangh not found" });
+
+    const groupName = sangh.name?.trim(); // ✅ Sangh name
+    const groupImage = sangh.sanghImage || null; // ✅ Sangh image
+    const creator = sangh.createdBy;
+
+    // ✅ Collect unique userIds from officeBearers and members
+    const officeBearerUserIds = sangh.officeBearers.map(ob => ob.userId?.toString());
+    const memberUserIds = sangh.members.map(m => m.userId?.toString());
+    const groupMembers = Array.from(new Set([...officeBearerUserIds, ...memberUserIds]));
+
+    // ✅ Check if group already exists
+    let existingGroup = await GroupChat.findOne({ groupName: new RegExp(`^${groupName}$`, 'i') });
+
+    if (existingGroup) {
+      // Add missing members
+      groupMembers.forEach(memberId => {
+        if (!existingGroup.groupMembers.some(m => m.user.toString() === memberId)) {
+          existingGroup.groupMembers.push({ user: memberId, role: "member" });
+        }
+      });
+      existingGroup.groupImage = groupImage; // Update group image
+      await existingGroup.save();
+    } else {
+      // ✅ Create new group
+      existingGroup = new GroupChat({
+        groupName, // Sangh name
+        groupImage, // Sangh image
+        groupMembers: groupMembers.map(memberId => ({
+          user: memberId,
+          role: memberId === creator.toString() ? "admin" : "member"
+        })),
+        isHierarchicalSanghGroup: true,
+        creator,
+        admins: [creator]
+      });
+      await existingGroup.save();
+    }
+
+    // ✅ Emit via Socket.io
+    const io = getIo();
+    if (io) {
+      groupMembers.forEach(memberId => {
+        io.to(memberId).emit("newGroup", {
+          _id: existingGroup._id,
+          groupName: existingGroup.groupName,
+          groupImage: existingGroup.groupImage,
+          creator: existingGroup.creator,
+          createdAt: existingGroup.createdAt
+        });
+        io.to(memberId).emit("addedToGroup", {
+          groupId: existingGroup._id,
+          groupName: existingGroup.groupName
+        });
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: "Sangh group created or updated successfully",
+      group: existingGroup
+    });
+
+  } catch (error) {
+    console.error("Error in createOrFindHierarchicalSanghGroup:", error);
+    res.status(500).json({ message: error.message });
   }
 };
 

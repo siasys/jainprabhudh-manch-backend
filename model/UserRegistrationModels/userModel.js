@@ -167,6 +167,10 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId, 
       ref: 'User'
     }],
+    followedSanghs: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'HierarchicalSangh'
+    }],
     story: [
       {
         type: mongoose.Schema.Types.ObjectId,
