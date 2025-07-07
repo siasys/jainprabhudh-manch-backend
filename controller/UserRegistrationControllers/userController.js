@@ -4,7 +4,7 @@ const Block = require('../../model/Block User/Block')
 const asyncHandler = require("express-async-handler");
 const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
-const dotenv = require("dotenv");
+const dotenv = require("dotenv")
 dotenv.config();
 const { userValidation } = require('../../validators/validations');
 const { errorResponse, successResponse } = require("../../utils/apiResponse");
@@ -415,35 +415,15 @@ const loginUser = [
    // authLimiter,
     userValidation.login,
     asyncHandler(async (req, res) => {
-    const { email, password,captchaToken } = req.body;
+    const { email, password } = req.body;
 
     try {
-       // 🔒 Step 1: Verify reCAPTCHA token with Google
-            if (!captchaToken) {
-                return errorResponse(res, "CAPTCHA token is missing", 400);
-            }
-console.log('Received captchaToken:', captchaToken);
-console.log('CAPTCHA_KEY exists:', !!process.env.CAPTCHA_KEY);
-            const verifyCaptcha = await axios.post(
-                `https://www.google.com/recaptcha/api/siteverify`,
-                {},
-                {
-                    params: {
-                        secret: process.env.CAPTCHA_KEY,
-                        response: captchaToken
-                    }
-                }
-            );
-console.log('Google reCAPTCHA response:', verifyCaptcha.data);
-            if (!verifyCaptcha.data.success) {
-                return errorResponse(res, "CAPTCHA verification failed", 403);
-            }
             const user = await User.findOne({ email });
 
             if (!user) {
                 return errorResponse(res, "Email not found", 401);
               }
-
+        
               const isMatch = await user.isPasswordMatched(password);
               if (!isMatch) {
                 return errorResponse(res, "Incorrect password", 401);
