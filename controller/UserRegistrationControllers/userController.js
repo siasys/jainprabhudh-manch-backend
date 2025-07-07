@@ -422,7 +422,8 @@ const loginUser = [
             if (!captchaToken) {
                 return errorResponse(res, "CAPTCHA token is missing", 400);
             }
-
+console.log('Received captchaToken:', captchaToken);
+console.log('CAPTCHA_KEY exists:', !!process.env.CAPTCHA_KEY);
             const verifyCaptcha = await axios.post(
                 `https://www.google.com/recaptcha/api/siteverify`,
                 {},
@@ -433,7 +434,7 @@ const loginUser = [
                     }
                 }
             );
-
+console.log('Google reCAPTCHA response:', verifyCaptcha.data);
             if (!verifyCaptcha.data.success) {
                 return errorResponse(res, "CAPTCHA verification failed", 403);
             }
