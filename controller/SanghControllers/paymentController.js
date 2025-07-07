@@ -10,7 +10,7 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 
-// ✅ Helper to get amount based on level
+// Helper to get amount based on level
 const getAmountByLevel = (level) => {
   switch (level?.toLowerCase()) {
     case 'district': return 2100;
@@ -135,6 +135,48 @@ const verifyPayment = asyncHandler(async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error during payment verification", error: error.message });
   }
 });
+// ✅ VERIFY PAYMENT ONLY USING ORDER ID
+const verifyPaymentByOrderId = asyncHandler(async (req, res) => {
+  try {
+    const { orderId, sanghId, memberId, userId } = req.body;
+
+    if (!orderId || !sanghId || !memberId) {
+      return res.status(400).json({ success: false, message: "Missing required fields" });
+    }
+
+    const payment = await Payment.findOne({ transactionId: orderId });
+
+    if (!payment) {
+      return res.status(404).json({ success: false, message: "Payment not found" });
+    }
+
+    if (payment.status !== 'paid') {
+      return res.status(400).json({ success: false, message: "Payment not completed yet" });
+    }
+
+    // ✅ Check if already a member in Sangh
+    const sangh = await HierarchicalSangh.findById(sanghId);
+
+    if (!sangh) {
+      return res.status(404).json({ success: false, message: "Sangh not found" });
+    }
+
+    const isMember = sangh.members?.some(
+      (m) => m?.userId?.toString() === userId?.toString()
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: isMember ? "Already a member" : "Payment verified, proceed to form",
+      alreadyMember: isMember,
+    });
+
+  } catch (error) {
+    console.error("Order ID verification error:", error);
+    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+  }
+});
+
 const createOfficeBearerOrder = asyncHandler(async (req, res) => {
   const { sanghId, memberId, role } = req.body;
 
@@ -249,4 +291,4 @@ const payment = await Payment.findOneAndUpdate(
 });
 
 
-module.exports = { createOrder, verifyPayment,createOfficeBearerOrder ,verifyOfficeBearerPayment  };
+module.exports = {verifyPaymentByOrderId, createOrder, verifyPayment,createOfficeBearerOrder ,verifyOfficeBearerPayment  };

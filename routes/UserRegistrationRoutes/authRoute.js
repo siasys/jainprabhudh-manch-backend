@@ -22,10 +22,11 @@ const {
     changePassword,
     getCitiesByState
 } = require('../../controller/UserRegistrationControllers/userController');
-const { authMiddleware, checkAccess } = require('../../middlewares/authMiddlewares');
+const { authMiddleware, checkAccess, authenticate } = require('../../middlewares/authMiddlewares');
 const upload = require('../../middlewares/upload');
 const { check, param, body } = require('express-validator');
 const rateLimit = require('express-rate-limit');
+const { switchToUserToken } = require('../../controller/SanghControllers/hierarchicalSanghController');
 
 
 const router = express.Router();
@@ -63,31 +64,33 @@ router.post('/register',
 router.post('/verification-email',sendVerificationCode)
 router.post('/verify-email', verifyEmail);
 router.post('/resend-code', resendVerificationCode);
-
 //router.get('/cities', getAllCities);
 router.get('/location', getCitiesByState);
 // Password reset
 router.post('/request-password-reset', requestPasswordReset);
 router.post('/reset-password', resetPassword);
 router.post('/login',loginUser);
+
+// backend route
+
 router.use(authMiddleware);
 router.post('/logout', logoutUser);
+router.post('/switch-to-user', authMiddleware, switchToUserToken);
 // router.use(checkAccess);
-router.get('/', getAllUsers);
 router.post('/send-change-email-otp', sendChangeEmailOtp);
 router.post('/verify-change-email', verifyChangeEmail);
 // Search users endpoint for suggestion/complaint recipient selection
 router.get('/search', searchUsers);
-router.get('/:id', getUserById);
+router.get('/', getAllUsers);
+router.post('/change-password', changePassword); 
+router.post('/upload-profile-picture', authMiddleware,
+upload.single('profilePicture'),uploadProfilePicture);
+router.post('/skip-profile-picture', authMiddleware, skipProfilePicture);
+router.put('/update-privacy/:id', updatePrivacy);
 router.put('/:id', upload.fields([
     { name: 'profilePicture', maxCount: 1 },
     { name: 'coverPicture', maxCount: 1 }
   ]),
   updateUserById);
-router.post('/change-password', changePassword); 
-router.put('/update-privacy/:id', updatePrivacy);
-router.post('/upload-profile-picture', authMiddleware,
-upload.single('profilePicture'),uploadProfilePicture);
-router.post('/skip-profile-picture', authMiddleware, skipProfilePicture);
-
+router.get('/:id', getUserById);
 module.exports = router;

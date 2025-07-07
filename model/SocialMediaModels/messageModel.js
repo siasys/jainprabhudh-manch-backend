@@ -66,14 +66,21 @@ const messageSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      index: true 
+      index: true
     },
     receiver: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      index: true 
+      index: true
     },
+    sanghId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'HierarchicalSangh',
+      default: null
+    },
+    senderType: { type: String, enum: ['user', 'sangh'], default: 'user' },
+    receiverType: { type: String, enum: ['user', 'sangh'], default: 'user' },
     conversation: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Conversation',

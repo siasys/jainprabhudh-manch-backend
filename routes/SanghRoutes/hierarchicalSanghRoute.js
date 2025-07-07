@@ -25,7 +25,8 @@ const {
     getUserByJainAadhar,
     updateSanghById,
     unfollowSangh,
-    followSangh
+    followSangh,
+    switchToSanghToken
 } = require('../../controller/SanghControllers/hierarchicalSanghController');
 
 const upload = require('../../middlewares/upload');
@@ -34,6 +35,8 @@ router.get('/generate-member-card/:userId', generateMemberCard);
 router.get('/generate-member-card/:userId', generateMembersCard);
 // Protect all routes
 router.use(authMiddleware);
+router.post('/switch-sangh-token', authMiddleware, switchToSanghToken);
+
 
 // Create new Sangh (Protected + Requires ability to create lower level)
 router.post('/create', upload.sangathanDocs, checkSanghCreationPermission,
@@ -74,11 +77,9 @@ router.put('/update/:id', upload.sangathanDocs, updateHierarchicalSangh);
 // Member management routes with updated permissions
 router.post('/:sanghId/members', upload.single('memberPhoto'), addSanghMember);
 
-router.delete('/:sanghId/members/:memberId', 
-    isOfficeBearer,
+router.delete('/:sanghId/members/:memberId', isOfficeBearer,
     //validateSanghAccess,
-    removeSanghMember
-);
+    removeSanghMember);
 
 router.put('/:sanghId/members/:memberId', 
     //isOfficeBearer,

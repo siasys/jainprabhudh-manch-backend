@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const asyncHandler = require("express-async-handler");
 const dotenv = require("dotenv").config();
 const Sadhu = require('../model/SadhuModels/sadhuModel');
+const Sangh = require('../model/SanghModels/hierarchicalSanghModel');
 
 // Log middleware function
 const logMiddleware = (req, res, next) => {
@@ -52,46 +53,69 @@ const authenticate = async (req, res, next) => {
   };
   
   // Auth middleware function
-  const authMiddleware = asyncHandler(async (req, res, next) => {
-      try {
-          const token = req.headers.authorization?.split(" ")[1];
-  
-          if (!token) {
-              return res.status(401).json({
-                  success: false,
-                  message: "No token attached to headers"
-              });
-          }
-  
-          const decoded = jwt.verify(token, process.env.JWT_SECRET);
-          const user = await User.findById(decoded._id)
-              .select('-password -__v');
-  
-          if (!user) {
-              return res.status(401).json({
-                  success: false,
-                  message: "User not found"
-              });
-          }
-  
-          // Check if token matches stored token
-          if (token !== user.token) {
-              return res.status(401).json({
-                  success: false,
-                  message: "Session expired or invalid. Please login again."
-              });
-          }
-  
-          req.user = user;
-          next();
-      } catch (error) {
-          return res.status(401).json({
-              success: false,
-              message: "Authentication failed",
-              error: error.message
-          });
+const authMiddleware = asyncHandler(async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+//console.log("Decoded token payload:", decoded);
+
+    const { type } = decoded;
+
+    let user = null;
+    let sangh = null;
+
+    // 🔁 Always get correct userId
+    const userId = decoded.type === "sangh" ? decoded.originalUserId : decoded._id;
+
+    user = await User.findById(userId).select("-password -__v");
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    // Optional token match check
+    // if (user.token && token !== user.token) {
+    //   return res.status(401).json({ message: "Invalid token" });
+    // }
+
+    // 🔁 If sangh token, validate sangh too
+    if (type === "sangh") {
+      if (!decoded.sanghId) {
+        return res.status(400).json({ message: "sanghId missing in token" });
       }
-  });  
+
+      sangh = await Sangh.findById(decoded.sanghId).select("-__v");
+      if (!sangh) {
+        return res.status(401).json({ message: "Sangh not found" });
+      }
+    }
+
+    // ✅ Attach to request
+    req.user = user;
+    req.sangh = sangh || null;
+    req.accountType = type;
+    req.userId = user._id;
+    req.jwtPayload = decoded;
+
+    next();
+
+  } catch (error) {
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Token expired" });
+    }
+
+    console.error("Auth Error:", error);
+    return res.status(401).json({
+      success: false,
+      message: "Authentication failed",
+      error: error.message,
+    });
+  }
+});
 
 // Admin middleware
 const isAdmin = asyncHandler(async (req, res, next) => {

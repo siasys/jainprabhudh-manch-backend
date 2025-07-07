@@ -30,10 +30,6 @@ const officeBearerSchema = new mongoose.Schema({
     pinCode:{
         type:Number
     },
-    document: {
-        type: String,
-      //  required: true
-    },
     photo: {
         type: String,
        // required: true
@@ -143,7 +139,10 @@ const hierarchicalSanghSchema = new mongoose.Schema({
             required: function() {
                 return this.level === 'area';
             }
-        }
+        },
+         address: {
+        type: String,
+    }
     },
   parentSangh: {
     type: mongoose.Schema.Types.ObjectId,
@@ -204,6 +203,12 @@ const hierarchicalSanghSchema = new mongoose.Schema({
     ref: 'User'
   }
 ],
+  stories: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Story',
+    }
+  ],
  posts: [
       {
         type: mongoose.Schema.Types.ObjectId,

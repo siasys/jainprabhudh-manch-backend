@@ -6,6 +6,15 @@ const storySchema = new mongoose.Schema({
         ref: 'User',
         required: true,
     },
+    sanghId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'HierarchicalSangh',
+  },
+  isSanghStory: {
+    type: Boolean,
+    default: false,
+  },
+  
     media: [{
         type: String,
     }],

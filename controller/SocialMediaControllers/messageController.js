@@ -1,7 +1,8 @@
 // controllers/messageController.js
 const { Message, encrypt, decrypt } = require('../../model/SocialMediaModels/messageModel');
 const User = require('../../model/UserRegistrationModels/userModel');
-const Conversation = require('../../model/SocialMediaModels/conversationModel')
+const Conversation = require('../../model/SocialMediaModels/conversationModel');
+const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
 const mongoose = require('mongoose');
 const {getIo, getUserStatus}  = require('../../websocket/socket');
 const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
@@ -10,38 +11,62 @@ const { getOrSetCache,invalidateCache } = require('../../utils/cache');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
 // Create a new message
+// controllers/messageController.js
+
 exports.createMessage = async (req, res) => {
   try {
-     // Trim the sender and receiver IDs to remove any extra spaces
-     const sender = req.body.sender.trim();
-     const receiver = req.body.receiver.trim();
-     const message = req.body.message;
-    // Validate message content
+    const sender = req.body.sender.trim();
+    const receiver = req.body.receiver.trim();
+    const message = req.body.message;
+    const senderType = req.body.senderType || req.user.type;
+    const receiverType = req.body.receiverType || 'user';
+
+    // 🛡️ 1. Validate message
     if (!message || message.trim() === "") {
       return res.status(400).json({ message: 'Message cannot be empty' });
     }
 
-     // Verify sender matches authenticated user
-     if (sender !== req.user._id.toString()) {
-      return res.status(403).json({ 
-        success: false,
-        message: 'Sender ID must match authenticated user' 
-      });
-    }
-    const senderUser = await User.findById(sender);
-    const receiverUser = await User.findById(receiver);
-    if (!senderUser || !receiverUser) {
-      // Delete uploaded file if users not found
-      if (req.file) {
-        await s3Client.send(new DeleteObjectCommand({
-          Bucket: process.env.AWS_BUCKET_NAME,
-          Key: req.file.key
-        }));
+    // 🧠 2. Validate sender authorization
+    if (senderType === 'sangh') {
+      const sangh = await HierarchicalSangh.findById(sender);
+      if (!sangh) {
+        return res.status(404).json({ message: "Sangh not found" });
       }
-      return errorResponse(res, 'Sender or receiver not found', 400);
+      const isOfficeBearer = sangh.officeBearers.some(ob =>
+        ob.userId.toString() === req.user._id.toString()
+      );
+      if (!isOfficeBearer) {
+        return res.status(403).json({
+          success: false,
+          message: 'User not authorized to send on behalf of Sangh'
+        });
+      }
+    } else {
+      if (sender !== req.user._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Sender ID must match authenticated user'
+        });
+      }
     }
+
+    // 🎯 3. Fetch receiver (can be user or sangh)
+    let receiverUser = null;
+    let receiverSangh = null;
+    if (receiverType === 'sangh') {
+      receiverSangh = await HierarchicalSangh.findById(receiver);
+      if (!receiverSangh) {
+        return errorResponse(res, 'Receiver Sangh not found', 400);
+      }
+    } else {
+      receiverUser = await User.findById(receiver);
+      if (!receiverUser) {
+        return errorResponse(res, 'Receiver User not found', 400);
+      }
+    }
+
+    // 💬 4. Create/get conversation
     const conversationCacheKey = `conversation:${sender}:${receiver}`;
-    // Find or create conversation
     let conversation = await getOrSetCache(conversationCacheKey, async () => {
       return await Conversation.findOne({
         participants: { $all: [sender, receiver] }
@@ -53,10 +78,12 @@ exports.createMessage = async (req, res) => {
       });
       await conversation.save();
     }
-    // Create message object - encryption happens automatically via schema middleware
+
+    // 📦 5. Prepare message data
     const messageData = {
       sender,
       receiver,
+      senderType,
       message: message,
       attachments: req.file ? [{
         type: 'image',
@@ -66,50 +93,83 @@ exports.createMessage = async (req, res) => {
       }] : [],
       createdAt: new Date()
     };
+
+    let senderInfo = {};
+
+    if (senderType === 'sangh') {
+      const sangh = await HierarchicalSangh.findById(sender);
+      if (!sangh) {
+        return errorResponse(res, 'Sender Sangh not found', 404);
+      }
+
+      messageData.sanghId = sangh._id;
+
+      senderInfo = {
+        _id: sangh._id,
+        fullName: sangh.name || sangh.sanghName,
+        profilePicture: sangh.sanghImage || null,
+        type: 'sangh'
+      };
+    } else {
+      const senderUser = await User.findById(sender);
+      if (!senderUser) {
+        return errorResponse(res, 'Sender user not found', 404);
+      }
+
+      senderInfo = {
+        _id: senderUser._id,
+        fullName: `${senderUser.firstName} ${senderUser.lastName}`,
+        profilePicture: senderUser.profilePicture,
+        type: 'user'
+      };
+    }
+
+    // ✅ 6. Save message
     const newMessage = new Message(messageData);
     await newMessage.save();
-    // Update conversation
+
+    // 🔁 7. Update conversation
     conversation.messages.push(newMessage._id);
     conversation.lastMessage = newMessage._id;
     await conversation.save();
-    await invalidateCache(`conversation:${sender}:${receiver}`);
-    await invalidateCache(`conversation:${receiver}:${sender}`); 
-    // Get decrypted message for socket emission
-    const decryptedMessage = newMessage.decryptedMessage;
-      // Emit real-time message event
-      const io = getIo();
-      io.to(receiver.toString()).emit('newMessage', {
-        message: {
-          ...newMessage.toObject(),
-          message: decryptedMessage // Send decrypted message in real-time
-        },
-        sender: {
-          _id: senderUser._id,
-          fullName: `${senderUser.firstName} ${senderUser.lastName}`,
-          profilePicture: senderUser.profilePicture
-        }
-      });
 
-      return successResponse(res, {
+    // 🚫 Invalidate cache
+    await invalidateCache(`conversation:${sender}:${receiver}`);
+    await invalidateCache(`conversation:${receiver}:${sender}`);
+
+    // 🔊 8. Emit socket message
+    const decryptedMessage = newMessage.decryptedMessage;
+    const io = getIo();
+    io.to(receiver.toString()).emit('newMessage', {
+      message: {
         ...newMessage.toObject(),
-        message: decryptedMessage // Send decrypted message in response
-      }, 'Message sent successfully', 201);
-    } catch (error) {
-      // Delete uploaded file if message creation fails
-      if (req.file) {
-        try {
-          await s3Client.send(new DeleteObjectCommand({
-            Bucket: process.env.AWS_BUCKET_NAME,
-            Key: req.file.key
-          }));
-        } catch (deleteError) {
-          console.error('Error deleting file:', deleteError);
-        }
+        message: decryptedMessage
+      },
+      sender: senderInfo
+    });
+
+    // 🎉 9. Success response
+    return successResponse(res, {
+      ...newMessage.toObject(),
+      message: decryptedMessage
+    }, 'Message sent successfully', 201);
+
+  } catch (error) {
+    if (req.file) {
+      try {
+        await s3Client.send(new DeleteObjectCommand({
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: req.file.key
+        }));
+      } catch (deleteError) {
+        console.error('Error deleting file:', deleteError);
       }
-      console.error('Message creation error:', error);
-      return errorResponse(res, 'Error sending message', 500, error.message);
     }
-  };
+    console.error('Message creation error:', error);
+    return errorResponse(res, 'Error sending message', 500, error.message);
+  }
+};
+
 // DELETE /messages/clear/:receiverId
 exports.clearAllMessagesBetweenUsers = async (req, res) => {
   try {

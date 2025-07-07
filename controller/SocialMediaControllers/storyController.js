@@ -4,11 +4,16 @@ const asyncHandler = require("express-async-handler");
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 const StoryReport = require('../../model/SocialMediaModels/StoryReport')
+const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
+
+
 // Create Story
 const createStory = asyncHandler(async (req, res) => {
     try {
-        const { type } = req.body;
-        const userId = req.user._id; // Get userId from authenticated user
+        const { type,sanghId, isSanghStory } = req.body;
+        const userId = req.user._id;
+        const userType = req.user.type;
+        //console.log("📛 Sangh ID:", sanghId);
         // Get S3 URLs from uploaded files
         const mediaFiles = req.files
         ? req.files.map(file => convertS3UrlToCDN(file.location))
@@ -27,7 +32,8 @@ const createStory = asyncHandler(async (req, res) => {
             });
         }
         //  Check if the user already has an active story
-        let existingStory = await Story.findOne({ userId });
+        let query = userType === "sangh" ? { userId: sanghId } : { userId };
+        let existingStory = await Story.findOne(query);
 
         if (existingStory) {
             // Update existing story (Add new media)
@@ -36,17 +42,25 @@ const createStory = asyncHandler(async (req, res) => {
         } else {
             //  Create a new story
             existingStory = await Story.create({
-                userId,
+                 userId: req.user._id,
+                sanghId: isSanghStory ? sanghId : null,
+                isSanghStory: isSanghStory === 'true',
                 media: mediaFiles,
                 type
-            });
+                            });
 
-            // Add story reference to user
-            await User.findByIdAndUpdate(userId, {
+                    if (userType === "user") {
+                // update user doc
+                await User.findByIdAndUpdate(userId, {
                 story: existingStory._id
-            });
-        }
-
+                });
+            } else if (userType === "sangh" && sanghId) {
+                // update sangh doc
+                await HierarchicalSangh.findByIdAndUpdate(sanghId, {
+                $push: { stories: existingStory._id }
+                });
+            }
+            }
         res.status(201).json({
             success: true,
             message: "Story updated successfully",
@@ -72,7 +86,8 @@ const getAllStories = asyncHandler(async (req, res) => {
         // Fetch only stories from the last 24 hours
         const stories = await Story.find({
             createdAt: { $gte: twentyFourHoursAgo }
-        }).populate("userId", "profilePicture firstName lastName fullName");
+        }).populate("userId", "profilePicture firstName lastName fullName")
+          .populate("sanghId", "name sanghImage");
       //  console.log("Fetched Stories:", stories);
       
         res.status(200).json({
@@ -99,7 +114,8 @@ const getStoriesByUser = asyncHandler(async (req, res) => {
         const stories = await Story.find({
             userId,
             createdAt: { $gte: twentyFourHoursAgo }
-        }).populate("userId", "profilePicture firstName lastName fullName");
+        }).populate("userId", "profilePicture firstName lastName fullName")
+          .populate("sanghId", "name sanghImage"); 
 
         if (!stories.length) {
             return errorResponse(res, 'No active stories found for this user', 404);
@@ -119,7 +135,6 @@ const getStoriesByUser = asyncHandler(async (req, res) => {
 const deleteStory = asyncHandler(async (req, res) => {
     try {
         const { userId, storyId } = req.params;
-        
         // Verify story ownership
         const story = await Story.findOne({
             _id: storyId,

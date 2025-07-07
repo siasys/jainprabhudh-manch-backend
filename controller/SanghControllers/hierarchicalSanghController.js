@@ -4,6 +4,7 @@ const JainAadharApplication = require('../../model/UserRegistrationModels/jainAa
 const asyncHandler = require('express-async-handler');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
+const { generateSanghToken,generateToken } = require('../../helpers/authHelpers');
 const { extractS3KeyFromUrl } = require('../../utils/s3Utils');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 const { createCanvas, loadImage } = require('canvas');
@@ -12,7 +13,7 @@ const path = require('path');
 const { default: axios } = require('axios');
 // Helper Functions
 const formatFullName = (firstName, lastName) => {
-    return lastName.toLowerCase() === 'jain' 
+    return lastName.toLowerCase() === 'jain'
         ? `${firstName} Jain`
         : `${firstName} Jain (${lastName})`;
 };
@@ -23,11 +24,9 @@ const validateOfficeBearers = async (officeBearers) => {
             jainAadharNumber: officeBearers[role].jainAadharNumber,
             jainAadharStatus: 'verified'
         });
-
         if (!user) {
             throw new Error(`${role}'s Jain Aadhar is not verified`);
         }
-
         // Check if user is already an office bearer in another active Sangh
         const existingSangh = await HierarchicalSangh.findOne({
             'officeBearers': {
@@ -44,16 +43,58 @@ const validateOfficeBearers = async (officeBearers) => {
         }
     }
 };
+const switchToUserToken = asyncHandler(async (req, res) => {
+  try {
+    const decoded = req.jwtPayload;
+
+    if (decoded.type !== "sangh" || !decoded.originalUserId) {
+      return res.status(400).json({ message: "Invalid sangh token" });
+    }
+
+    const user = await User.findById(decoded.originalUserId);
+    if (!user) {
+      return res.status(404).json({ message: "Original user not found" });
+    }
+
+    const newToken = generateToken(user);
+    res.json({ token: newToken, userId: user._id });
+
+  } catch (err) {
+    console.error("Switch to user failed:", err);
+    res.status(500).json({ message: "Switch to user failed", error: err.message });
+  }
+});
+
+const switchToSanghToken = asyncHandler(async (req, res) => {
+  const { sanghId } = req.body;
+
+  const user = await User.findById(req.user._id);
+  if (!user) return res.status(404).json({ message: "User not found" });
+
+  const matchedRole = user.sanghRoles.find(role =>
+    role.sanghId.toString() === sanghId.toString()
+  );
+
+  if (!matchedRole) {
+    return res.status(403).json({ message: "You don't have access to this Sangh" });
+  }
+
+  //  Use helper function
+  const token = generateSanghToken(user, sanghId);
+
+  return res.status(200).json({ token });
+});
+
 // Create new Sangh
 const createHierarchicalSangh = asyncHandler(async (req, res) => {
-    const coverImage = req.files?.coverImage ? convertS3UrlToCDN(req.files.coverImage[0].location) : null;
-const sanghImage = req.files?.sanghImage ? convertS3UrlToCDN(req.files.sanghImage[0].location) : null;
+  const coverImage = req.files?.coverImage ? convertS3UrlToCDN(req.files.coverImage[0].location) : null;
+  const sanghImage = req.files?.sanghImage ? convertS3UrlToCDN(req.files.sanghImage[0].location) : null;
     try {
         const {
             name,
             level,
             location,
-            officeBearers,
+           // officeBearers,
             parentSanghId,
             contact,
             establishedDate,
@@ -67,7 +108,7 @@ const sanghImage = req.files?.sanghImage ? convertS3UrlToCDN(req.files.sanghImag
 
          // Validate required fields
         // if (!name || !level || !location || !officeBearers) {
-            if (!name || !level || !officeBearers) {
+            if (!name || !level || !location) {
             return errorResponse(res, 'Missing required fields', 400);
         }
         // Validate sanghType
@@ -94,53 +135,48 @@ const sanghImage = req.files?.sanghImage ? convertS3UrlToCDN(req.files.sanghImag
                  parentMainSanghId = parentSangh.parentMainSangh || parentSangh._id;
              }
          }
-         // Validate office bearers
-         if (!officeBearers.president || !officeBearers.secretary || !officeBearers.treasurer) {
-             return errorResponse(res, 'All office bearer details are required', 400);
-         }
-         const formattedOfficeBearers = await Promise.all(['president', 'secretary', 'treasurer'].map(async role => {
-           const jainAadharNumber = officeBearers[role]?.jainAadharNumber;
+        //  const formattedOfficeBearers = await Promise.all(['president', 'secretary', 'treasurer'].map(async role => {
+        //    const jainAadharNumber = officeBearers[role]?.jainAadharNumber;
 
-            let firstName = "";
-            let lastName = "";
-            let mobileNumber = "";
-            let address = "";
-            let pinCode = "";
+        //     let firstName = "";
+        //     let lastName = "";
+        //     let mobileNumber = "";
+        //     let address = "";
+        //     let pinCode = "";
 
-            let user = null;
-             if (jainAadharNumber) {
-                user = await User.findOne({ jainAadharNumber });
-                const jainAadhar = await JainAadharApplication.findOne({ jainAadharNumber });
+        //     let user = null;
+        //      if (jainAadharNumber) {
+        //         user = await User.findOne({ jainAadharNumber });
+        //         const jainAadhar = await JainAadharApplication.findOne({ jainAadharNumber });
 
-                if (jainAadhar) {
-                // Name split logic
-                 const fullName = jainAadhar.name?.trim() || "";
-                const nameParts = fullName.split(" ");
-                firstName = nameParts[0] || "";
-                lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+        //         if (jainAadhar) {
+        //         // Name split logic
+        //          const fullName = jainAadhar.name?.trim() || "";
+        //         const nameParts = fullName.split(" ");
+        //         firstName = nameParts[0] || "";
+        //         lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
 
-                // Contact and Location
-                mobileNumber = jainAadhar.contactDetails?.number || "";
-                address = jainAadhar.location?.address || "";
-                pinCode = jainAadhar.location?.pinCode || "";
-                }
-            }
+        //         // Contact and Location
+        //         mobileNumber = jainAadhar.contactDetails?.number || "";
+        //         address = jainAadhar.location?.address || "";
+        //         pinCode = jainAadhar.location?.pinCode || "";
+        //         }
+        //     }
 
-            return {
-                role,
-                userId: user ? user._id : null,
-                firstName,
-                lastName,
-                 name: `${firstName} ${lastName}`.trim(),
-                   jainAadharNumber: jainAadharNumber || "",
-                mobileNumber,
-                address,
-                pinCode,
-                document: req.files[`${role}JainAadhar`] ? convertS3UrlToCDN(req.files[`${role}JainAadhar`][0].location) : null,
-                photo: req.files[`${role}Photo`] ? convertS3UrlToCDN(req.files[`${role}Photo`][0].location) : null,
-                description: officeBearers[role]?.description || ""
-            };
-        }));
+        //     return {
+        //         role,
+        //         userId: user ? user._id : null,
+        //         firstName,
+        //         lastName,
+        //         name: `${firstName} ${lastName}`.trim(),
+        //         jainAadharNumber: jainAadharNumber || "",
+        //         mobileNumber,
+        //         address,
+        //         pinCode,
+        //         photo: req.files[`${role}Photo`] ? convertS3UrlToCDN(req.files[`${role}Photo`][0].location) : null,
+        //         description: officeBearers[role]?.description || ""
+        //     };
+        // }));
         // Validate location hierarchy based on level
         if (level === 'area' && (!location.country || !location.state || !location.district || !location.city || !location.area)) {
             return errorResponse(res, 'Area level Sangh requires complete location hierarchy (country, state, district, city, area)', 400);
@@ -162,18 +198,18 @@ const sanghImage = req.files?.sanghImage ? convertS3UrlToCDN(req.files.sanghImag
             }
         }
         // Validate required documents
-        if (!req.files) {
-            return errorResponse(res, 'Office bearer documents are required', 400);
-        }
+        // if (!req.files) {
+        //     return errorResponse(res, 'Office bearer documents are required', 400);
+        // }
 
-        const requiredDocs = [
-            'presidentJainAadhar',
-            'presidentPhoto',
-            'secretaryJainAadhar',
-            'secretaryPhoto',
-            'treasurerJainAadhar',
-            'treasurerPhoto'
-        ];
+        // const requiredDocs = [
+        //     'presidentJainAadhar',
+        //     'presidentPhoto',
+        //     'secretaryJainAadhar',
+        //     'secretaryPhoto',
+        //     'treasurerJainAadhar',
+        //     'treasurerPhoto'
+        // ];
         // const missingDocs = requiredDocs.filter(doc => !req.files[doc]);
         // if (missingDocs.length > 0) {
         //     return errorResponse(res, `Missing required documents: ${missingDocs.join(', ')}`, 400);
@@ -198,7 +234,7 @@ const sanghImage = req.files?.sanghImage ? convertS3UrlToCDN(req.files.sanghImag
             level,
             location,
             parentSangh: parentSanghId,
-            officeBearers: formattedOfficeBearers,
+            //officeBearers: formattedOfficeBearers,
             description,
             contact,
             socialMedia,
@@ -208,29 +244,25 @@ const sanghImage = req.files?.sanghImage ? convertS3UrlToCDN(req.files.sanghImag
             coverImage,
             sanghImage
         });
-        // console.log("Saved Sangh:", sangh);
-        // console.log("Assigning parentSangh:", parentSanghId);
-        // console.log("Assigning parentMainSangh:", parentMainSanghId);
-        // Validate hierarchy
         await sangh.validateHierarchy();
         // Update office bearer roles in User model
-        for (const bearer of formattedOfficeBearers) {
-            console.log('Updating bearer:', bearer);
-            if (!bearer.userId) {
-                console.warn('⚠️ User not found for:', bearer.jainAadharNumber);
-                continue;
-            }
-            await User.findByIdAndUpdate(bearer.userId, {
-                $push: {
-                    sanghRoles: {
-                        sanghId: sangh._id,
-                        role: bearer.role,
-                        level: level,
-                        sanghType: resolvedSanghType
-                    }
-                }
-            });
-        }
+        // for (const bearer of formattedOfficeBearers) {
+        //     console.log('Updating bearer:', bearer);
+        //     if (!bearer.userId) {
+        //         console.warn('⚠️ User not found for:', bearer.jainAadharNumber);
+        //         continue;
+        //     }
+        //     await User.findByIdAndUpdate(bearer.userId, {
+        //         $push: {
+        //             sanghRoles: {
+        //                 sanghId: sangh._id,
+        //                 role: bearer.role,
+        //                 level: level,
+        //                 sanghType: resolvedSanghType
+        //             }
+        //         }
+        //     });
+        // }
         // Automatically create SanghAccess entry
         const SanghAccess = require('../../model/SanghModels/sanghAccessModel');
         const mongoose = require('mongoose');
@@ -239,10 +271,9 @@ const sanghImage = req.files?.sanghImage ? convertS3UrlToCDN(req.files.sanghImag
             sanghId: sangh._id,
             status: 'active'
         });
-        
         let sanghAccess;
         let resolvedParentSanghAccessId = null;
-        
+
         // Resolve parentSanghAccessId if provided
         if (parentSanghAccessId) {
             if (mongoose.Types.ObjectId.isValid(parentSanghAccessId)) {
@@ -250,11 +281,11 @@ const sanghImage = req.files?.sanghImage ? convertS3UrlToCDN(req.files.sanghImag
                 resolvedParentSanghAccessId = parentSanghAccessId;
             } else {
                 // It might be an access code string
-                const parentAccess = await SanghAccess.findOne({ 
+                const parentAccess = await SanghAccess.findOne({
                     accessId: parentSanghAccessId,
                     status: 'active'
                 });
-                
+
                 if (parentAccess) {
                     resolvedParentSanghAccessId = parentAccess._id;
                 }
@@ -296,7 +327,6 @@ const sanghImage = req.files?.sanghImage ? convertS3UrlToCDN(req.files.sanghImag
                 sanghAccessCode: existingAccess.accessId
             }, 'Sangh created successfully with existing access', 201);
         }
-
     } catch (error) {
         if (req.files) {
             await deleteS3Files(req.files);
@@ -432,9 +462,11 @@ const getHierarchy = asyncHandler(async (req, res) => {
             hierarchy.current.officeBearers = hierarchy.current.officeBearers.map((bearer) => ({
                 ...bearer,
                 photo: bearer.photo ? convertS3UrlToCDN(bearer.photo) : '',
-                document: bearer.document ? convertS3UrlToCDN(bearer.document) : ''
             }));
         }
+
+        // ✅ Add sanghImage to hierarchy response
+        hierarchy.sanghImage = sangh.sanghImage ? convertS3UrlToCDN(sangh.sanghImage) : null;
 
         return successResponse(res, hierarchy, 'Hierarchy retrieved successfully');
     } catch (error) {
@@ -571,10 +603,10 @@ const updateHierarchicalSangh = asyncHandler(async (req, res) => {
       updateFields['officeBearers.$[elemTarget].photo'] = photo;
     }
 
-    if (req.files?.[`${role}JainAadhar`]) {
-      const document = convertS3UrlToCDN(req.files[`${role}JainAadhar`][0].location);
-      updateFields['officeBearers.$[elemTarget].document'] = document;
-    }
+    // if (req.files?.[`${role}JainAadhar`]) {
+    //   const document = convertS3UrlToCDN(req.files[`${role}JainAadhar`][0].location);
+    //   updateFields['officeBearers.$[elemTarget].document'] = document;
+    // }
 
     const updated = await HierarchicalSangh.findByIdAndUpdate(
       id,
@@ -1766,5 +1798,7 @@ module.exports = {
     checkOfficeBearerTerms,
     getAllSanghs,
     generateMemberCard,
-    generateMembersCard
+    generateMembersCard,
+    switchToSanghToken,
+    switchToUserToken
 }; 
