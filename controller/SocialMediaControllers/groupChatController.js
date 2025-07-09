@@ -219,8 +219,9 @@ exports.createOrFindHierarchicalSanghGroup = async (req, res) => {
           user: memberId,
           role: memberId === creator.toString() ? "admin" : "member"
         })),
-        isHierarchicalSanghGroup: true,
+        isSanghGroup: true,
         creator,
+        sanghId,
         admins: [creator]
       });
       await existingGroup.save();
@@ -255,6 +256,10 @@ exports.createOrFindHierarchicalSanghGroup = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+
+
+
 
 // all groups
 exports.getAllGroups = async (req, res) => {
@@ -508,11 +513,13 @@ exports.getGroupMessages = async (req, res) => {
   try {
     const { groupId } = req.params;
     const { page = 1, limit = 20 } = req.query;
-    const userId = req.user._id;
+   const userId = req.user?._id || req.userId;
+
 
     const skip = (page - 1) * limit;
 
     const group = await GroupChat.findById(groupId)
+      .populate('sanghId')
       .populate({
         path: 'groupMessages.sender',
         select: 'firstName lastName fullName profilePicture'
@@ -581,7 +588,11 @@ exports.getGroupMessages = async (req, res) => {
 exports.deleteGroupMessage = async (req, res) => {
   try {
     const { groupId, messageId } = req.params;
-    const userId = req.user._id;
+ const userId = req.user?._id || req.userId;
+if (!userId) {
+  return res.status(401).json({ message: "User not found" });
+}
+
     const group = await GroupChat.findById(groupId);
     if (!group) return res.status(404).json({ message: 'Group not found' });
    // Find the message

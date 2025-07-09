@@ -422,8 +422,7 @@ const loginUser = [
 
             if (!user) {
                 return errorResponse(res, "Email not found", 401);
-              }
-        
+            }
               const isMatch = await user.isPasswordMatched(password);
               if (!isMatch) {
                 return errorResponse(res, "Incorrect password", 401);
@@ -556,6 +555,44 @@ const getUserById = asyncHandler(async (req, res) => {
 
     res.json(userResponse);
 });
+
+// Get user by Jain Aadhar Number
+const getUserByJainAadharNumber = asyncHandler(async (req, res) => {
+  const { number } = req.params;
+
+  const user = await User.findOne({
+    jainAadharNumber: number,
+    jainAadharStatus: 'verified'
+  }).populate('jainAadharApplication');
+
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User not found or not verified' });
+  }
+
+  const gender = user?.jainAadharApplication?.gender || '';
+const dob = user?.jainAadharApplication?.dob || '';
+let age = null;
+
+if (dob) {
+  const dobDate = new Date(dob);
+  const diffMs = Date.now() - dobDate.getTime();
+  const ageDate = new Date(diffMs);
+  age = Math.abs(ageDate.getUTCFullYear() - 1970);
+}
+  res.json({
+    success: true,
+    data: {
+      _id: user._id,
+      name: user?.jainAadharApplication?.name || 'Unknown',
+      gender,
+      dob,
+      age,
+      profileImage: user?.profileImage || '',
+      jainAadharNumber: user.jainAadharNumber,
+    }
+  });
+});
+
 const changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
 
@@ -824,6 +861,7 @@ module.exports = {
     getCitiesByState,
     getAllUsers,
     getUserById,
+    getUserByJainAadharNumber,
     updateUserById,
     changePassword ,
     updatePrivacy,

@@ -6,6 +6,7 @@ const dotenv = require("dotenv");
 const helmet = require('helmet');
 dotenv.config();
 const PORT = 4000;
+const { initializeWebSocket } = require('./websocket/socket'); 
 const session = require('express-session');
 const upload = require('./middlewares/upload')
 const bodyParser = require("body-parser");
@@ -43,7 +44,6 @@ const sanghPostRoutes = require('./routes/SanghRoutes/sanghPostRoutes');
 const panchayatRoutes = require('./routes/SanghRoutes/panchRoutes');
 const tirthRoutes = require('./routes/TirthRoutes/tirthRoutes');
 const tirthPostRoutes = require('./routes/TirthRoutes/tirthPostRoutes');
-const { initializeWebSocket } = require('./websocket/socket');
 const { scheduleStoryCleanup } = require('./jobs/storyCleanupJob');
 const vyaparRoutes = require('./routes/VyaparRoutes/vyaparRoutes');
 const vyaparPostRoutes = require('./routes/VyaparRoutes/vyaparPostRoutes');
@@ -58,7 +58,7 @@ const jainFoodRoutes = require('./routes/JainFood/jainFoodRoutes');
 const reportRoutes = require('./routes/SocialMediaRoutes/reportRoutes');
 const blockRoutes = require('./routes/Block User/blockRoutes');
 const deleteAccountRoutes = require('./routes/Account delete/deleteAccountRoutes');
-
+const projectRoutes = require('./routes/SanghRoutes/projectRoutes');
 app.set('trust proxy',1)
 // connect to databse
 dbConnect();
@@ -137,7 +137,7 @@ app.use('/api/panch', authMiddleware, panchayatRoutes);
 app.use('/api/panch-posts', authMiddleware, panchPostRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/inqury', inquiryRoutes);
-
+app.use('/api', projectRoutes);
 // uplaod biolers
 app.use('/api/bailors', bailorRoutes);
 
@@ -160,9 +160,8 @@ app.use('/api', deleteAccountRoutes);
 app.use(notFound);
 app.use(errorHandler);
 const server = http.createServer(app);
-// Initialize WebSocket with mobile-friendly config
-const io = initializeWebSocket(server);
-app.set('socketio', io);
+// ✅ Initialize WebSocket (⚠️ ye line missing thi)
+initializeWebSocket(server);
 
 // Start the job scheduler
 scheduleStoryCleanup();

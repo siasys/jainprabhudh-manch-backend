@@ -13,26 +13,28 @@ const officeBearerSchema = new mongoose.Schema({
         ref: 'User',
         //required: true
     },
+    level:{
+        type:String,
+    },
+    sanghType:{
+      type: String,
+    },
     name: {
         type: String,
-        //required: true
     },
     jainAadharNumber: {
         type: String,
         required: true
     },
-    mobileNumber:{
-        type:Number
-    },
-    address:{
-     type: String,
-    },
-    pinCode:{
-        type:Number
-    },
-    photo: {
-        type: String,
-       // required: true
+    email: String,
+    phoneNumber: String,
+    userImage: String,
+    address: {
+        street: String,
+        city: String,
+        district: String,
+        state: String,
+        pincode: String
     },
     appointmentDate: {
         type: Date,
@@ -59,6 +61,51 @@ const officeBearerSchema = new mongoose.Schema({
     default: ''
   }
 });
+const panchSchema = new mongoose.Schema({
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    name: {
+        type: String,
+        required: true
+    },
+    jainAadharNumber: {
+        type: String,
+        required: true
+    },
+    level:{
+        type:String,
+    },
+    sanghType:{
+      type: String,
+    },
+    postMember: {
+        type: String,
+    },
+    email: String,
+    phoneNumber: String,
+    document: String,
+    userImage: String,
+    address: {
+        street: String,
+        city: String,
+        district: String,
+        state: String,
+        pincode: String
+    },
+    status: {
+        type: String,
+        enum: ['active', 'inactive'],
+        default: 'active'
+    },
+    paymentStatus: {
+        type: String,
+        enum: ['pending', 'paid', 'failed'],
+        default: 'pending'
+    }
+});
 
 const memberSchema = new mongoose.Schema({
     userId: {
@@ -74,6 +121,12 @@ const memberSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    level:{
+        type:String,
+    },
+    sanghType:{
+      type: String,
+    },
     postMember: {
         type: String,
     },
@@ -87,6 +140,15 @@ const memberSchema = new mongoose.Schema({
         district: String,
         state: String,
         pincode: String
+    },
+    localSangh: {
+    state: String,
+    district: String,
+    sanghId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'HierarchicalSangh'
+    },
+    name: String
     },
     status: {
         type: String,
@@ -144,6 +206,25 @@ const hierarchicalSanghSchema = new mongoose.Schema({
         type: String,
     }
     },
+    officeAddress: {
+    country: {
+        type: String,
+        default: 'India',
+        required: true
+    },
+    state: {
+        type: String
+    },
+    district: {
+        type: String
+    },
+    // city: {
+    //     type: String
+    // },
+    address: {
+        type: String
+    }
+    },
   parentSangh: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'HierarchicalSangh',
@@ -159,6 +240,7 @@ const hierarchicalSanghSchema = new mongoose.Schema({
         type:String
     },
     members: [memberSchema],
+    panches: [panchSchema],
     establishedDate: {
         type: Date,
         default: Date.now
@@ -246,15 +328,16 @@ hierarchicalSanghSchema.pre('save', async function(next) {
 });
 
 hierarchicalSanghSchema.methods.validateHierarchy = async function() {
-    if (this.level === 'country') {
-        if (this.parentSangh) {
-            throw new Error('Country level Sangh cannot have a parent Sangh');
-        }
-        return;
-    }
+ 
     if (this.level === 'foundation') {
         if (this.parentSangh) {
             throw new Error('foundation level Sangh cannot have a parent Sangh');
+        }
+        return;
+    }
+       if (this.level === 'country') {
+        if (this.parentSangh) {
+            throw new Error('Country level Sangh cannot have a parent Sangh');
         }
         return;
     }

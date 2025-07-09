@@ -20,7 +20,8 @@ const {
     sendChangeEmailOtp,
     verifyChangeEmail,
     changePassword,
-    getCitiesByState
+    getCitiesByState,
+    getUserByJainAadharNumber
 } = require('../../controller/UserRegistrationControllers/userController');
 const { authMiddleware, checkAccess, authenticate } = require('../../middlewares/authMiddlewares');
 const upload = require('../../middlewares/upload');
@@ -66,6 +67,7 @@ router.post('/verify-email', verifyEmail);
 router.post('/resend-code', resendVerificationCode);
 //router.get('/cities', getAllCities);
 router.get('/location', getCitiesByState);
+
 // Password reset
 router.post('/request-password-reset', requestPasswordReset);
 router.post('/reset-password', resetPassword);
@@ -82,6 +84,8 @@ router.post('/verify-change-email', verifyChangeEmail);
 // Search users endpoint for suggestion/complaint recipient selection
 router.get('/search', searchUsers);
 router.get('/', getAllUsers);
+router.get('/by-jain-aadhar/:number', getUserByJainAadharNumber);
+
 router.post('/change-password', changePassword); 
 router.post('/upload-profile-picture', authMiddleware,
 upload.single('profilePicture'),uploadProfilePicture);

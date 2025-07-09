@@ -30,13 +30,13 @@ const authenticate = async (req, res, next) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const user = await User.findById(decoded._id);
   
-        if (!user) {
-          return res.status(401).json({ message: 'User not found' });
-        }
+        // if (!user) {
+        //   return res.status(401).json({ message: 'User not found' });
+        // }
   
-        if (token !== user.token) {
-          return res.status(401).json({ message: 'Invalid token' });
-        }
+        // if (token !== user.token) {
+        //   return res.status(401).json({ message: 'Invalid token' });
+        // }
   
         req.user = user;
         next();
@@ -62,28 +62,24 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
 
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-//console.log("Decoded token payload:", decoded);
 
-    const { type } = decoded;
+    //console.log("🧾 Decoded Token:", decoded);
 
-    let user = null;
-    let sangh = null;
+    // ✅ Safe fallback for userId
+    const userId = decoded.originalUserId || decoded._id;
+   // console.log("🔍 Resolved userId:", userId);
 
-    // 🔁 Always get correct userId
-    const userId = decoded.type === "sangh" ? decoded.originalUserId : decoded._id;
-
-    user = await User.findById(userId).select("-password -__v");
+    let user = await User.findById(userId).select("-password -__v");
     if (!user) {
+      console.log("❌ User not found in DB for ID:", userId);
       return res.status(401).json({ message: "User not found" });
     }
 
-    // Optional token match check
-    // if (user.token && token !== user.token) {
-    //   return res.status(401).json({ message: "Invalid token" });
-    // }
+   // console.log("✅ Found user:", user.fullName);
 
-    // 🔁 If sangh token, validate sangh too
-    if (type === "sangh") {
+    let sangh = null;
+
+    if (decoded.type === "sangh") {
       if (!decoded.sanghId) {
         return res.status(400).json({ message: "sanghId missing in token" });
       }
@@ -94,10 +90,9 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
       }
     }
 
-    // ✅ Attach to request
     req.user = user;
-    req.sangh = sangh || null;
-    req.accountType = type;
+    req.sangh = sangh;
+    req.accountType = decoded.type;
     req.userId = user._id;
     req.jwtPayload = decoded;
 
@@ -116,6 +111,7 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
     });
   }
 });
+
 
 // Admin middleware
 const isAdmin = asyncHandler(async (req, res, next) => {

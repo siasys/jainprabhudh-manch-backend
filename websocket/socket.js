@@ -9,7 +9,7 @@ const messageQueue = new Map();
 const initializeWebSocket = (server) => {
   io = socketIo(server, {
     cors: {
-      origin: process.env.FRONTEND_URL || "*",
+      origin: "*",
       methods: ["GET", "POST"],
       credentials: true,
     },

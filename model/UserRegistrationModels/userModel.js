@@ -197,7 +197,7 @@ const userSchema = new mongoose.Schema(
       },
       role: {
         type: String,
-        enum: ['president', 'secretary', 'treasurer', 'member']
+        enum: ['president', 'secretary', 'treasurer', 'member','panchMember']
       },
       level: {
         type: String,

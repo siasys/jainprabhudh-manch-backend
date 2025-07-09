@@ -88,6 +88,10 @@ const groupMessageSchema = new mongoose.Schema({
 });
 
 const groupChatSchema = new mongoose.Schema({
+  sanghId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'HierarchicalSangh',
+},
   groupName: {
     type: String,
     required: true,
@@ -146,6 +150,7 @@ const groupChatSchema = new mongoose.Schema({
     default: true
   },
   isGotraGroup: { type: Boolean, default: false },
+  isSanghGroup: { type: Boolean, default: false },
 }, {
   timestamps: true,
 });

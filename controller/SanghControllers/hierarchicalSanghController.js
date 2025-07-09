@@ -1,5 +1,7 @@
 const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
+
 const User = require('../../model/UserRegistrationModels/userModel');
+const SanghPayment = require('../../model/SanghModels/Payment');
 const JainAadharApplication = require('../../model/UserRegistrationModels/jainAadharModel');
 const asyncHandler = require('express-async-handler');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
@@ -95,6 +97,7 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             level,
             location,
            // officeBearers,
+           officeAddress,
             parentSanghId,
             contact,
             establishedDate,
@@ -103,12 +106,12 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             parentSanghAccessId,
             sanghType = 'main'
         } = req.body;
-        // console.log("parentSanghId in request:", req.body);
-        // console.log("Received parentSanghId:", req.body.parentSanghId);
+        console.log("parentSanghId in request:", req.body);
+        console.log("Received parentSanghId:", req.body.parentSanghId);
 
          // Validate required fields
         // if (!name || !level || !location || !officeBearers) {
-            if (!name || !level || !location) {
+            if (!name || !level || !location || !officeAddress) {
             return errorResponse(res, 'Missing required fields', 400);
         }
         // Validate sanghType
@@ -121,9 +124,9 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
 
          if (parentSanghId) {
              const parentSangh = await HierarchicalSangh.findById(parentSanghId);
-            //  if (!parentSangh) {
-            //      return errorResponse(res, 'Parent Sangh not found', 404);
-            //  }
+             if (!parentSangh) {
+                 return errorResponse(res, 'Parent Sangh not found', 404);
+             }
 
              // If parent is specialized, child must be the same type
              if (parentSangh.sanghType !== 'main') {
@@ -135,48 +138,6 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
                  parentMainSanghId = parentSangh.parentMainSangh || parentSangh._id;
              }
          }
-        //  const formattedOfficeBearers = await Promise.all(['president', 'secretary', 'treasurer'].map(async role => {
-        //    const jainAadharNumber = officeBearers[role]?.jainAadharNumber;
-
-        //     let firstName = "";
-        //     let lastName = "";
-        //     let mobileNumber = "";
-        //     let address = "";
-        //     let pinCode = "";
-
-        //     let user = null;
-        //      if (jainAadharNumber) {
-        //         user = await User.findOne({ jainAadharNumber });
-        //         const jainAadhar = await JainAadharApplication.findOne({ jainAadharNumber });
-
-        //         if (jainAadhar) {
-        //         // Name split logic
-        //          const fullName = jainAadhar.name?.trim() || "";
-        //         const nameParts = fullName.split(" ");
-        //         firstName = nameParts[0] || "";
-        //         lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
-
-        //         // Contact and Location
-        //         mobileNumber = jainAadhar.contactDetails?.number || "";
-        //         address = jainAadhar.location?.address || "";
-        //         pinCode = jainAadhar.location?.pinCode || "";
-        //         }
-        //     }
-
-        //     return {
-        //         role,
-        //         userId: user ? user._id : null,
-        //         firstName,
-        //         lastName,
-        //         name: `${firstName} ${lastName}`.trim(),
-        //         jainAadharNumber: jainAadharNumber || "",
-        //         mobileNumber,
-        //         address,
-        //         pinCode,
-        //         photo: req.files[`${role}Photo`] ? convertS3UrlToCDN(req.files[`${role}Photo`][0].location) : null,
-        //         description: officeBearers[role]?.description || ""
-        //     };
-        // }));
         // Validate location hierarchy based on level
         if (level === 'area' && (!location.country || !location.state || !location.district || !location.city || !location.area)) {
             return errorResponse(res, 'Area level Sangh requires complete location hierarchy (country, state, district, city, area)', 400);
@@ -197,35 +158,15 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
                 return errorResponse(res, 'An active Sangh already exists for this area', 400);
             }
         }
-        // Validate required documents
-        // if (!req.files) {
-        //     return errorResponse(res, 'Office bearer documents are required', 400);
-        // }
-
-        // const requiredDocs = [
-        //     'presidentJainAadhar',
-        //     'presidentPhoto',
-        //     'secretaryJainAadhar',
-        //     'secretaryPhoto',
-        //     'treasurerJainAadhar',
-        //     'treasurerPhoto'
-        // ];
-        // const missingDocs = requiredDocs.filter(doc => !req.files[doc]);
-        // if (missingDocs.length > 0) {
-        //     return errorResponse(res, `Missing required documents: ${missingDocs.join(', ')}`, 400);
-        // }
-        // Validate office bearers
-       // await validateOfficeBearers(officeBearers);
         // Validate hierarchy level before creation
         const parentSangh = parentSanghId ? await HierarchicalSangh.findById(parentSanghId) : null;
         if (parentSangh) {
             const levelHierarchy = ['foundation','country', 'state', 'district', 'city', 'area'];
             const parentIndex = levelHierarchy.indexOf(parentSangh.level);
             const currentIndex = levelHierarchy.indexOf(level);
-            
-            // if (currentIndex <= parentIndex || currentIndex - parentIndex > 1) {
-            //     return errorResponse(res, `Invalid hierarchy: ${level} level cannot be directly under ${parentSangh.level} level`, 400);
-            // }
+            if (currentIndex <= parentIndex || currentIndex - parentIndex > 1) {
+                return errorResponse(res, `Invalid hierarchy: ${level} level cannot be directly under ${parentSangh.level} level`, 400);
+            }
         }
 
         // Create Sangh
@@ -233,6 +174,7 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             name,
             level,
             location,
+            officeAddress,
             parentSangh: parentSanghId,
             //officeBearers: formattedOfficeBearers,
             description,
@@ -245,24 +187,6 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             sanghImage
         });
         await sangh.validateHierarchy();
-        // Update office bearer roles in User model
-        // for (const bearer of formattedOfficeBearers) {
-        //     console.log('Updating bearer:', bearer);
-        //     if (!bearer.userId) {
-        //         console.warn('⚠️ User not found for:', bearer.jainAadharNumber);
-        //         continue;
-        //     }
-        //     await User.findByIdAndUpdate(bearer.userId, {
-        //         $push: {
-        //             sanghRoles: {
-        //                 sanghId: sangh._id,
-        //                 role: bearer.role,
-        //                 level: level,
-        //                 sanghType: resolvedSanghType
-        //             }
-        //         }
-        //     });
-        // }
         // Automatically create SanghAccess entry
         const SanghAccess = require('../../model/SanghModels/sanghAccessModel');
         const mongoose = require('mongoose');
@@ -473,6 +397,183 @@ const getHierarchy = asyncHandler(async (req, res) => {
         return errorResponse(res, error.message, 500);
     }
 });
+const updateSanghDetails = async (req, res) => {
+  try {
+    const { sanghId } = req.params;
+    const { name, officeAddress, officeBearers } = req.body;
+
+    const sangh = await HierarchicalSangh.findById(sanghId);
+    if (!sangh) return res.status(404).json({ success: false, message: 'Sangh not found' });
+
+    if (name) sangh.name = name;
+
+    if (officeAddress) {
+      sangh.officeAddress = {
+        ...sangh.officeAddress,
+        ...officeAddress
+      };
+    }
+    if (Array.isArray(officeBearers)) {
+      sangh.officeBearers = [];
+      for (const ob of officeBearers) {
+        if (!ob?.role || !ob?.userId) continue;
+      const addr = ob.address || {};
+      const bearerData = {
+        role: ob.role,
+        userId: ob.userId,
+        name: ob.name,
+        jainAadharNumber: ob.jainAadharNumber,
+        mobileNumber: ob.phoneNumber,
+        email: ob.email || '',
+        userImage: ob.userImage,
+        paymentStatus: ob.paymentStatus || 'pending',
+        status: 'active',
+        description: ob.description || '',
+        appointmentDate: new Date(),
+        termEndDate: new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000),
+        level: sangh.level,
+        sanghType: sangh.sanghType || 'main',
+        address: {
+          street: ob.address?.street || '',
+          city: ob.address?.city || '',
+          district: ob.address?.district || '',
+          state: ob.address?.state || '',
+          pincode: ob.address?.pincode || ''
+        }
+      };
+
+
+        // ✅ Update User's sanghRoles as well
+        const user = await User.findById(ob.userId);
+        if (user) {
+          const roleIndex = user.sanghRoles.findIndex(
+            (r) => r.sanghId?.toString() === sanghId
+          );
+
+          if (roleIndex !== -1) {
+            user.sanghRoles[roleIndex].role = ob.role; // ✅ role change: 'member' => 'president' etc.
+          } else {
+            // if not present, add new
+            user.sanghRoles.push({
+              sanghId,
+              role: ob.role,
+              level: sangh.level,
+              sanghType: sangh.sanghType || 'main'
+            });
+          }
+
+          await user.save();
+        }
+
+        sangh.officeBearers.push(bearerData);
+      }
+    }
+
+    await sangh.save();
+
+    return res.json({
+      success: true,
+      message: 'Sangh updated successfully',
+      data: sangh
+    });
+
+  } catch (error) {
+    console.error("❌ Error updating sangh:", error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+const updatePanchMembers = async (req, res) => {
+  try {
+    const { sanghId } = req.params;
+    const { panches } = req.body;
+
+    console.log("📥 Received Panches:", panches);
+
+    if (!Array.isArray(panches)) {
+      return res.status(400).json({ success: false, message: 'Panch members must be an array' });
+    }
+
+    if (panches.length > 5) {
+      return res.status(400).json({ success: false, message: 'Only 5 Panch members allowed' });
+    }
+
+    const sangh = await HierarchicalSangh.findById(sanghId);
+    if (!sangh) {
+      return res.status(404).json({ success: false, message: 'Sangh not found' });
+    }
+
+    sangh.panches = [];
+
+    const addedUserIds = new Set();
+
+    for (const pm of panches) {
+      if (!pm.userId || !pm.jainAadharNumber) {
+        console.warn("⚠️ Skipping invalid member:", pm);
+        continue;
+      }
+
+      if (addedUserIds.has(pm.userId)) {
+        console.warn("⚠️ Duplicate userId skipped:", pm.userId);
+        continue;
+      }
+
+      sangh.panches.push({
+        userId: pm.userId,
+        name: pm.name,
+        jainAadharNumber: pm.jainAadharNumber,
+        level: pm.level || sangh.level,
+        sanghType: pm.sanghType || sangh.sanghType || 'main',
+        postMember: pm.postMember || '',
+        email: pm.email || '',
+        phoneNumber: pm.phoneNumber || '',
+        document: pm.document || '',
+        userImage: pm.userImage || '',
+        address: {
+          street: pm.address?.street || '',
+          city: pm.address?.city || '',
+          district: pm.address?.district || '',
+          state: pm.address?.state || '',
+          pincode: pm.address?.pincode || '',
+        },
+        status: 'active',
+        paymentStatus: pm.paymentStatus || 'pending',
+      });
+
+      addedUserIds.add(pm.userId);
+
+      const user = await User.findById(pm.userId);
+      if (user) {
+        const roleIndex = user.sanghRoles.findIndex(
+          r => r.sanghId?.toString() === sanghId
+        );
+        if (roleIndex !== -1) {
+          user.sanghRoles[roleIndex].role = 'panchMember';
+        } else {
+          user.sanghRoles.push({
+            sanghId,
+            role: 'panch',
+            level: sangh.level,
+            sanghType: sangh.sanghType || 'main',
+          });
+        }
+        await user.save();
+      }
+    }
+
+    await sangh.save();
+
+    return res.json({
+      success: true,
+      message: 'Panch members updated successfully',
+      data: sangh.panches,
+    });
+
+  } catch (error) {
+    console.error("❌ Error updating panch members:", error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
 
 
 // Get Sanghs by level and location
@@ -487,7 +588,6 @@ const getSanghsByLevelAndLocation = asyncHandler(async (req, res) => {
         if (city) query['location.city'] = city;
 
         const skip = (parseInt(page) - 1) * parseInt(limit);
-
         const sanghs = await HierarchicalSangh.find(query)
             .populate('parentSangh', 'name level location')
             .populate('officeBearers.userId', 'name email phoneNumber')
@@ -496,7 +596,6 @@ const getSanghsByLevelAndLocation = asyncHandler(async (req, res) => {
             .sort({ createdAt: -1 });
 
         const total = await HierarchicalSangh.countDocuments(query);
-
         return successResponse(res, {
             sanghs,
             pagination: {
@@ -517,7 +616,6 @@ const getChildSanghs = asyncHandler(async (req, res) => {
         if (!sangh) {
             return errorResponse(res, 'Sangh not found', 404);
         }
-
         const children = await sangh.getChildSanghs();
         return successResponse(res, children, 'Child Sanghs retrieved successfully');
     } catch (error) {
@@ -532,7 +630,6 @@ const updateSanghById = asyncHandler(async (req, res) => {
     if (!existingSangh) {
       return errorResponse(res, 'Sangh not found', 404);
     }
-
     // ✅ Optional uploaded images
     const coverImage =
       req.files?.coverImage && req.files.coverImage.length > 0
@@ -796,7 +893,13 @@ const addSanghMember = asyncHandler(async (req, res) => {
             },
             addedBy: req.user._id,
             addedAt: new Date(),
-            status: 'active'
+            status: 'active',
+          localSangh: member.localSangh?.sanghId ? {
+            state: member.localSangh.state || '',
+            district: member.localSangh.district || '',
+            sanghId: member.localSangh.sanghId,
+            name: member.localSangh.name || ''
+          } : undefined
           };
 
           sangh.members.push(newMember);
@@ -833,7 +936,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
     }
 
     // ======= SINGLE MEMBER ADDITION =======
-    const { jainAadharNumber, postMember } = req.body;
+    const { jainAadharNumber, postMember,level, sanghType } = req.body;
 
     if (!jainAadharNumber) return errorResponse(res, 'Jain Aadhar number is required', 400);
 
@@ -853,7 +956,11 @@ const addSanghMember = asyncHandler(async (req, res) => {
     (req.file?.location || req.file?.path) ||
     user?.jainAadharApplication?.photo ||
     user?.profileImage || '';
-
+    const paidRecord = await SanghPayment.findOne({
+      memberId: user._id,
+      sanghId: sangh._id,
+      status: 'paid'
+    });
     const userImage = rawImage ? convertS3UrlToCDN(rawImage) : '';
     const newMember = {
       userId: user._id,
@@ -862,6 +969,8 @@ const addSanghMember = asyncHandler(async (req, res) => {
       email: contact.email || user.email,
       phoneNumber: contact.number || user.phoneNumber,
       postMember: postMember || '',
+      level: level || '',
+      sanghType: sanghType || 'main',
       userImage,
       address: {
         street: location.address || '',
@@ -870,9 +979,16 @@ const addSanghMember = asyncHandler(async (req, res) => {
         state: location.state || '',
         pincode: location.pinCode || ''
       },
+      paymentStatus: paidRecord ? 'paid' : 'pending',
+      localSangh: req.body.localSangh?.sanghId ? {
+            state: req.body.localSangh.state || '',
+            district: req.body.localSangh.district || '',
+            sanghId: req.body.localSangh.sanghId,
+            name: req.body.localSangh.name || ''
+          } : undefined,
       addedBy: req.user._id,
       addedAt: new Date(),
-      status: 'active'
+      status: 'active',
     };
 
     sangh.members.push(newMember);
@@ -1782,12 +1898,14 @@ module.exports = {
     updateSanghById,
     unfollowSangh,
     followSangh,
+    updatePanchMembers,
     getUserByJainAadhar,
     getAllSangh,
     getSanghsByLevelAndLocation,
     getChildSanghs,
     updateHierarchicalSangh,
     addSanghMember,
+    updateSanghDetails,
     removeSanghMember,
     updateMemberDetails,
     getSanghMembers,
