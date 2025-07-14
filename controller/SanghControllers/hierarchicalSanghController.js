@@ -96,7 +96,6 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             name,
             level,
             location,
-           // officeBearers,
            officeAddress,
             parentSanghId,
             contact,
@@ -135,8 +134,13 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
 
              // Track the top-level main Sangh for specialized Sanghs
              if (resolvedSanghType !== 'main') {
-                 parentMainSanghId = parentSangh.parentMainSangh || parentSangh._id;
-             }
+              parentMainSanghId = parentSangh.parentMainSangh
+                  ? parentSangh.parentMainSangh
+                  : parentSangh.sanghType === 'main'
+                      ? parentSangh._id 
+                      : null;
+          }
+
          }
         // Validate location hierarchy based on level
         if (level === 'area' && (!location.country || !location.state || !location.district || !location.city || !location.area)) {
@@ -164,9 +168,19 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             const levelHierarchy = ['foundation','country', 'state', 'district', 'city', 'area'];
             const parentIndex = levelHierarchy.indexOf(parentSangh.level);
             const currentIndex = levelHierarchy.indexOf(level);
-            if (currentIndex <= parentIndex || currentIndex - parentIndex > 1) {
-                return errorResponse(res, `Invalid hierarchy: ${level} level cannot be directly under ${parentSangh.level} level`, 400);
-            }
+           const isSameLevelAllowed = (
+            currentIndex === parentIndex &&
+            parentSangh.sanghType === 'main' &&
+            ['women', 'youth'].includes(sanghType)
+        );
+
+        if ((currentIndex < parentIndex || currentIndex - parentIndex > 1) && !isSameLevelAllowed) {
+            return errorResponse(
+                res,
+                `Invalid hierarchy: ${level} level (${sanghType}) cannot be directly under ${parentSangh.level} (${parentSangh.sanghType})`,
+                400
+            );
+        }
         }
 
         // Create Sangh
@@ -176,7 +190,6 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             location,
             officeAddress,
             parentSangh: parentSanghId,
-            //officeBearers: formattedOfficeBearers,
             description,
             contact,
             socialMedia,
@@ -894,7 +907,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             addedBy: req.user._id,
             addedAt: new Date(),
             status: 'active',
-          localSangh: member.localSangh?.sanghId ? {
+            localSangh: member.localSangh?.sanghId ? {
             state: member.localSangh.state || '',
             district: member.localSangh.district || '',
             sanghId: member.localSangh.sanghId,
@@ -1642,7 +1655,6 @@ const generateMemberCard = async (req, res) => {
     // 1. Find sangh with user
     const sangh = await HierarchicalSangh.findOne({
       $or: [
-        { 'officeBearers.userId': userId },
         { 'members.userId': userId }
       ]
     });
@@ -1650,9 +1662,7 @@ const generateMemberCard = async (req, res) => {
     if (!sangh) return res.status(404).json({ message: 'User not found in any sangh.' });
 
     // 2. Extract user from sangh
-    const user =
-      sangh.officeBearers.find(o => o.userId.toString() === userId) ||
-      sangh.members.find(m => m.userId.toString() === userId);
+    const user = sangh.members.find(m => m.userId.toString() === userId);
 
     if (!user) return res.status(404).json({ message: 'User data not found.' });
      function getRandomThreeDigitNumber() {
@@ -1676,22 +1686,23 @@ const generateMemberCard = async (req, res) => {
 
     // === FRONT ===
     ctx.drawImage(frontTemplate, 0, 0, width, height);
-if (user.photo) {
-  try {
-    const response = await axios.get(user.photo, { responseType: 'arraybuffer' });
-    const imageBuffer = Buffer.from(response.data, 'binary');
-    const userPhoto = await loadImage(imageBuffer);
-    ctx.drawImage(userPhoto, 65, 180, 220, 260);
-  } catch (err) {
-    console.error('Error loading user photo:', err);
-  }
-}
+    if (user.userImage) {
+      try {
+        const response = await axios.get(user.userImage, { responseType: 'arraybuffer' });
+        const imageBuffer = Buffer.from(response.data, 'binary');
+        const userPhoto = await loadImage(imageBuffer);
+        ctx.drawImage(userPhoto, 65, 180, 220, 260);
+      } catch (err) {
+        console.error('Error loading user photo:', err);
+      }
+    }
+
     ctx.fillStyle = 'black';
     ctx.font = '26px Georgia';
-    ctx.fillText(`${user.firstName || ''} ${user.lastName || ''}`, 570, 196);
+    ctx.fillText(`${user.name || ''}`, 570, 196);
     ctx.fillText(`${membershipNumber}`, 570, 260);
-    if (user.role) ctx.fillText(`${user.role}`, 570, 317);
-    if (user.jainAadharNumber) ctx.fillText(`${user.jainAadharNumber}`, 570, 380);
+    ctx.fillText(`${user.postMember || ''}`, 570, 320);  
+    if (user.jainAadharNumber) ctx.fillText(`${user.jainAadharNumber}`, 570, 379);
 // Bottom center text: Created By
 function getRandomFourDigitNumber() {
   return Math.floor(1000 + Math.random() * 9000);
@@ -1711,14 +1722,12 @@ ctx.drawImage(backTemplate, 0, height, width, height);
 ctx.font = '26px Georgia';
 ctx.fillStyle = 'black';
 
-if (user.address) {
-  ctx.fillText(user.address, 320, height + 182);
-}
+const addr = user.address || {};
+const line1 = `${addr.street || ''}, ${addr.state || ''}`;
+const line2 = `${addr.district || ''}, ${addr.pincode || ''}`;
 
-if (user.pinCode) {
-  ctx.fillText(`${user.pinCode}`, 230, height + 210);
-}
-
+ctx.fillText(line1, 320, height + 182);
+ctx.fillText(line2, 320, height + 220);
     // === RESPONSE ===
     res.setHeader('Content-Type', 'image/jpeg');
     combinedCanvas.createJPEGStream().pipe(res);

@@ -328,19 +328,29 @@ hierarchicalSanghSchema.pre('save', async function(next) {
 });
 
 hierarchicalSanghSchema.methods.validateHierarchy = async function() {
- 
     if (this.level === 'foundation') {
         if (this.parentSangh) {
             throw new Error('foundation level Sangh cannot have a parent Sangh');
         }
         return;
     }
-       if (this.level === 'country') {
-        if (this.parentSangh) {
-            throw new Error('Country level Sangh cannot have a parent Sangh');
+      if (this.level === 'country') {
+        const parentSangh = await this.constructor.findById(this.parentSangh);
+
+        const isSameLevelSpecialized = (
+            parentSangh &&
+            parentSangh.level === 'country' &&
+            parentSangh.sanghType === 'main' &&
+            ['women', 'youth'].includes(this.sanghType)
+        );
+
+        if (this.parentSangh && !isSameLevelSpecialized) {
+            throw new Error('Country level Sangh cannot have a parent Sangh unless it is a specialized Sangh under main');
         }
+
         return;
-    }
+        }
+
     // if (!this.parentSangh) {
     //     throw new Error('Non-country level Sangh must have a parent Sangh');
     // }

@@ -5,7 +5,7 @@ const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 const StoryReport = require('../../model/SocialMediaModels/StoryReport')
 const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
-
+const Friendship = require('../../model/SocialMediaModels/friendshipModel')
 
 // Create Story
 const createStory = asyncHandler(async (req, res) => {
@@ -80,30 +80,53 @@ const createStory = asyncHandler(async (req, res) => {
 
 // Get All Stories
 const getAllStories = asyncHandler(async (req, res) => {
-    try {
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-       // console.log("Current Server Time (UTC):", new Date().toISOString());
-        // Fetch only stories from the last 24 hours
-        const stories = await Story.find({
-            createdAt: { $gte: twentyFourHoursAgo }
-        }).populate("userId", "profilePicture firstName lastName fullName")
-          .populate("sanghId", "name sanghImage");
-      //  console.log("Fetched Stories:", stories);
-      
-        res.status(200).json({
-            success: true,
-            count: stories.length,
-            data: stories
-        });
-    } catch (error) {
-        console.error("Error fetching stories:", error);
-        res.status(500).json({
-            success: false,
-            message: "Error fetching stories",
-            error: error.message
-        });
-    }
+  try {
+    const userId = req.query.userId || req.user.id;
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // 1️⃣ Users jise "main" follow karta hoon
+    const followingList = await Friendship.find({
+      follower: userId,
+      followStatus: "following",
+    }).select("following");
+
+    // 2️⃣ Users jinhone "mujhe" follow kiya hai
+    const followerList = await Friendship.find({
+      following: userId,
+      followStatus: "following",
+    }).select("follower");
+
+    const followingIds = followingList.map(f => f.following.toString());
+    const followerIds = followerList.map(f => f.follower.toString());
+
+    // ✅ Unique userIds collect karo (Set se duplicates hatao)
+    const storyUserIds = new Set([...followingIds, ...followerIds, userId]);
+
+    // 🔍 Ab in users ki stories fetch karo
+    const stories = await Story.find({
+      createdAt: { $gte: twentyFourHoursAgo },
+      userId: { $in: Array.from(storyUserIds) },
+    })
+      .populate("userId", "profilePicture firstName lastName fullName")
+      .populate("sanghId", "name sanghImage");
+
+    res.status(200).json({
+      success: true,
+      count: stories.length,
+      data: stories,
+    });
+  } catch (error) {
+    console.error("Error fetching stories:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching stories",
+      error: error.message,
+    });
+  }
 });
+
+
+
 
 // Get Stories by User
 const getStoriesByUser = asyncHandler(async (req, res) => {
@@ -115,7 +138,7 @@ const getStoriesByUser = asyncHandler(async (req, res) => {
             userId,
             createdAt: { $gte: twentyFourHoursAgo }
         }).populate("userId", "profilePicture firstName lastName fullName")
-          .populate("sanghId", "name sanghImage"); 
+          .populate("sanghId", "name sanghImage");
 
         if (!stories.length) {
             return errorResponse(res, 'No active stories found for this user', 404);

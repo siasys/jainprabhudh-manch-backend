@@ -22,7 +22,6 @@ const Sangh = require('../../model/SanghModels/hierarchicalSanghModel'); // ✅ 
 
 const createPost = [
   upload.postMediaUpload,
-  body('caption').optional().isString().isLength({ max: 500 }),
   body('userId').notEmpty().isMongoId(),
   body('hashtags')
     .optional()
@@ -468,7 +467,7 @@ const toggleLike = [
         senderId: userId,
         receiverId: post.user._id, // Fix: user ka _id lena zaroori hai
         type: 'like',
-       message:`${user.firstName} ${user.lastName} liked your post.`,
+       message:"liked your post.",
          postId: postId,
       });
       await notification.save();
@@ -681,7 +680,7 @@ const addComment = async (req, res) => {
       senderId: userId,
       receiverId: post.user,
       type: 'comment',
-     message: `${user.firstName} ${user.lastName} commented on your post.`,
+     message: "commented on your post.",
        postId: postId,
     });
     await notification.save();
@@ -723,7 +722,7 @@ const addReply = async (req, res) => {
       senderId: userId,
       receiverId: comment.user,
       type: 'reply',
-      message: `${user.firstName} ${user.lastName} replied to your comment.`
+      message: "replied to your comment."
       
     });
     await notification.save();

@@ -30,7 +30,7 @@ const postSchema = new mongoose.Schema(
     },
     caption: {
       type: String,
-      maxlength: 500,
+      //maxlength: 500,
     },
     media: [{
       url: {

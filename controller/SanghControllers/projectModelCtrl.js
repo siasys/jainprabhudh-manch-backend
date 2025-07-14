@@ -111,7 +111,29 @@ exports.getProjectsBySanghId = async (req, res) => {
   }
 };
 
+// ✅ Get Projects Assigned to Sangh (for approvals)
+exports.getProjectsByAssignedToSanghId = async (req, res) => {
+  try {
+    const { sanghId } = req.params;
 
+    if (!sanghId) {
+      return res.status(400).json({ success: false, message: 'Sangh ID is required' });
+    }
+
+    const assignedProjects = await Project.find({ assignedToSangh: sanghId, status: 'pending' })
+      .populate('createdBy', 'name email')
+      .populate('sanghId', 'name');
+
+    if (!assignedProjects || assignedProjects.length === 0) {
+      return res.status(404).json({ success: false, message: 'No approval projects found' });
+    }
+
+    res.status(200).json({ success: true, data: assignedProjects });
+  } catch (error) {
+    console.error("❌ Error in getProjectsByAssignedToSanghId:", error);
+    res.status(500).json({ success: false, message: 'Error fetching approval projects' });
+  }
+};
 
 // Update Project
 exports.updateProject = async (req, res) => {

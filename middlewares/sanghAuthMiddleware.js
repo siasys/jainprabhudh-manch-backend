@@ -116,16 +116,100 @@ const canCreateLowerLevelSangh = asyncHandler(async (req, res, next) => {
     }
 });
 
-// Validate location hierarchy
+// // Validate location hierarchy
+// const validateLocationHierarchy = asyncHandler(async (req, res, next) => {
+//     try {
+//         const { level, location, parentSanghId } = req.body;
+        
+//         if (!parentSanghId) {
+//             return errorResponse(res, 'Parent Sangh ID is required', 400);
+//         }
+        
+//         // Get the parent Sangh if not already in the request
+//         if (!req.parentSangh) {
+//             const parentSangh = await HierarchicalSangh.findById(parentSanghId);
+//             if (!parentSangh) {
+//                 return errorResponse(res, 'Parent Sangh not found', 404);
+//             }
+//             req.parentSangh = parentSangh;
+//         }
+        
+//         const parentSangh = req.parentSangh;
+        
+//         // Validate location hierarchy based on level
+//         switch (level) {
+//             case 'state':
+//                 if (parentSangh.level !== 'country') {
+//                     return errorResponse(res, 'State can only be created under Country', 400);
+//                 }
+//                 if (parentSangh.location.country !== location.country) {
+//                     return errorResponse(res, 'State must be in the same country as the parent', 400);
+//                 }
+//                 break;
+                
+//             case 'district':
+//                 if (!['country', 'state'].includes(parentSangh.level)) {
+//                     return errorResponse(res, 'District can only be created under Country or State', 400);
+//                 }
+//                 if (parentSangh.location.country !== location.country) {
+//                     return errorResponse(res, 'District must be in the same country as the parent', 400);
+//                 }
+//                 if (parentSangh.level === 'state' && parentSangh.location.state !== location.state) {
+//                     return errorResponse(res, 'District must be in the same state as the parent', 400);
+//                 }
+//                 break;
+                
+//             case 'city':
+//                 if (!['country', 'state', 'district'].includes(parentSangh.level)) {
+//                     return errorResponse(res, 'City can only be created under Country, State, or District', 400);
+//                 }
+//                 if (parentSangh.location.country !== location.country) {
+//                     return errorResponse(res, 'City must be in the same country as the parent', 400);
+//                 }
+//                 if (['state', 'district'].includes(parentSangh.level) && parentSangh.location.state !== location.state) {
+//                     return errorResponse(res, 'City must be in the same state as the parent', 400);
+//                 }
+//                 if (parentSangh.level === 'district' && parentSangh.location.district !== location.district) {
+//                     return errorResponse(res, 'City must be in the same district as the parent', 400);
+//                 }
+//                 break;
+                
+//             case 'area':
+//                 if (!['country', 'state', 'district', 'city'].includes(parentSangh.level)) {
+//                     return errorResponse(res, 'Area can only be created under Country, State, District, or City', 400);
+//                 }
+//                 if (parentSangh.location.country !== location.country) {
+//                     return errorResponse(res, 'Area must be in the same country as the parent', 400);
+//                 }
+//                 if (['state', 'district', 'city'].includes(parentSangh.level) && parentSangh.location.state !== location.state) {
+//                     return errorResponse(res, 'Area must be in the same state as the parent', 400);
+//                 }
+//                 if (['district', 'city'].includes(parentSangh.level) && parentSangh.location.district !== location.district) {
+//                     return errorResponse(res, 'Area must be in the same district as the parent', 400);
+//                 }
+//                 if (parentSangh.level === 'city' && parentSangh.location.city !== location.city) {
+//                     return errorResponse(res, 'Area must be in the same city as the parent', 400);
+//                 }
+//                 break;
+                
+//             default:
+//                 return errorResponse(res, 'Invalid Sangh level', 400);
+//         }
+        
+//         next();
+//     } catch (error) {
+//         return errorResponse(res, error.message, 500);
+//     }
+// });
+
 const validateLocationHierarchy = asyncHandler(async (req, res, next) => {
     try {
-        const { level, location, parentSanghId } = req.body;
-        
+        const { level, location, parentSanghId, sanghType = 'main' } = req.body;
+
         if (!parentSanghId) {
             return errorResponse(res, 'Parent Sangh ID is required', 400);
         }
-        
-        // Get the parent Sangh if not already in the request
+
         if (!req.parentSangh) {
             const parentSangh = await HierarchicalSangh.findById(parentSanghId);
             if (!parentSangh) {
@@ -133,11 +217,29 @@ const validateLocationHierarchy = asyncHandler(async (req, res, next) => {
             }
             req.parentSangh = parentSangh;
         }
-        
+
         const parentSangh = req.parentSangh;
-        
-        // Validate location hierarchy based on level
+
+        // ✅ Allow women/youth of same level under main Sangh
+        const isSameLevel = parentSangh.level === level;
+        const isParentMain = parentSangh.sanghType === 'main';
+        const isChildSpecial = ['women', 'youth'].includes(sanghType);
+
+        if (isSameLevel && isParentMain && isChildSpecial) {
+            return next(); // ✅ Allow same-level women/youth under main Sangh
+        }
+
+        // 🧠 Standard hierarchy checks (for main Sanghs or lower level creation)
         switch (level) {
+            case 'foundation':
+                break;
+
+            case 'country':
+                if (parentSangh.level !== 'foundation') {
+                    return errorResponse(res, 'Country can only be created under Foundation', 400);
+                }
+                break;
+
             case 'state':
                 if (parentSangh.level !== 'country') {
                     return errorResponse(res, 'State can only be created under Country', 400);
@@ -146,7 +248,7 @@ const validateLocationHierarchy = asyncHandler(async (req, res, next) => {
                     return errorResponse(res, 'State must be in the same country as the parent', 400);
                 }
                 break;
-                
+
             case 'district':
                 if (!['country', 'state'].includes(parentSangh.level)) {
                     return errorResponse(res, 'District can only be created under Country or State', 400);
@@ -158,7 +260,7 @@ const validateLocationHierarchy = asyncHandler(async (req, res, next) => {
                     return errorResponse(res, 'District must be in the same state as the parent', 400);
                 }
                 break;
-                
+
             case 'city':
                 if (!['country', 'state', 'district'].includes(parentSangh.level)) {
                     return errorResponse(res, 'City can only be created under Country, State, or District', 400);
@@ -173,7 +275,7 @@ const validateLocationHierarchy = asyncHandler(async (req, res, next) => {
                     return errorResponse(res, 'City must be in the same district as the parent', 400);
                 }
                 break;
-                
+
             case 'area':
                 if (!['country', 'state', 'district', 'city'].includes(parentSangh.level)) {
                     return errorResponse(res, 'Area can only be created under Country, State, District, or City', 400);
@@ -191,45 +293,45 @@ const validateLocationHierarchy = asyncHandler(async (req, res, next) => {
                     return errorResponse(res, 'Area must be in the same city as the parent', 400);
                 }
                 break;
-                
+
             default:
                 return errorResponse(res, 'Invalid Sangh level', 400);
         }
-        
+
         next();
     } catch (error) {
         return errorResponse(res, error.message, 500);
     }
 });
-
-// Check Sangh creation permission
 const checkSanghCreationPermission = asyncHandler(async (req, res, next) => {
     try {
-        // If user is superadmin, grant full access
+        // Superadmin or admin full access
         if (req.user.role === 'superadmin' || req.user.role === 'admin') {
             return next();
         }
-        
-        const { level, parentSanghId } = req.body;
-        const userId = req.user._id;
-        
+
+        const { level, parentSanghId, sanghType = 'main' } = req.body;
+
         if (!parentSanghId) {
             return errorResponse(res, 'Parent Sangh ID is required for non-admin users', 400);
         }
 
-        // Find the user's highest level Sangh president role
-        const presidentRole = req.user.sanghRoles?.find(role => 
-            role.role === 'president' && 
+        // Check if user is president of any main Sangh
+        const presidentRole = req.user.sanghRoles?.find(role =>
+            role.role === 'president' &&
             role.sanghType === 'main'
         );
 
         if (!presidentRole) {
             return errorResponse(res, 'You must be a Sangh president to create sub-Sanghs', 403);
         }
-         if (presidentRole.level === 'foundation') {
-            return next(); // Allow creating any sangh
-            }
-        // Get the parent Sangh details
+
+        // Foundation level president can create anything
+        if (presidentRole.level === 'foundation') {
+            return next();
+        }
+
+        // Get parent Sangh details
         const parentSangh = await HierarchicalSangh.findById(parentSanghId)
             .select('level sanghType')
             .lean();
@@ -238,33 +340,105 @@ const checkSanghCreationPermission = asyncHandler(async (req, res, next) => {
             return errorResponse(res, 'Parent Sangh not found', 404);
         }
 
-        // Check if parent Sangh is main type
-        if (parentSangh.sanghType !== 'main') {
-            return errorResponse(res, 'Parent Sangh must be a main Sangh', 400);
-        }
-
-        // Get the hierarchy levels in order
         const levelHierarchy = ['foundation', 'country', 'state', 'district', 'city', 'area'];
         const userLevelIndex = levelHierarchy.indexOf(presidentRole.level);
         const parentLevelIndex = levelHierarchy.indexOf(parentSangh.level);
         const targetLevelIndex = levelHierarchy.indexOf(level);
 
-        // Allow creation only if:
-        // 1. User's level is higher than both parent and target level
-        // 2. Parent level is higher than target level
+        // Allow same-level women/youth Sangh under main Sangh
+        if (
+            sanghType !== 'main' &&                // creating women/youth
+            parentSangh.sanghType === 'main' &&    // parent is main sangh
+            parentSangh.level === level &&         // same level
+            presidentRole.level === level          // user president of same level
+        ) {
+            return next();
+        }
+
+        // Main rules
+        if (parentSangh.sanghType !== 'main') {
+            return errorResponse(res, 'Parent Sangh must be a main Sangh', 400);
+        }
+
+        // Prevent lower level user from creating higher level sangh
         if (userLevelIndex > targetLevelIndex || userLevelIndex > parentLevelIndex) {
             return errorResponse(res, `As a ${presidentRole.level} level president, you cannot create or use Sanghs at higher levels`, 403);
         }
 
+        // Ensure parent is above target
         if (parentLevelIndex >= targetLevelIndex) {
             return errorResponse(res, `Parent Sangh's level (${parentSangh.level}) must be higher than the new Sangh's level (${level})`, 400);
         }
-        
+
         next();
     } catch (error) {
         return errorResponse(res, error.message, 500);
     }
 });
+
+// Check Sangh creation permission
+// const checkSanghCreationPermission = asyncHandler(async (req, res, next) => {
+//     try {
+//         // If user is superadmin, grant full access
+//         if (req.user.role === 'superadmin' || req.user.role === 'admin') {
+//             return next();
+//         }
+        
+//         const { level, parentSanghId } = req.body;
+//         const userId = req.user._id;
+        
+//         if (!parentSanghId) {
+//             return errorResponse(res, 'Parent Sangh ID is required for non-admin users', 400);
+//         }
+
+//         // Find the user's highest level Sangh president role
+//         const presidentRole = req.user.sanghRoles?.find(role => 
+//             role.role === 'president' && 
+//             role.sanghType === 'main'
+//         );
+
+//         if (!presidentRole) {
+//             return errorResponse(res, 'You must be a Sangh president to create sub-Sanghs', 403);
+//         }
+//          if (presidentRole.level === 'foundation') {
+//             return next(); // Allow creating any sangh
+//             }
+//         // Get the parent Sangh details
+//         const parentSangh = await HierarchicalSangh.findById(parentSanghId)
+//             .select('level sanghType')
+//             .lean();
+
+//         if (!parentSangh) {
+//             return errorResponse(res, 'Parent Sangh not found', 404);
+//         }
+
+//         // Check if parent Sangh is main type
+//         if (parentSangh.sanghType !== 'main') {
+//             return errorResponse(res, 'Parent Sangh must be a main Sangh', 400);
+//         }
+
+//         // Get the hierarchy levels in order
+//         const levelHierarchy = ['foundation', 'country', 'state', 'district', 'city', 'area'];
+//         const userLevelIndex = levelHierarchy.indexOf(presidentRole.level);
+//         const parentLevelIndex = levelHierarchy.indexOf(parentSangh.level);
+//         const targetLevelIndex = levelHierarchy.indexOf(level);
+
+//         // Allow creation only if:
+//         // 1. User's level is higher than both parent and target level
+//         // 2. Parent level is higher than target level
+//         if (userLevelIndex > targetLevelIndex || userLevelIndex > parentLevelIndex) {
+//             return errorResponse(res, `As a ${presidentRole.level} level president, you cannot create or use Sanghs at higher levels`, 403);
+//         }
+
+//         if (parentLevelIndex >= targetLevelIndex) {
+//             return errorResponse(res, `Parent Sangh's level (${parentSangh.level}) must be higher than the new Sangh's level (${level})`, 400);
+//         }
+        
+//         next();
+//     } catch (error) {
+//         return errorResponse(res, error.message, 500);
+//     }
+// });
 
 module.exports = {
     validateSanghAccess,
