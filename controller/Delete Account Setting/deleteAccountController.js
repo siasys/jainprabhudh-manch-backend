@@ -49,7 +49,9 @@ exports.deleteAccount = async (req, res) => {
     await Story.deleteMany({ userId });
 
     // 8. Delete user
-    await User.findByIdAndDelete(userId);
+   await User.findByIdAndUpdate(userId, {
+      accountStatus: 'deactivated'
+    });
 
     res.status(200).json({ message: 'Account and all related data deleted successfully.' });
 
@@ -58,3 +60,4 @@ exports.deleteAccount = async (req, res) => {
     res.status(500).json({ message: 'Server error while deleting account' });
   }
 };
+

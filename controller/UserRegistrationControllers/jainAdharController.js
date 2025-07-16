@@ -6,6 +6,9 @@ const { validationResult } = require('express-validator');
 const { jainAadharValidation } = require('../../validators/validations');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
+const { sendVerificationEmail } = require('../../services/nodemailerEmailService');
+
+const EmailVerification = require('../../model/UserRegistrationModels/EmailVerification');
 
 // Check if user has existing application
 // const checkExistingApplication = asyncHandler(async (req, res, next) => {
@@ -26,6 +29,25 @@ const determineApplicationLevel = (location) => {
 // Create Jain Aadhar application with level-based routing
 const createJainAadhar = asyncHandler(async (req, res) => {
     try {
+      const email = req.body.contactDetails?.email;
+      const enteredOtp = req.body.otp;
+
+  if (!email || !enteredOtp) {
+    return errorResponse(res, 'Email and OTP are required for verification', 400);
+  }
+
+  const otpEntry = await EmailVerification.findOne({ email });
+
+  if (!otpEntry || otpEntry.code !== enteredOtp || new Date(otpEntry.expiresAt) < new Date()) {
+    return errorResponse(res, 'Invalid or expired OTP', 400);
+  }
+
+  // Mark email as verified
+  otpEntry.isVerified = true;
+  await otpEntry.save();
+
+  req.body.isEmailVerified = true;
+
         const { location } = req.body;
         let applicationLevel = 'city';
 
@@ -146,11 +168,11 @@ const createJainAadhar = asyncHandler(async (req, res) => {
                 reviewingSanghId = reviewingSangh._id;
             }
         }
-
+    const applicantUserId = req.body.applicantUserId || req.user._id;
         // Create application
       const jainAadharData = {
         ...req.body,
-        userId:req.user._id,
+        userId:applicantUserId,
         createdBy: req.user._id,
             applicationLevel,
             reviewingSanghId,
@@ -197,6 +219,62 @@ const createJainAadhar = asyncHandler(async (req, res) => {
         return errorResponse(res, error.message, 500);
     }
 });
+
+const sendEmailVerificationOtp = async (req, res) => {
+  const { email, name } = req.body;
+
+  if (!email) return errorResponse(res, 'Email is required', 400);
+
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+
+  try {
+    await sendVerificationEmail(email, name || 'User', code);
+
+    await EmailVerification.findOneAndUpdate(
+      { email },
+      { code, expiresAt, isVerified: false },
+      { upsert: true }
+    );
+
+    return successResponse(res, null, 'OTP sent to your email');
+  } catch (err) {
+    console.error(err);
+    return errorResponse(res, 'Failed to send OTP', 500);
+  }
+};
+const verifyEmailOtp = async (req, res) => {
+  const { email, code } = req.body;
+
+  if (!email || !code) {
+    return errorResponse(res, 'Email and OTP code are required', 400);
+  }
+
+  try {
+    const record = await EmailVerification.findOne({ email });
+
+    if (!record) {
+      return errorResponse(res, 'No OTP sent to this email', 404);
+    }
+
+    if (record.code !== code) {
+      return errorResponse(res, 'Incorrect OTP', 400);
+    }
+
+    if (new Date() > record.expiresAt) {
+      return errorResponse(res, 'OTP expired', 400);
+    }
+
+    // Mark as verified
+    record.isVerified = true;
+    await record.save();
+
+    return successResponse(res, null, 'Email verified successfully');
+  } catch (err) {
+    console.error(err);
+    return errorResponse(res, 'OTP verification failed', 500);
+  }
+};
 
 const verifyJainAadhar = async (req, res) => {
   try {
@@ -399,17 +477,8 @@ const reviewApplication = asyncHandler(async (req, res) => {
         const reviewerLevel = req.reviewerLevel;
         const reviewerSanghId = req.reviewerSanghId;
 
-        // console.log('Review Application Debug:');
-        // console.log('Application ID:', appId);
-        // console.log('Request params:', req.params);
-        // console.log('Reviewer Level:', reviewerLevel);
-        // console.log('User ID:', userId);
-        // Try to find application directly by string ID to check if it exists
         const allApplications = await JainAadhar.find({});
-        //console.log('Total applications in DB:', allApplications.length);
-       // console.log('Application IDs in DB:', allApplications.map(app => app._id.toString()));
         const application = await JainAadhar.findById(appId);
-       // console.log('Application found:', application ? 'Yes' : 'No');
     if (!application) {
       return errorResponse(res, 'Application not found', 404);
     }
@@ -449,7 +518,7 @@ const reviewApplication = asyncHandler(async (req, res) => {
             // Verify location authority
             hasAuthority = verifyLocationAuthority(reviewerSangh, application);
         }
-        
+
         // District and city presidents can only review applications from their area
         else if (reviewerLevel === 'district' || reviewerLevel === 'city') {
             // Ensure application is at the correct level
@@ -492,17 +561,17 @@ const reviewApplication = asyncHandler(async (req, res) => {
       const jainAadharNumber = await generateJainAadharNumber();
         application.jainAadharNumber = jainAadharNumber;
 
-            // Update user status
-      await User.findByIdAndUpdate(application.userId, {
-        jainAadharStatus: 'verified',
-        jainAadharNumber,
-      });
-        // Add location information to user profile for easier filtering
-        await User.findByIdAndUpdate(application.userId, {
-            city: application.location.city,
-            district: application.location.district,
-            state: application.location.state
-            });
+      const user = await User.findById(application.userId);
+
+      if (!user?.jainAadharNumber && user?.jainAadharStatus !== 'verified') {
+    await User.findByIdAndUpdate(application.userId, {
+      jainAadharStatus: 'verified',
+      jainAadharNumber,
+      city: application.location.city,
+      district: application.location.district,
+      state: application.location.state
+    });
+  }
         } else if (status === 'rejected') {
       await User.findByIdAndUpdate(application.userId, {
         jainAadharStatus: 'rejected'
@@ -797,47 +866,72 @@ const getVerifiedMembers = asyncHandler(async (req, res) => {
 });
 // Edit Jain Aadhar application details
 const editJainAadhar = asyncHandler(async (req, res) => {
-    try {
-        const applicationId = req.params.applicationId;
-        console.log("Received Application ID:", req.params.applicationId);
+  try {
+    const applicationId = req.params.applicationId;
+    console.log("Received Application ID:", applicationId);
 
-        // Check if application exists
-        const application = await JainAadhar.findById(applicationId);
-        console.log("Found Application:", application);
-        if (!application) {
-            return errorResponse(res, 'Application not found', 404);
-        }
-
-        // Add edit to review history
-        const editHistory = {
-            action: 'edited',
-            by: req.user._id,
-            level: req.editingLevel,
-            sanghId: req.editingSanghId,
-            remarks: req.body.editRemarks || 'Application details edited',
-            timestamp: new Date()
-        };
-
-        // Update application with new details and add to history
-        const updatedApplication = await JainAadhar.findByIdAndUpdate(
-            applicationId,
-            {
-                $set: req.body, // Directly update all fields
-                $push: { reviewHistory: editHistory }
-            },
-            { new: true }
-        );
-
-        return successResponse(res, updatedApplication, 'Application updated successfully');
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
+    // Check if application exists
+    const application = await JainAadhar.findById(applicationId);
+    if (!application) {
+      return errorResponse(res, 'Application not found', 404);
     }
+
+    // ✅ Parse JSON fields from FormData
+    if (typeof req.body.contactDetails === 'string') {
+      req.body.contactDetails = JSON.parse(req.body.contactDetails);
+    }
+    if (typeof req.body.location === 'string') {
+      req.body.location = JSON.parse(req.body.location);
+    }
+    if (typeof req.body.conversionDetails === 'string') {
+      req.body.conversionDetails = JSON.parse(req.body.conversionDetails);
+    }
+    if (typeof req.body.marriedStatus === 'string') {
+      try {
+        req.body.marriedStatus = JSON.parse(req.body.marriedStatus);
+      } catch (e) {
+        // keep it as string "No"
+      }
+    }
+
+    // ✅ If userProfile file uploaded, convert URL & attach
+    if (req.files?.userProfile?.[0]) {
+      const profileUrl = req.files.userProfile[0].location || req.files.userProfile[0].path;
+      req.body.userProfile = convertS3UrlToCDN(profileUrl);
+    }
+
+    // ✅ Create edit history log
+    const editHistory = {
+      action: 'edited',
+      by: req.user._id,
+      level: req.editingLevel,
+      sanghId: req.editingSanghId,
+      remarks: req.body.editRemarks || 'Application details edited',
+      timestamp: new Date()
+    };
+
+    // ✅ Perform the update
+    const updatedApplication = await JainAadhar.findByIdAndUpdate(
+      applicationId,
+      {
+        $set: req.body,
+        $push: { reviewHistory: editHistory }
+      },
+      { new: true }
+    );
+
+    return successResponse(res, updatedApplication, 'Application updated successfully');
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
 });
 
 
 module.exports = {
-    reviewBySanghPresident,
-    getApplicationsReview,
+  reviewBySanghPresident,
+  getApplicationsReview,
+  sendEmailVerificationOtp,
+  verifyEmailOtp,
   createJainAadhar,
   getApplicationStatus,
   getAllApplications,

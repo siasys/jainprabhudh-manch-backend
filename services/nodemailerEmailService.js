@@ -34,7 +34,7 @@ const sendPasswordResetEmail = async (email, name, code) => {
   return transporter.sendMail({
     from: process.env.EMAIL_FROM,
     to: email,
-    subject: 'Reset Your Password - Jain Prabhutmanch',
+    subject: 'Reset Your Password - Jain Prabhuddh Manch',
     html
   });
 };

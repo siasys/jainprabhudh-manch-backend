@@ -16,7 +16,9 @@ const {
   //checkExistingApplication,
   verifyJainAadhar,
   getApplicationsReview,
-  reviewBySanghPresident
+  reviewBySanghPresident,
+  sendEmailVerificationOtp,
+  verifyEmailOtp
 } = require('../../controller/UserRegistrationControllers/jainAdharController');
 const { authMiddleware, canReviewJainAadhar } = require('../../middlewares/authMiddlewares');
 const { canEditJainAadhar } = require('../../middlewares/jainAadharEditPermissions');
@@ -59,6 +61,9 @@ router.post(
   //checkExistingApplication,
   createJainAadhar
 );
+// routes/jainAadharRoutes.js
+router.post('/send-email-otp', sendEmailVerificationOtp);
+router.post('/verify-email-otp', verifyEmailOtp);
 
 router.get(
   '/status',
@@ -181,7 +186,7 @@ router.put(
   //     param('applicationId').isMongoId().withMessage('Invalid application ID'),
   //     body('editRemarks').optional().isString().withMessage('Edit remarks must be a string')
   // ],
-
+ upload.jainAadharDocs,
   editJainAadhar
 );
 router.post(

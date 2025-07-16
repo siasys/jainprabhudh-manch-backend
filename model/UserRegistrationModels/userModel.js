@@ -190,6 +190,11 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null
     },
+    accountStatus: {
+      type: String,
+      enum: ['active', 'deactivated'],
+      default: 'active'
+    },
     sanghRoles: [{
       sanghId: {
         type: mongoose.Schema.Types.ObjectId,

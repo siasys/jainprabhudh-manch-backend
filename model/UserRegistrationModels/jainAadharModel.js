@@ -22,6 +22,21 @@ const jainAadharSchema = new mongoose.Schema(
     age: { type: String },
     birthPlace: { type: String },
     bloodGroup: {type: String},
+       contactDetails: {
+      number: { type: String },
+      whatsappNumber: { type: String },
+      guardiansNumber: { type: String },
+      guardiansRelation: { type: String },
+      email: { type: String },
+    },
+     isEmailVerified: {
+      type: Boolean,
+      default: false
+    },
+    verificationCode: {
+      code: { type: String },
+      expiresAt: { type: Date }
+    },
     marriedStatus: { type: String },
     husbandWifeName: { type: String },
     marriageDate: { type: String },
@@ -61,7 +76,7 @@ const jainAadharSchema = new mongoose.Schema(
     job: { type: String },
     jobCompanyName: { type: String },
     jobAddress: { type: String },
-    JobPosition: {type:String},
+    jobPosition: {type:String},
     jobAnnualIncom : {type:String},
     business: { type: String },
     businessType: {type:String},
@@ -88,13 +103,6 @@ const jainAadharSchema = new mongoose.Schema(
     time: { type: String },
     guidance: { type: String },
  },
-    contactDetails: {
-      number: { type: String },
-      whatsappNumber: { type: String },
-      guardiansNumber: { type: String },
-      guardiansRelation: { type: String },
-      email: { type: String },
-    },
     qrCode: { type: String },
     AadharCard: { type: String },
     userProfile: { type: String },
