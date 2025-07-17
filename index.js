@@ -59,7 +59,7 @@ const reportRoutes = require('./routes/SocialMediaRoutes/reportRoutes');
 const blockRoutes = require('./routes/Block User/blockRoutes');
 const deleteAccountRoutes = require('./routes/Account delete/deleteAccountRoutes');
 const projectRoutes = require('./routes/SanghRoutes/projectRoutes');
-const appVersionRoute = require('./routes/Update apk/appVersion');
+//const appVersionRoute = require('./routes/Update apk/appVersion');
 
 app.set('trust proxy',1)
 // connect to databse
@@ -90,11 +90,11 @@ app.use(session({
 app.get('/', (req, res) => {
   res.send('Hello World!');
 });
-app.use('/static', express.static('./Public/latest.apk'));
+//app.use('/static', express.static('./Public/latest.apk'));
 // Routes
 app.use("/api/user",authRouter)
 // Protected routes (require authentication)
-app.use('/api/app', appVersionRoute);
+//app.use('/api/app', appVersionRoute);
 app.use("/api/JainAadhar", authMiddleware, jainAdharRouter);
 app.use("/api/friendship", authMiddleware, friendshipRoutes);
 app.use('/api/posts', postRoutes);
