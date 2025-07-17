@@ -61,7 +61,7 @@ const deleteAccountRoutes = require('./routes/Account delete/deleteAccountRoutes
 const projectRoutes = require('./routes/SanghRoutes/projectRoutes');
 //const appVersionRoute = require('./routes/Update apk/appVersion');
 
-app.set('trust proxy',1)
+app.set('trust proxy',1);
 // connect to databse
 dbConnect();
 app.use(helmet());
