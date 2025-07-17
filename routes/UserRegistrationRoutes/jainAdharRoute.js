@@ -179,7 +179,7 @@ router.put(
   reviewBySanghPresident
 );
 
-// Edit Jain Aadhar application - for authorized reviewers
+// Edit Jain Aadhar application
 router.put(
   '/applications/:applicationId/edit',
   // [

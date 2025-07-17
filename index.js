@@ -2,6 +2,7 @@ const express = require("express");
 const http = require("http");
 const dbConnect = require("./config/dbConnect");
 const app = express();
+const path = require('path')
 const dotenv = require("dotenv");
 const helmet = require('helmet');
 dotenv.config();
@@ -75,8 +76,10 @@ app.use(cors({
 app.use(logMiddleware);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended:false}));
-app.use(express.json()); 
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// ✅ Serve app-version.json as static file
+app.use('/app-version', express.static(path.join(__dirname, 'app-version.json')));
 // Session configuration for payment flow
 app.use(session({
   secret: process.env.SESSION_SECRET || 'jainprabhutmanch-secret-key',
@@ -186,4 +189,3 @@ app.listen(PORT, () => {
 //   };
 //   // Run the cleanup job every hour
 //   setInterval(deleteExpiredStories, 60 * 60 * 1000);
-  
