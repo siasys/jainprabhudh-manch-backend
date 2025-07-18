@@ -52,6 +52,7 @@ const jainAadharSchema = new mongoose.Schema(
        type: String,
      },
     gotra: { type: String },
+    subGotra:{type:String},
     sansthan: { type: String },
     sansthanPosition: { type: String },
     pitaKaNaam: { type: String },
