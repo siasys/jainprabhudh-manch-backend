@@ -1862,7 +1862,7 @@ const generateMembersCard = async (req, res) => {
 // POST /api/hierarchical-sangh/:sanghId/follow
 const followSangh = asyncHandler(async (req, res) => {
   const { sanghId } = req.params;
-  const userId = req.user._id; // assuming auth middleware sets this
+  const userId = req.user._id;
 
   const sangh = await HierarchicalSangh.findById(sanghId);
   if (!sangh) {

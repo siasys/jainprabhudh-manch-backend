@@ -334,22 +334,31 @@ hierarchicalSanghSchema.methods.validateHierarchy = async function() {
         }
         return;
     }
-      if (this.level === 'country') {
-        const parentSangh = await this.constructor.findById(this.parentSangh);
+     if (this.level === 'country') {
+  const parentSangh = await this.constructor.findById(this.parentSangh);
 
-        const isSameLevelSpecialized = (
-            parentSangh &&
-            parentSangh.level === 'country' &&
-            parentSangh.sanghType === 'main' &&
-            ['women', 'youth'].includes(this.sanghType)
-        );
+  if (!parentSangh) {
+    throw new Error('Parent Sangh not found');
+  }
 
-        if (this.parentSangh && !isSameLevelSpecialized) {
-            throw new Error('Country level Sangh cannot have a parent Sangh unless it is a specialized Sangh under main');
-        }
+  // Allow foundation as parent
+  if (parentSangh.level === 'foundation') {
+    return;
+  }
 
-        return;
-        }
+  // Allow specialized Sanghs (women/youth) under country level main Sangh
+  const isSameLevelSpecialized = (
+    parentSangh.level === 'country' &&
+    parentSangh.sanghType === 'main' &&
+    ['women', 'youth'].includes(this.sanghType)
+  );
+
+  if (!isSameLevelSpecialized) {
+    throw new Error('Country level Sangh must have a foundation as parent or be a specialized Sangh under country main Sangh');
+  }
+
+  return;
+}
 
     // if (!this.parentSangh) {
     //     throw new Error('Non-country level Sangh must have a parent Sangh');
