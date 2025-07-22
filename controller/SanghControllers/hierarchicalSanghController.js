@@ -176,6 +176,7 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
                 name,
                 jainAadharNumber: jainAadharNumber || "",
                 phoneNumber,
+                address,
                 photo: req.files[`${role}Photo`] ? convertS3UrlToCDN(req.files[`${role}Photo`][0].location) : null,
                 description: officeBearers[role]?.description || ""
             };
