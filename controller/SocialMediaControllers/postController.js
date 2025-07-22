@@ -733,6 +733,101 @@ const addReply = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+const likeComment = async (req, res) => {
+  try {
+    const { postId, commentId, userId } = req.body;
+
+    if (!postId || !commentId || !userId) {
+      return res.status(400).json({ message: 'postId, commentId and userId are required' });
+    }
+
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ message: 'Post not found' });
+
+    const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+
+    const index = comment.likes?.findIndex((id) => id.toString() === userId);
+
+    if (index > -1) {
+      // User already liked, so unlike
+      comment.likes.splice(index, 1);
+      await post.save();
+      return res.status(200).json({ message: 'Comment unliked successfully' });
+    } else {
+      // Like the comment
+      comment.likes.push(userId);
+      await post.save();
+
+      // Optional: send notification to comment owner (not self)
+      if (comment.user.toString() !== userId) {
+        const notification = new Notification({
+          senderId: userId,
+          receiverId: comment.user,
+          type: 'like_comment',
+          message: 'liked your comment',
+          postId,
+        });
+        await notification.save();
+        const io = getIo();
+        io.to(comment.user.toString()).emit('newNotification', notification);
+      }
+
+      return res.status(200).json({ message: 'Comment liked successfully' });
+    }
+  } catch (error) {
+    console.error('Error liking comment:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+const likeReply = async (req, res) => {
+  try {
+    const { postId, commentId, replyId, userId } = req.body;
+
+    if (!postId || !commentId || !replyId || !userId) {
+      return res.status(400).json({ message: 'postId, commentId, replyId and userId are required' });
+    }
+
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ message: 'Post not found' });
+
+    const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+
+    const reply = comment.replies.id(replyId);
+    if (!reply) return res.status(404).json({ message: 'Reply not found' });
+
+    const index = reply.likes?.findIndex((id) => id.toString() === userId);
+
+    if (index > -1) {
+      reply.likes.splice(index, 1);
+      await post.save();
+      return res.status(200).json({ message: 'Reply unliked successfully' });
+    } else {
+      reply.likes = reply.likes || [];
+      reply.likes.push(userId);
+      await post.save();
+
+      if (reply.user.toString() !== userId) {
+        const notification = new Notification({
+          senderId: userId,
+          receiverId: reply.user,
+          type: 'like_reply',
+          message: 'liked your reply',
+          postId,
+        });
+        await notification.save();
+        const io = getIo();
+        io.to(reply.user.toString()).emit('newNotification', notification);
+      }
+
+      return res.status(200).json({ message: 'Reply liked successfully' });
+    }
+  } catch (error) {
+    console.error('Error liking reply:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
 
 // Get Replies for a Specific Comment
 const getReplies = async (req, res) => {
@@ -1023,5 +1118,7 @@ module.exports = {
   unhidePost,
   getCombinedFeed,
   getCombinedFeedOptimized,
-  getLikedUsers
+  getLikedUsers,
+  likeReply,
+  likeComment
 };

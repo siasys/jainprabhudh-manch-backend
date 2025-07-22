@@ -1,5 +1,5 @@
 const express = require('express');
-const { createPost, getAllPosts, likePost, unlikePost, deletePost, getPostsByUser, getPostById, addComment, addReply, toggleLike, getReplies, editPost, hidePost, unhidePost, getCombinedFeed, getCombinedFeedOptimized, getLikedUsers, searchHashtags } = require('../../controller/SocialMediaControllers/postController');
+const { createPost, getAllPosts, likePost, unlikePost, deletePost, getPostsByUser, getPostById, addComment, addReply, toggleLike, getReplies, editPost, hidePost, unhidePost, getCombinedFeed, getCombinedFeedOptimized, getLikedUsers, searchHashtags, likeComment, likeReply } = require('../../controller/SocialMediaControllers/postController');
 const { authMiddleware } = require('../../middlewares/authMiddlewares');
 const rateLimit = require('express-rate-limit');
 
@@ -32,8 +32,11 @@ router.get('/:postId', getPostById);
 router.get('/:postId/likes', getLikedUsers);
 router.post('/comment', addComment);
 router.post('/comment/reply', addReply);
+router.post('/like-comment', likeComment);
+router.post('/like-reply', likeReply);
+
 router.put('/:postId/like', toggleLike);
-router.put('/:postId',editPost);
+router.put('/:postId', editPost);
 router.get('/comments/:commentId/replies', getReplies);
 
 // Visibility routes

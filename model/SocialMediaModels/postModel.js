@@ -96,7 +96,13 @@ const postSchema = new mongoose.Schema(
           ref: 'Community',
           sparse: true
         },
-        replies: [
+        likes: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+     replies: [
           {
             user: {
               type: mongoose.Schema.Types.ObjectId,
@@ -104,11 +110,17 @@ const postSchema = new mongoose.Schema(
             },
              isSangh: { type: Boolean, default: false },
             sanghId: { type: mongoose.Schema.Types.ObjectId, ref: 'HierarchicalSangh', default: null },
-           
+
             text: {
               type: String,
               maxlength: 300,
             },
+            likes: [
+            {
+              type: mongoose.Schema.Types.ObjectId,
+              ref: 'User',
+            },
+          ],
             createdAt: {
               type: Date,
               default: Date.now,
@@ -119,7 +131,7 @@ const postSchema = new mongoose.Schema(
     ],
   },
   {
-    timestamps: true, 
+    timestamps: true,
   }
 );
 // Indexes - grouped for better readability
