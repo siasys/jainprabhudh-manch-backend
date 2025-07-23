@@ -906,7 +906,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             },
             addedBy: req.user._id,
             addedAt: new Date(),
-            status: 'active',
+            status: 'Inactive',
             localSangh: member.localSangh?.sanghId ? {
             state: member.localSangh.state || '',
             district: member.localSangh.district || '',
@@ -1011,7 +1011,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
           } : undefined,
       addedBy: req.user._id,
       addedAt: new Date(),
-      status: 'active',
+      status: 'inactive',
     };
 
     sangh.members.push(newMember);
