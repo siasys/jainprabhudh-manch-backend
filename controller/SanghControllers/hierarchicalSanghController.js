@@ -951,6 +951,16 @@ const addSanghMember = asyncHandler(async (req, res) => {
     // ======= SINGLE MEMBER ADDITION =======
     const { jainAadharNumber, postMember,level, sanghType } = req.body;
 
+    // ✅ Parse localSangh if needed
+    if (req.body.localSangh && typeof req.body.localSangh === 'string') {
+      try {
+        req.body.localSangh = JSON.parse(req.body.localSangh);
+      } catch (err) {
+        console.error('❌ Error parsing localSangh:', err.message);
+        req.body.localSangh = undefined;
+      }
+    }
+
     if (!jainAadharNumber) return errorResponse(res, 'Jain Aadhar number is required', 400);
 
     const user = await User.findOne({
