@@ -174,15 +174,15 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             ['women', 'youth'].includes(sanghType)
         );
 
-        if ((currentIndex < parentIndex || currentIndex - parentIndex > 1) && !isSameLevelAllowed) {
-            return errorResponse(
-                res,
-                `Invalid hierarchy: ${level} level (${sanghType}) cannot be directly under ${parentSangh.level} (${parentSangh.sanghType})`,
-                400
-            );
-        }
-        }
+       if (currentIndex <= parentIndex && !isSameLevelAllowed) {
+    return errorResponse(
+        res,
+        `Invalid hierarchy: ${level} level (${sanghType}) cannot be directly under ${parentSangh.level} (${parentSangh.sanghType})`,
+        400
+    );
+}
 
+        }
         // Create Sangh
         const sangh = await HierarchicalSangh.create({
             name,

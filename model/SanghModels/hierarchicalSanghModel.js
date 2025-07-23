@@ -372,10 +372,10 @@ hierarchicalSanghSchema.methods.validateHierarchy = async function() {
     const levelHierarchy = ['foundation', 'country', 'state', 'district', 'city', 'area'];
     const parentIndex = levelHierarchy.indexOf(parentSangh.level);
     const currentIndex = levelHierarchy.indexOf(this.level);
+       if ((currentIndex <= parentIndex) && !isSameLevelSpecialized) {
+    throw new Error(`Invalid hierarchy: ${this.level} level cannot be directly under ${parentSangh.level} level`);
+}
 
-    if (currentIndex <= parentIndex || currentIndex - parentIndex > 1) {
-        throw new Error(`Invalid hierarchy: ${this.level} level cannot be directly under ${parentSangh.level} level`);
-    }
 };
 
 // Add pre-save middleware to ensure validation

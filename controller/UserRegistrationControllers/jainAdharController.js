@@ -48,128 +48,100 @@ const createJainAadhar = asyncHandler(async (req, res) => {
 
   req.body.isEmailVerified = true;
 
-        const { location } = req.body;
-        let applicationLevel = 'city';
+    const { location } = req.body;
+    let applicationLevel = 'city';
 
-        // Validate location data
-        if (!location || !location.state) {
-            return errorResponse(res, 'State is required in location data', 400);
-        }
-        // Default to city level if city is provided
-        if (location.city && location.district) {
-            applicationLevel = 'city';
-        }
-        // If no city but district is provided, route to district level
-        else if (!location.city && location.district) {
-            applicationLevel = 'district';
-        }
-        // If neither city nor district, route to state level
-        else if (!location.district) {
-            applicationLevel = 'state';
-        }
+    // Validate location data
+    if (!location || !location.state) {
+      return errorResponse(res, 'State is required in location data', 400);
+    }
 
-        // Special case: For country level office bearers, route to superadmin
-        if (req.body.isOfficeBearer && applicationLevel === 'country') {
+    // Default to city level if city is provided
+    if (location.city && location.district) {
+      applicationLevel = 'city';
+    }
+    // If no city but district is provided, route to district level
+    else if (!location.city && location.district) {
+      applicationLevel = 'district';
+    }
+    // If neither city nor district, route to state level
+    else if (!location.district) {
+      applicationLevel = 'state';
+    }
+
+    // Special case: For country level office bearers, route to superadmin
+    if (req.body.isOfficeBearer && applicationLevel === 'country') {
+      applicationLevel = 'superadmin';
+    }
+
+    let reviewingSanghId = null;
+
+    if (applicationLevel !== 'superadmin') {
+      const query = {
+        level: applicationLevel,
+        status: 'active',
+      };
+
+      if (applicationLevel === 'district') {
+        query['location.district'] = location.district;
+        query['location.state'] = location.state;
+      } else if (applicationLevel === 'state') {
+        query['location.state'] = location.state;
+      }
+
+      const reviewingSangh = await HierarchicalSangh.findOne(query);
+
+      if (!reviewingSangh) {
+        // Handle fallback escalation
+        const tryFallbackLevels = async (levels) => {
+          for (const level of levels) {
+            let sanghQuery = { level, status: 'active' };
+
+            if (level === 'district') {
+              sanghQuery['location.district'] = location.district;
+              sanghQuery['location.state'] = location.state;
+            } else if (level === 'state') {
+              sanghQuery['location.state'] = location.state;
+            } else if (level === 'country') {
+              sanghQuery['location.country'] = location.country || 'India';
+            }
+
+            const fallbackSangh = await HierarchicalSangh.findOne(sanghQuery);
+            if (fallbackSangh) {
+              reviewingSanghId = fallbackSangh._id;
+              applicationLevel = level;
+              return;
+            }
+          }
+
+          // If none found, try foundation
+          const foundationSangh = await HierarchicalSangh.findOne({
+            level: 'foundation',
+            status: 'active',
+          });
+          if (foundationSangh) {
+            reviewingSanghId = foundationSangh._id;
+            applicationLevel = 'foundation';
+          } else {
             applicationLevel = 'superadmin';
-        }
+          }
+        };
 
-        // Find appropriate reviewing Sangh based on location hierarchy
-        let reviewingSanghId = null;
-        if (applicationLevel !== 'superadmin') {
-            const query = {
-                level: applicationLevel,
-                status: 'active'
-            };
-            // Add location filters based on application level
-             if (applicationLevel === 'district') {
-                query['location.district'] = location.district;
-                query['location.state'] = location.state;
-            } else if (applicationLevel === 'state') {
-                query['location.state'] = location.state;
-            }
-            const reviewingSangh = await HierarchicalSangh.findOne(query);
-            // If no matching sangh found at the current level, try to escalate to next level
-            if (!reviewingSangh) {
-                if (applicationLevel === 'city') {
-                    // Try district level
-                    const districtSangh = await HierarchicalSangh.findOne({
-                        level: 'district',
-                        status: 'active',
-                        'location.district': location.district,
-                        'location.state': location.state
-                    });
-                    if (districtSangh) {
-                        reviewingSanghId = districtSangh._id;
-                        applicationLevel = 'district';
-                    } else {
-                        // Try state level
-                        const stateSangh = await HierarchicalSangh.findOne({
-                            level: 'state',
-                            status: 'active',
-                            'location.state': location.state
-                        });
-                        if (stateSangh) {
-                            reviewingSanghId = stateSangh._id;
-                            applicationLevel = 'state';
-                        } else {
-                            // Try country level before superadmin
-                            const countrySangh = await HierarchicalSangh.findOne({
-                                level: 'country',
-                                status: 'active',
-                                'location.country': 'India'  // Since we're only operating in India
-                            });
-                            if (countrySangh) {
-                                reviewingSanghId = countrySangh._id;
-                                applicationLevel = 'country';
-                            } else {
-                                applicationLevel = 'superadmin';
-                            }
-                        }
-                    }
-                } else if (applicationLevel === 'district') {
-                    // Try state level
-                    const stateSangh = await HierarchicalSangh.findOne({
-                        level: 'state',
-                        status: 'active',
-                        'location.state': location.state
-                    });
-                    if (stateSangh) {
-                        reviewingSanghId = stateSangh._id;
-                        applicationLevel = 'state';
-                    } else {
-                        // Try country level before superadmin
-                        const countrySangh = await HierarchicalSangh.findOne({
-                            level: 'country',
-                            status: 'active',
-                            'location.country': 'India'
-                        });
-                        if (countrySangh) {
-                            reviewingSanghId = countrySangh._id;
-                            applicationLevel = 'country';
-                        } else {
-                            applicationLevel = 'superadmin';
-                        }
-                    }
-                } else if (applicationLevel === 'state') {
-                    // Try country level before superadmin
-                    const countrySangh = await HierarchicalSangh.findOne({
-                        level: 'country',
-                        status: 'active',
-                        'location.country': 'India'
-                    });
-                    if (countrySangh) {
-                        reviewingSanghId = countrySangh._id;
-                        applicationLevel = 'country';
-                    } else {
-                        applicationLevel = 'superadmin';
-                    }
-                }
-            } else {
-                reviewingSanghId = reviewingSangh._id;
-            }
+        // Start fallback search based on initial level
+        if (applicationLevel === 'city') {
+          await tryFallbackLevels(['district', 'state', 'country']);
+        } else if (applicationLevel === 'district') {
+          await tryFallbackLevels(['state', 'country']);
+        } else if (applicationLevel === 'state') {
+          await tryFallbackLevels(['country']);
         }
+      } else {
+        reviewingSanghId = reviewingSangh._id;
+      }
+    }
+
     const applicantUserId = req.body.applicantUserId || req.user._id;
-        // Create application
+      // Create application
       const jainAadharData = {
         ...req.body,
         userId:applicantUserId,
