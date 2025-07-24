@@ -496,6 +496,34 @@ const updateSanghDetails = async (req, res) => {
   }
 };
 
+// PATCH /api/hierarchical-sangh/member-status
+const updateMemberStatus = asyncHandler(async (req, res) => {
+  const { sanghId, userId, status } = req.body;
+
+  if (!sanghId || !userId) {
+    return errorResponse(res, 'sanghId and userId are required', 400);
+  }
+
+  const sangh = await HierarchicalSangh.findById(sanghId);
+  if (!sangh) {
+    return errorResponse(res, 'Sangh not found', 404);
+  }
+
+  // Find index of member inside the sangh.members array
+  const memberIndex = sangh.members.findIndex(m => m.userId.toString() === userId);
+
+  if (memberIndex === -1) {
+    return errorResponse(res, 'Member not found in hierarchy', 404);
+  }
+
+  // Update member status
+  sangh.members[memberIndex].status = status || 'active';
+
+  await sangh.save();
+
+  return successResponse(res, sangh.members[memberIndex], 'Member status updated successfully');
+});
+
 const updatePanchMembers = async (req, res) => {
   try {
     const { sanghId } = req.params;
@@ -1937,5 +1965,6 @@ module.exports = {
     generateMemberCard,
     generateMembersCard,
     switchToSanghToken,
-    switchToUserToken
-}; 
+    switchToUserToken,
+    updateMemberStatus
+};

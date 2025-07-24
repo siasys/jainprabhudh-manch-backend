@@ -28,7 +28,8 @@ const {
     followSangh,
     switchToSanghToken,
     updateSanghDetails,
-    updatePanchMembers
+    updatePanchMembers,
+    updateMemberStatus
 } = require('../../controller/SanghControllers/hierarchicalSanghController');
 
 const upload = require('../../middlewares/upload');
@@ -73,6 +74,8 @@ router.get('/children/:id', validateSanghAccess, getChildSanghs);
 router.put('/update-sangh/:id', upload.sangathanDocs, updateSanghById);
 router.put('/update-sangh-details/:sanghId', updateSanghDetails);
 router.put('/update-panch-members/:sanghId', updatePanchMembers);
+// routes/hierarchicalSanghRoutes.js
+router.patch('/member-status', updateMemberStatus);
 
 // Update Sangh (Requires office bearer permission)
 router.put('/update/:id', upload.sangathanDocs, updateHierarchicalSangh);
