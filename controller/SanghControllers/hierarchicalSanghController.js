@@ -274,15 +274,14 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
 
 const getAllSangh = asyncHandler(async (req, res) => {
   try {
-    const { district, state, city } = req.query;
+    const { district, state, city, level } = req.query;
 
     const query = {};
-    if (district) {
-      query['location.district'] = district;
-      query['level'] = 'district'; // ✅ Only District level Sangh
-    }
+
     if (state) query['location.state'] = state;
+    if (district) query['location.district'] = district;
     if (city) query['location.city'] = city;
+    if (level) query['level'] = level; // Optional: level=city ya level=district aap query param se bhej sakte ho
 
     const sanghs = await HierarchicalSangh.find(query);
 
