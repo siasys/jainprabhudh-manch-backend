@@ -207,6 +207,7 @@ const verifyEmail = asyncHandler(async (req, res) => {
     await user.save();
 
     const userResponse = user.toObject();
+    userResponse.id = user._id;
     delete userResponse.password;
     delete userResponse.__v;
 
