@@ -39,8 +39,8 @@ const generateJainAadharCard = async (req, res) => {
     ctx.fillText(application.dob || 'N/A', 490, 268);
     ctx.fillText(application.mulJain || 'N/A', 490, 317);
     ctx.fillText(application.panth || 'N/A', 490, 362);
-    ctx.fillText(application.subCaste || 'N/A', 490, 408);
-    ctx.fillText(application.gotra || 'N/A', 490, 460);
+    ctx.fillText(application.gotra || 'N/A', 490, 408);
+    ctx.fillText(application.subCaste || 'N/A', 490, 460);
     ctx.fillText(application.location?.city || 'N/A', 490, 505);
 
     ctx.font = 'bold 24px Georgia';
