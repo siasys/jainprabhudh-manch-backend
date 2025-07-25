@@ -48,20 +48,20 @@ const registerUser = [
             location,
         } = req.body;
         // Check if user already exists
-        const existingUserByEmail = await User.findOne({ email });
+      const existingUserByEmail = await User.findOne({ email, accountStatus: { $ne: 'deactivated' } });
 
-        if (existingUserByEmail) {
-            if (existingUserByEmail.isEmailVerified) {
-                return errorResponse(res, 'User with this email already exists', 400);
-            }
-            // 💡 Delete old unverified user to allow re-registration
-            await User.deleteOne({ _id: existingUserByEmail._id });
-        }
-        // Now check phone number AFTER possibly deleting the old user
-        const existingUser = await User.findOne({ phoneNumber });
-        if (existingUser) {
-            return errorResponse(res, 'User with this phone number already exists', 400);
-        }
+if (existingUserByEmail) {
+    if (existingUserByEmail.isEmailVerified) {
+        return errorResponse(res, 'User with this email already exists', 400);
+    }
+    await User.deleteOne({ _id: existingUserByEmail._id });
+}
+
+const existingUser = await User.findOne({ phoneNumber, accountStatus: { $ne: 'deactivated' } });
+if (existingUser) {
+    return errorResponse(res, 'User with this phone number already exists', 400);
+}
+
         // Generate verification code
         const verificationCode = generateVerificationCode();
         const codeExpiry = new Date();
