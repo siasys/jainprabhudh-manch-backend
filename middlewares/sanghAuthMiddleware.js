@@ -241,7 +241,7 @@ const validateLocationHierarchy = asyncHandler(async (req, res, next) => {
                 break;
 
             case 'state':
-                if (parentSangh.level !== 'country') {
+               if (!['foundation', 'country'].includes(parentSangh.level)) {
                     return errorResponse(res, 'State can only be created under Country', 400);
                 }
                 if (parentSangh.location.country !== location.country) {
@@ -250,7 +250,7 @@ const validateLocationHierarchy = asyncHandler(async (req, res, next) => {
                 break;
 
             case 'district':
-                if (!['country', 'state'].includes(parentSangh.level)) {
+                if (!['foundation','country', 'state'].includes(parentSangh.level)) {
                     return errorResponse(res, 'District can only be created under Country or State', 400);
                 }
                 if (parentSangh.location.country !== location.country) {
@@ -262,7 +262,7 @@ const validateLocationHierarchy = asyncHandler(async (req, res, next) => {
                 break;
 
             case 'city':
-                if (!['country', 'state', 'district'].includes(parentSangh.level)) {
+                if (!['foundation','country', 'state', 'district'].includes(parentSangh.level)) {
                     return errorResponse(res, 'City can only be created under Country, State, or District', 400);
                 }
                 if (parentSangh.location.country !== location.country) {
