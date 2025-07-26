@@ -86,7 +86,7 @@ router.get('/search', searchUsers);
 router.get('/', getAllUsers);
 router.get('/by-jain-aadhar/:number', getUserByJainAadharNumber);
 
-router.post('/change-password', changePassword); 
+router.post('/change-password', changePassword);
 router.post('/upload-profile-picture', authMiddleware,
 upload.single('profilePicture'),uploadProfilePicture);
 router.post('/skip-profile-picture', authMiddleware, skipProfilePicture);
