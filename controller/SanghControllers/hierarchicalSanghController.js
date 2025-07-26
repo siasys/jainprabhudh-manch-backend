@@ -88,7 +88,6 @@ const switchToSanghToken = asyncHandler(async (req, res) => {
 });
 
 // Create new Sangh
-// Create new Sangh
 const createHierarchicalSangh = asyncHandler(async (req, res) => {
   const coverImage = req.files?.coverImage ? convertS3UrlToCDN(req.files.coverImage[0].location) : null;
   const sanghImage = req.files?.sanghImage ? convertS3UrlToCDN(req.files.sanghImage[0].location) : null;
@@ -97,7 +96,7 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             name,
             level,
             location,
-            officeBearers,
+           officeAddress,
             parentSanghId,
             contact,
             establishedDate,
@@ -106,12 +105,12 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             parentSanghAccessId,
             sanghType = 'main'
         } = req.body;
-        // console.log("parentSanghId in request:", req.body);
-        // console.log("Received parentSanghId:", req.body.parentSanghId);
+        console.log("parentSanghId in request:", req.body);
+        console.log("Received parentSanghId:", req.body.parentSanghId);
 
          // Validate required fields
         // if (!name || !level || !location || !officeBearers) {
-            if (!name || !level || !location) {
+            if (!name || !level || !location || !officeAddress) {
             return errorResponse(res, 'Missing required fields', 400);
         }
         // Validate sanghType
@@ -135,53 +134,14 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
 
              // Track the top-level main Sangh for specialized Sanghs
              if (resolvedSanghType !== 'main') {
-                 parentMainSanghId = parentSangh.parentMainSangh || parentSangh._id;
-             }
+              parentMainSanghId = parentSangh.parentMainSangh
+                  ? parentSangh.parentMainSangh
+                  : parentSangh.sanghType === 'main'
+                      ? parentSangh._id 
+                      : null;
+          }
+
          }
-         const formattedOfficeBearers = await Promise.all(['president', 'secretary', 'treasurer'].map(async role => {
-           const jainAadharNumber = officeBearers[role]?.jainAadharNumber;
-
-            let name = "";
-            let phoneNumber = "";
-             let address = {
-                street: "",
-                city: "",
-                district: "",
-                state: "",
-                pincode: ""
-              };
-
-            let user = null;
-             if (jainAadharNumber) {
-                user = await User.findOne({ jainAadharNumber });
-                const jainAadhar = await JainAadharApplication.findOne({ jainAadharNumber });
-
-                if (jainAadhar) {
-                  name = jainAadhar.name?.trim() || "";
-
-                // Contact and Location
-                phoneNumber = jainAadhar.contactDetails?.number || "";
-               address = {
-                street: jainAadhar.location?.address || "",
-                city: jainAadhar.location?.city || "",
-                district: jainAadhar.location?.district || "",
-                state: jainAadhar.location?.state || "",
-                pincode: jainAadhar.location?.pinCode || ""
-              };
-                }
-            }
-
-            return {
-                role,
-                userId: user ? user._id : null,
-                name,
-                jainAadharNumber: jainAadharNumber || "",
-                phoneNumber,
-                address,
-                photo: req.files[`${role}Photo`] ? convertS3UrlToCDN(req.files[`${role}Photo`][0].location) : null,
-                description: officeBearers[role]?.description || ""
-            };
-        }));
         // Validate location hierarchy based on level
         if (level === 'area' && (!location.country || !location.state || !location.district || !location.city || !location.area)) {
             return errorResponse(res, 'Area level Sangh requires complete location hierarchy (country, state, district, city, area)', 400);
@@ -202,44 +162,34 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
                 return errorResponse(res, 'An active Sangh already exists for this area', 400);
             }
         }
-        // Validate required documents
-        // if (!req.files) {
-        //     return errorResponse(res, 'Office bearer documents are required', 400);
-        // }
-
-        // const requiredDocs = [
-        //     'presidentJainAadhar',
-        //     'presidentPhoto',
-        //     'secretaryJainAadhar',
-        //     'secretaryPhoto',
-        //     'treasurerJainAadhar',
-        //     'treasurerPhoto'
-        // ];
-        // const missingDocs = requiredDocs.filter(doc => !req.files[doc]);
-        // if (missingDocs.length > 0) {
-        //     return errorResponse(res, `Missing required documents: ${missingDocs.join(', ')}`, 400);
-        // }
-        // Validate office bearers
-       // await validateOfficeBearers(officeBearers);
         // Validate hierarchy level before creation
         const parentSangh = parentSanghId ? await HierarchicalSangh.findById(parentSanghId) : null;
         if (parentSangh) {
             const levelHierarchy = ['foundation','country', 'state', 'district', 'city', 'area'];
             const parentIndex = levelHierarchy.indexOf(parentSangh.level);
             const currentIndex = levelHierarchy.indexOf(level);
-            
-            // if (currentIndex <= parentIndex || currentIndex - parentIndex > 1) {
-            //     return errorResponse(res, `Invalid hierarchy: ${level} level cannot be directly under ${parentSangh.level} level`, 400);
-            // }
-        }
+           const isSameLevelAllowed = (
+            currentIndex === parentIndex &&
+            parentSangh.sanghType === 'main' &&
+            ['women', 'youth'].includes(sanghType)
+        );
 
+       if (currentIndex <= parentIndex && !isSameLevelAllowed) {
+    return errorResponse(
+        res,
+        `Invalid hierarchy: ${level} level (${sanghType}) cannot be directly under ${parentSangh.level} (${parentSangh.sanghType})`,
+        400
+    );
+}
+
+        }
         // Create Sangh
         const sangh = await HierarchicalSangh.create({
             name,
             level,
             location,
+            officeAddress,
             parentSangh: parentSanghId,
-            officeBearers: formattedOfficeBearers,
             description,
             contact,
             socialMedia,
@@ -250,24 +200,6 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             sanghImage
         });
         await sangh.validateHierarchy();
-        //Update office bearer roles in User model
-        for (const bearer of formattedOfficeBearers) {
-            console.log('Updating bearer:', bearer);
-            if (!bearer.userId) {
-                console.warn('⚠️ User not found for:', bearer.jainAadharNumber);
-                continue;
-            }
-            await User.findByIdAndUpdate(bearer.userId, {
-                $push: {
-                    sanghRoles: {
-                        sanghId: sangh._id,
-                        role: bearer.role,
-                        level: level,
-                        sanghType: resolvedSanghType
-                    }
-                }
-            });
-        }
         // Automatically create SanghAccess entry
         const SanghAccess = require('../../model/SanghModels/sanghAccessModel');
         const mongoose = require('mongoose');
@@ -339,8 +271,6 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
         return errorResponse(res, error.message, 500);
     }
 });
-
-
 
 const getAllSangh = asyncHandler(async (req, res) => {
   try {
