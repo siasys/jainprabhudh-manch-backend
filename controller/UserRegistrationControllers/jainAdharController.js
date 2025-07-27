@@ -48,33 +48,30 @@ const createJainAadhar = asyncHandler(async (req, res) => {
 
   req.body.isEmailVerified = true;
 
-    const { location } = req.body;
-    let applicationLevel = 'city';
+const { location } = req.body;
+let applicationLevel = 'city';
+let reviewingSanghId = req.body.reviewingSanghId || null; // ✅ pehle declare karo
 
-    // Validate location data
-    if (!location || !location.state) {
-      return errorResponse(res, 'State is required in location data', 400);
-    }
+if (!location || !location.state) {
+  return errorResponse(res, 'State is required in location data', 400);
+}
 
-    // Default to city level if city is provided
-    if (location.city && location.district) {
-      applicationLevel = 'city';
-    }
-    // If no city but district is provided, route to district level
-    else if (!location.city && location.district) {
-      applicationLevel = 'district';
-    }
-    // If neither city nor district, route to state level
-    else if (!location.district) {
-      applicationLevel = 'state';
-    }
+// ✅ Use frontend values if available
+if (req.body.applicationLevel && req.body.reviewingSanghId) {
+  applicationLevel = req.body.applicationLevel;
+  reviewingSanghId = req.body.reviewingSanghId;
+} else if (!location.city && location.district) {
+  applicationLevel = 'district';
+} else if (!location.district) {
+  applicationLevel = 'state';
+}
 
     // Special case: For country level office bearers, route to superadmin
     if (req.body.isOfficeBearer && applicationLevel === 'country') {
       applicationLevel = 'superadmin';
     }
 
-    let reviewingSanghId = null;
+  //  let reviewingSanghId = null;
 
     if (applicationLevel !== 'superadmin') {
       const query = {
