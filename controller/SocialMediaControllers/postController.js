@@ -299,7 +299,7 @@ const getAllPosts = async (req, res) => {
       ...timeCondition
     })
       .populate('user', 'firstName lastName fullName profilePicture friends accountStatus')
-      .populate('sanghId', 'name sanghImage')
+      .populate('sanghId', '_id name sanghImage')
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
