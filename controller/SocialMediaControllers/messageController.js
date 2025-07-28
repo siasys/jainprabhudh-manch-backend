@@ -515,15 +515,27 @@ exports.getConversation = async (req, res) => {
     const conversationMap = new Map();
 
     // Loop through messages to get latest per conversation
-    messages.forEach(msg => {
-      const otherUser = msg.sender._id.toString() === userId
-        ? msg.receiver._id.toString()
-        : msg.sender._id.toString();
+  messages.forEach((msg, index) => {
+  const isSender = msg.sender && msg.sender._id;
+  const isReceiver = msg.receiver && msg.receiver._id;
 
-      if (!conversationMap.has(otherUser)) {
-        conversationMap.set(otherUser, msg);
-      }
-    });
+  // console.log(`\n[${index}] Message ID: ${msg._id}`);
+  // console.log("Sender:", msg.sender);
+  // console.log("Receiver:", msg.receiver);
+
+  if (!isSender || !isReceiver) {
+    console.warn(`Missing sender/receiver data for message ${msg._id}`);
+    return;
+  }
+
+  const otherUser = msg.sender._id.toString() === userId
+    ? msg.receiver._id.toString()
+    : msg.sender._id.toString();
+
+  if (!conversationMap.has(otherUser)) {
+    conversationMap.set(otherUser, msg);
+  }
+});
 
     const recentChats = Array.from(conversationMap.values());
 
