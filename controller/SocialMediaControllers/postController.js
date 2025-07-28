@@ -274,14 +274,108 @@ const getPostById = asyncHandler(async (req, res) => {
 
 //     res.json(formattedPosts);
 // });
-// Optimized Get All Posts API
+// Optimized Get All Posts API for followers
+// const getAllPosts = async (req, res) => {
+//   try {
+//     const limit = parseInt(req.query.limit) || 5;
+//     const cursor = req.query.cursor;
+//     const userId = req.query.userId;
+
+//     const user = await User.findById(userId).select('friends');
+//     if (!user) {
+//       return successResponse(res, {
+//         posts: [],
+//         pagination: { nextCursor: null, hasMore: false }
+//       }, 'User not found');
+//     }
+
+//     const followedUserIds = user.friends.map(f => f.toString());
+//     const priorityUserIds = [...followedUserIds, userId];
+//     const timeCondition = cursor ? { createdAt: { $lt: new Date(cursor) } } : {};
+
+//     // Own posts
+//     const ownPostsRaw = await Post.find({
+//       user: userId,
+//       ...timeCondition
+//     })
+//       .populate('user', 'firstName lastName fullName profilePicture friends accountStatus')
+//       .populate('sanghId', 'name sanghImage')
+//       .sort({ createdAt: -1 })
+//       .limit(limit)
+//       .lean();
+
+//     //Filter out posts where user is deactivated
+//     const ownPosts = ownPostsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
+
+//     const remainingLimitAfterOwn = limit - ownPosts.length;
+
+//     let followedPosts = [];
+//     if (remainingLimitAfterOwn > 0) {
+//       const followedPostsRaw = await Post.find({
+//         user: { $in: followedUserIds, $ne: userId },
+//         ...timeCondition
+//       })
+//         .populate('user', 'firstName lastName fullName profilePicture friends accountStatus')
+//         .populate('sanghId', 'name sanghImage')
+//         .sort({ createdAt: -1 })
+//         .limit(remainingLimitAfterOwn)
+//         .lean();
+
+//       followedPosts = followedPostsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
+//     }
+
+//     const remainingLimitAfterFollowed = remainingLimitAfterOwn - followedPosts.length;
+
+//     let otherPosts = [];
+//     if (remainingLimitAfterFollowed > 0) {
+//       const otherPostsRaw = await Post.find({
+//         user: { $nin: priorityUserIds },
+//         ...timeCondition
+//       })
+//         .populate('user', 'firstName lastName fullName profilePicture friends accountStatus')
+//         .populate('sanghId', 'name sanghImage')
+//         .sort({ createdAt: -1 })
+//         .limit(remainingLimitAfterFollowed)
+//         .lean();
+
+//       otherPosts = otherPostsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
+//     }
+
+//     const allPosts = [...ownPosts, ...followedPosts, ...otherPosts];
+
+//     const nextCursor = allPosts.length > 0
+//       ? allPosts[allPosts.length - 1].createdAt.toISOString()
+//       : null;
+
+//     // Add default empty friends if not exists
+//     allPosts.forEach(post => {
+//       if (post.user && !post.user.friends) {
+//         post.user.friends = [];
+//       }
+//     });
+
+//     return successResponse(res, {
+//       posts: allPosts,
+//       pagination: {
+//         nextCursor,
+//         hasMore: allPosts.length === limit
+//       }
+//     }, 'All user posts fetched');
+
+//   } catch (error) {
+//     console.error("Error in getAllPosts:", error);
+//     return errorResponse(res, 'Failed to fetch posts', 500, error.message);
+//   }
+// };
+
+// Get all posts (Modified)
 const getAllPosts = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 5;
     const cursor = req.query.cursor;
     const userId = req.query.userId;
 
-    const user = await User.findById(userId).select('friends');
+    const user = await User.findById(userId);
     if (!user) {
       return successResponse(res, {
         posts: [],
@@ -289,13 +383,9 @@ const getAllPosts = async (req, res) => {
       }, 'User not found');
     }
 
-    const followedUserIds = user.friends.map(f => f.toString());
-    const priorityUserIds = [...followedUserIds, userId];
     const timeCondition = cursor ? { createdAt: { $lt: new Date(cursor) } } : {};
 
-    // Own posts
-    const ownPostsRaw = await Post.find({
-      user: userId,
+    const postsRaw = await Post.find({
       ...timeCondition
     })
       .populate('user', 'firstName lastName fullName profilePicture friends accountStatus')
@@ -304,63 +394,26 @@ const getAllPosts = async (req, res) => {
       .limit(limit)
       .lean();
 
-    //Filter out posts where user is deactivated
-    const ownPosts = ownPostsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
+    const posts = postsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
 
-    const remainingLimitAfterOwn = limit - ownPosts.length;
-
-    let followedPosts = [];
-    if (remainingLimitAfterOwn > 0) {
-      const followedPostsRaw = await Post.find({
-        user: { $in: followedUserIds, $ne: userId },
-        ...timeCondition
-      })
-        .populate('user', 'firstName lastName fullName profilePicture friends accountStatus')
-        .populate('sanghId', 'name sanghImage')
-        .sort({ createdAt: -1 })
-        .limit(remainingLimitAfterOwn)
-        .lean();
-
-      followedPosts = followedPostsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
-    }
-
-    const remainingLimitAfterFollowed = remainingLimitAfterOwn - followedPosts.length;
-
-    let otherPosts = [];
-    if (remainingLimitAfterFollowed > 0) {
-      const otherPostsRaw = await Post.find({
-        user: { $nin: priorityUserIds },
-        ...timeCondition
-      })
-        .populate('user', 'firstName lastName fullName profilePicture friends accountStatus')
-        .populate('sanghId', 'name sanghImage')
-        .sort({ createdAt: -1 })
-        .limit(remainingLimitAfterFollowed)
-        .lean();
-
-      otherPosts = otherPostsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
-    }
-
-    const allPosts = [...ownPosts, ...followedPosts, ...otherPosts];
-
-    const nextCursor = allPosts.length > 0
-      ? allPosts[allPosts.length - 1].createdAt.toISOString()
+    const nextCursor = posts.length > 0
+      ? posts[posts.length - 1].createdAt.toISOString()
       : null;
 
-    // Add default empty friends if not exists
-    allPosts.forEach(post => {
+    // Ensure default empty friends array
+    posts.forEach(post => {
       if (post.user && !post.user.friends) {
         post.user.friends = [];
       }
     });
 
     return successResponse(res, {
-      posts: allPosts,
+      posts,
       pagination: {
         nextCursor,
-        hasMore: allPosts.length === limit
+        hasMore: posts.length === limit
       }
-    }, 'All user posts fetched');
+    }, 'All posts fetched successfully');
 
   } catch (error) {
     console.error("Error in getAllPosts:", error);
@@ -368,65 +421,6 @@ const getAllPosts = async (req, res) => {
   }
 };
 
-// Get all posts (Modified: Followed User Posts First)
-// const getAllPosts = async (req, res) => {
-//   try {
-//     const limit = parseInt(req.query.limit) || 5;
-//     const cursor = req.query.cursor;
-//     const userId = req.query.userId; // User ID of the logged-in user
-
-//     // Skip the cache when debugging pagination
-//     const cacheKey = cursor
-//       ? `allUserPosts:cursor:${cursor}:limit:${limit}:page:${req.query.page || 1}`
-//       : `allUserPosts:firstPage:limit:${limit}`;
-
-//     // Add a page parameter to your API call
-//     const page = parseInt(req.query.page) || 1;
-//     const skip = cursor ? 0 : (page - 1) * limit;
-
-//     const result = await getOrSetCache(cacheKey, async () => {
-//       const cursorQuery = cursor ? { createdAt: { $lt: new Date(cursor) } } : {};
-
-//       // Fetching the user's followed list
-//       const user = await User.findById(userId).select('friends');
-//       if (!user) {
-//         return { posts: [], pagination: { nextCursor: null, hasMore: false, currentPage: page } };
-//       }
-
-//       const followedUserIds = user.friends.map(f => f.toString());
-
-//       // Fetching posts with followed users first
-//       const posts = await Post.find(cursorQuery)
-//         .populate('user', 'firstName lastName fullName profilePicture')
-//         .sort({ createdAt: -1 })
-//         .lean();
-
-//       // Separate followed and non-followed user posts
-//       const followedPosts = posts.filter(post => followedUserIds.includes(post.user._id.toString()));
-//       const otherPosts = posts.filter(post => !followedUserIds.includes(post.user._id.toString()));
-
-//       const sortedPosts = [...followedPosts, ...otherPosts].slice(skip, skip + limit);
-
-//       const nextCursor = sortedPosts.length > 0
-//         ? sortedPosts[sortedPosts.length - 1].createdAt.toISOString()
-//         : null;
-
-//       return {
-//         posts: sortedPosts,
-//         pagination: {
-//           nextCursor,
-//           hasMore: sortedPosts.length === limit,
-//           currentPage: page,
-//         }
-//       };
-//     }, 30); // Cache for 30 seconds
-
-//     return successResponse(res, result, 'All user posts fetched');
-//   } catch (error) {
-//     console.error("Error in getAllPosts:", error);
-//     return errorResponse(res, 'Failed to fetch posts', 500, error.message);
-//   }
-// };
 
 // Function to toggle like on a post
 const toggleLike = [
