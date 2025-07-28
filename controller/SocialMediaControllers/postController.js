@@ -299,12 +299,12 @@ const getAllPosts = async (req, res) => {
       ...timeCondition
     })
       .populate('user', 'firstName lastName fullName profilePicture friends accountStatus')
-      .populate('sanghId', '_id name sanghImage')
+      .populate('sanghId', 'name sanghImage')
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
 
-    // ✅ Filter out posts where user is deactivated
+    //Filter out posts where user is deactivated
     const ownPosts = ownPostsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
 
     const remainingLimitAfterOwn = limit - ownPosts.length;
@@ -316,6 +316,7 @@ const getAllPosts = async (req, res) => {
         ...timeCondition
       })
         .populate('user', 'firstName lastName fullName profilePicture friends accountStatus')
+        .populate('sanghId', 'name sanghImage')
         .sort({ createdAt: -1 })
         .limit(remainingLimitAfterOwn)
         .lean();
