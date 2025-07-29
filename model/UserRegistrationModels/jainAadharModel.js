@@ -9,9 +9,6 @@ const jainAadharSchema = new mongoose.Schema(
           required: true,
            default: null
     },
-    promoterId:{
-      type:String
-    },
     jainAadharNumber:{
       type:String
     },
@@ -20,14 +17,18 @@ const jainAadharSchema = new mongoose.Schema(
     gender:{type:String},
     dob: {type: String },
     age: { type: String },
-    birthPlace: { type: String },
     bloodGroup: {type: String},
-       contactDetails: {
+    contactDetails: {
       number: { type: String },
-      whatsappNumber: { type: String },
       guardiansNumber: { type: String },
-      guardiansRelation: { type: String },
       email: { type: String },
+    },
+    location: {
+      country: { type: String, required: true, default: 'India' },
+      state: String,
+      district: String,
+      address: String,
+      pinCode: String
     },
      isEmailVerified: {
       type: Boolean,
@@ -48,31 +49,12 @@ const jainAadharSchema = new mongoose.Schema(
     panth: {
       type:String
     },
-    subCaste: {
-       type: String,
-     },
-    gotra: { type: String },
-    subGotra:{type:String},
-    sansthan: { type: String },
-    sansthanPosition: { type: String },
     pitaKaNaam: { type: String },
-    pitaKaMulNiwas: { type: String },
     mataKaNaam: { type: String },
-    mataKaMulNiwas: { type: String },
-    dadaKaNaam: { type: String },
-    dadaKaMulNiwas: { type: String },
-    parDadaKaNaam: { type: String },
-    parDadaKaMulNiwas: { type: String },
     brotherCount: { type: String },
     sisterCount: { type: String },
-   brother: [{ type: String }],  // array of brother names
+   brother: [{ type: String }],
    sister: [{ type: String }],
-    mamaPaksh: {
-      nanajiName: { type: String },
-      mulNiwas: { type: String },
-      mamaGotra: { type: String },
-    },
-    //workingOption: { type: String },
     education: { type: String },
     job: { type: String },
     jobCompanyName: { type: String },
@@ -90,20 +72,7 @@ const jainAadharSchema = new mongoose.Schema(
     houseWife : {type:String},
     retired : {type:String},
    religionConvert: { type: String, enum: ['Yes', 'No'], default: 'No' },
-   convertReason: { type: String }, 
-   marriageDetails: {
-    religionJati: { type: String },
-    religionUpjati: { type: String },
-    religionGotra: { type: String }
-  },
-   conversionDetails: {
-    jati: { type: String },
-    upjati: { type: String },
-    gotra: {type:String},
-    inspiration: { type: String },
-    time: { type: String },
-    guidance: { type: String },
- },
+   convertReason: { type: String },
     qrCode: { type: String },
     AadharCard: { type: String },
     userProfile: { type: String },
@@ -120,7 +89,7 @@ const jainAadharSchema = new mongoose.Schema(
     // New fields for level-specific review
     applicationLevel: {
       type: String,
-      enum: ['superadmin', 'country', 'state', 'district', 'city', 'area'],
+      enum: ['superadmin','foundation', 'country', 'state', 'district', 'city', 'area'],
       required: true
     },
     reviewingSanghId: {
@@ -150,7 +119,7 @@ const jainAadharSchema = new mongoose.Schema(
       },
       level: {
         type: String,
-        enum: ['superadmin', 'country', 'state', 'district', 'city', 'area', 'user']
+        enum: ['superadmin','foundation', 'country', 'state', 'district', 'city', 'area', 'user']
       },
       sanghId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -162,13 +131,7 @@ const jainAadharSchema = new mongoose.Schema(
         default: Date.now
       }
     }],
-location: {
-  country: { type: String, required: true, default: 'India' },
-  state: String,
-  district: String,
-  address: String,
-  pinCode: String
-}
+
   },
   { timestamps: true }
 );

@@ -162,10 +162,10 @@ if (req.body.applicationLevel && req.body.reviewingSanghId) {
             }]
       };
      if (req.files) {
-        if (req.files.aadharCard && req.files.aadharCard[0]) {
-            const aadharUrl = req.files.aadharCard[0].location || req.files.aadharCard[0].path;
-            jainAadharData.AadharCard = convertS3UrlToCDN(aadharUrl);
-        }
+        // if (req.files.aadharCard && req.files.aadharCard[0]) {
+        //     const aadharUrl = req.files.aadharCard[0].location || req.files.aadharCard[0].path;
+        //     jainAadharData.AadharCard = convertS3UrlToCDN(aadharUrl);
+        // }
         if (req.files.userProfile && req.files.userProfile[0]) {
             const profileUrl = req.files.userProfile[0].location || req.files.userProfile[0].path;
             jainAadharData.userProfile = convertS3UrlToCDN(profileUrl);
@@ -333,8 +333,8 @@ const generateJainAadharNumber = async () => {
   while (true) {
     // Generate a random 8-digit number
     const randomNum = Math.floor(10000000 + Math.random() * 90000000);
-    const jainAadharNumber = `JA${randomNum}`;
-    
+    const jainAadharNumber = `JAIN${randomNum}`;
+
     // Check if this number already exists
     const existingUser = await User.findOne({ jainAadharNumber });
     if (!existingUser) {
