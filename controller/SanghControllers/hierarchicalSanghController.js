@@ -536,7 +536,7 @@ const updatePanchMembers = async (req, res) => {
     }
 
     if (panches.length > 5) {
-      return res.status(400).json({ success: false, message: 'Only 5 Panch members allowed' });
+      return res.status(400).json({ success: false, message: 'Only 5 Panch members allowed at a time' });
     }
 
     const sangh = await HierarchicalSangh.findById(sanghId);
@@ -552,8 +552,7 @@ const updatePanchMembers = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Unauthorized to update this sangh' });
     }
 
-    sangh.panches = [];
-
+    const existingUserIds = new Set(sangh.panches.map(p => String(p.userId)));
     const addedUserIds = new Set();
 
     for (const pm of panches) {
@@ -562,8 +561,14 @@ const updatePanchMembers = async (req, res) => {
         continue;
       }
 
-      if (addedUserIds.has(pm.userId)) {
-        console.warn("⚠️ Duplicate userId skipped:", pm.userId);
+      const userIdStr = String(pm.userId);
+      if (existingUserIds.has(userIdStr)) {
+        console.warn("⚠️ Skipping already existing user:", userIdStr);
+        continue;
+      }
+
+      if (addedUserIds.has(userIdStr)) {
+        console.warn("⚠️ Duplicate in current request skipped:", userIdStr);
         continue;
       }
 
@@ -589,12 +594,12 @@ const updatePanchMembers = async (req, res) => {
         paymentStatus: pm.paymentStatus || 'pending',
       });
 
-      addedUserIds.add(pm.userId);
+      addedUserIds.add(userIdStr);
 
       const user = await User.findById(pm.userId);
       if (user) {
         const roleIndex = user.sanghRoles.findIndex(
-          r => r.sanghId?.toString() === sanghId
+          r => String(r.sanghId) === sanghId
         );
         if (roleIndex !== -1) {
           user.sanghRoles[roleIndex].role = 'panchMember';
@@ -614,7 +619,7 @@ const updatePanchMembers = async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'Panch members updated successfully',
+      message: 'Panch members updated (merged) successfully',
       data: sangh.panches,
     });
 
@@ -623,7 +628,6 @@ const updatePanchMembers = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
-
 // Get Sanghs by level and location
 const getSanghsByLevelAndLocation = asyncHandler(async (req, res) => {
     try {
