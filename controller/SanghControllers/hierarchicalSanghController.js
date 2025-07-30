@@ -529,7 +529,7 @@ const updatePanchMembers = async (req, res) => {
     const { panches } = req.body;
     const requester = req.user; // assume req.user is set via middleware
 
-    console.log("📥 Received Panches:", panches);
+    //console.log("📥 Received Panches:", panches);
 
     if (!Array.isArray(panches)) {
       return res.status(400).json({ success: false, message: 'Panch members must be an array' });

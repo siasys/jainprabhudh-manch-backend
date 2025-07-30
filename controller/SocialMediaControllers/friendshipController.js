@@ -114,16 +114,20 @@ const getFollowing = asyncHandler(async (req, res) => {
     try {
         const following = await Friendship.find({ follower: userId })
             .populate('following', 'firstName lastName fullName profilePicture'); 
+
+        // 🔐 Filter out any broken references (null following)
+        const validFollowing = following.filter(f => f.following);
+
         res.status(200).json({
             success: true,
-            count: following.length,
-            following: following.map(f => ({
+            count: validFollowing.length,
+            following: validFollowing.map(f => ({
                 id: f.following._id,
                 firstName: f.following.firstName,
                 lastName: f.following.lastName,
                 fullName: f.following.fullName,
                 profilePicture: f.following.profilePicture,
-                 followStatus: f.followStatus
+                followStatus: f.followStatus
             }))
         });
     } catch (error) {
