@@ -15,28 +15,24 @@ const initializeWebSocket = (server) => {
     },
     transports: ['websocket', 'polling'],
     allowUpgrades: true,
-    pingTimeout: 60000, // Close connection after 60s of inactivity
-    pingInterval: 25000, // Send a ping every 25s
+    pingTimeout: 60000,
+    pingInterval: 25000,
   });
 
   io.use((socket, next) => {
     try {
-      // Authenticate WebSocket connection using JWT
       const token = socket.handshake.auth.token;
       if (!token) {
         return next(new Error('Authentication error: No token provided'));
       }
-
-      // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       socket.userId = decoded._id;
-      
-      // Store user's online status in memory
+
       userStatus.set(socket.userId, {
         status: 'online',
         lastSeen: Date.now()
       });
-      
+
       next();
     } catch (error) {
       console.error('Socket authentication error:', error);
@@ -47,22 +43,15 @@ const initializeWebSocket = (server) => {
   io.on('connection', (socket) => {
     console.log('User connected:', socket.userId);
 
-    // Store socket mapping
     userSockets.set(socket.userId, socket.id);
-
-    // Join personal room
     socket.join(socket.userId.toString());
-
-    // Update and broadcast user's online status
     updateUserStatus(socket.userId, 'online');
 
-    // Handle joining group chats
     socket.on('joinGroup', (groupId) => {
       socket.join(`group:${groupId}`);
       console.log(`User ${socket.userId} joined group ${groupId}`);
     });
 
-    // Handle typing events
     socket.on('typing', ({ chatId, receiverId }) => {
       if (chatId) {
         socket.to(`group:${chatId}`).emit('userTyping', {
@@ -76,7 +65,6 @@ const initializeWebSocket = (server) => {
       }
     });
 
-    // Handle read receipts
     socket.on('messageRead', (data) => {
       const { messageId, senderId } = data;
       socket.to(senderId.toString()).emit('messageReadReceipt', {
@@ -85,7 +73,6 @@ const initializeWebSocket = (server) => {
       });
     });
 
-    // Add message delivery status
     socket.on('messageDelivered', (data) => {
       const { messageId, senderId } = data;
       socket.to(senderId.toString()).emit('messageDeliveryStatus', {
@@ -95,13 +82,11 @@ const initializeWebSocket = (server) => {
       });
     });
 
-    // Handle group typing
     socket.on('typingInGroup', ({ groupId }) => {
       const groupChatController = require('../controllers/SocialMediaControllers/groupChatController');
       groupChatController.handleGroupTyping(socket, groupId);
     });
 
-    // Handle group message read status
     socket.on('groupMessageRead', ({ groupId, messageId }) => {
       socket.to(`group:${groupId}`).emit('groupMessageReadStatus', {
         messageId,
@@ -110,12 +95,29 @@ const initializeWebSocket = (server) => {
       });
     });
 
-    // Handle errors
+    // ✅ NEW: Handle sendMessage from client socket
+    socket.on('sendMessage', (data) => {
+      const receiverId = data?.receiver?._id || data?.receiver;
+      if (!receiverId) return;
+
+      const formattedMessage = {
+        message: data,
+        sender: {
+          _id: socket.userId
+        }
+      };
+
+      if (userSockets.has(receiverId)) {
+        io.to(receiverId.toString()).emit('newMessage', formattedMessage);
+      } else {
+        addToMessageQueue(receiverId, formattedMessage);
+      }
+    });
+
     socket.on('error', (error) => {
       console.error('Socket error:', error);
     });
 
-    // When user connects, send queued messages
     if (messageQueue.has(socket.userId)) {
       const messages = messageQueue.get(socket.userId);
       messages.forEach(msg => {
@@ -124,18 +126,13 @@ const initializeWebSocket = (server) => {
       messageQueue.delete(socket.userId);
     }
 
-    // Handle disconnection
     socket.on('disconnect', () => {
       userSockets.delete(socket.userId);
-      
-      // Update user's last seen time and status
       updateUserStatus(socket.userId, 'offline');
-      
       console.log('User disconnected:', socket.userId);
     });
   });
 
-  // Add reconnection logic
   io.on('reconnect_attempt', () => {
     console.log('Attempting to reconnect...');
   });
@@ -143,7 +140,7 @@ const initializeWebSocket = (server) => {
   return io;
 };
 
-// Helper Functions
+// Helper functions
 const getUserStatus = (userId) => {
   if (!userStatus.has(userId)) {
     return { status: 'offline', lastSeen: null };
@@ -170,7 +167,7 @@ const updateUserStatus = (userId, status) => {
     status,
     lastSeen: status === 'offline' ? Date.now() : null
   });
-  
+
   if (io) {
     io.emit('userStatusUpdate', {
       userId,

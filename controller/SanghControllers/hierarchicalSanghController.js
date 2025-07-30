@@ -1071,8 +1071,6 @@ const addSanghMember = asyncHandler(async (req, res) => {
   }
 });
 
-
-
 // Remove member from Sangh
 const removeSanghMember = asyncHandler(async (req, res) => {
     try {
