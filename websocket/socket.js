@@ -160,7 +160,7 @@ const getIo = () => {
   if (!io) {
     throw new Error('Socket.io not initialized');
   }
-  return io;
+  return io;updateUserStatus
 };
 
 const addToMessageQueue = (userId, message) => {
