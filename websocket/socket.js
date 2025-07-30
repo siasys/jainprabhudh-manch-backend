@@ -1,6 +1,6 @@
 const socketIo = require('socket.io');
 const jwt = require('jsonwebtoken');
-
+const User = require('../model/UserRegistrationModels/userModel')
 let io;
 const userSockets = new Map();
 const userStatus = new Map(); 
@@ -162,18 +162,29 @@ const addToMessageQueue = (userId, message) => {
   messageQueue.get(userId).push(message);
 };
 
-const updateUserStatus = (userId, status) => {
-  userStatus.set(userId, {
+const updateUserStatus = async (userId, status) => {
+  const statusObj = {
     status,
-    lastSeen: status === 'offline' ? Date.now() : null
-  });
+    lastSeen: status === 'offline' ? new Date() : null,
+  };
+
+  userStatus.set(userId, statusObj);
 
   if (io) {
     io.emit('userStatusUpdate', {
       userId,
-      status,
-      lastSeen: status === 'offline' ? Date.now() : null
+      ...statusObj,
     });
+  }
+
+  // ✅ Update in database
+  try {
+    await User.findByIdAndUpdate(userId, {
+      status: statusObj.status,
+      lastSeen: statusObj.lastSeen,
+    });
+  } catch (err) {
+    console.error(`❌ Failed to update user ${userId} status in DB:`, err.message);
   }
 };
 

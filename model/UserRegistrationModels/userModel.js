@@ -195,6 +195,15 @@ const userSchema = new mongoose.Schema(
       enum: ['active', 'deactivated'],
       default: 'active'
     },
+      status: {
+    type: String,
+    enum: ['online', 'offline'],
+    default: 'offline',
+  },
+  lastSeen: {
+    type: Date,
+    default: null,
+  },
     sanghRoles: [{
       sanghId: {
         type: mongoose.Schema.Types.ObjectId,

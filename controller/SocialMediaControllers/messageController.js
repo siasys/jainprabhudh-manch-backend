@@ -508,7 +508,7 @@ exports.getConversation = async (req, res) => {
     const messages = await Message.find({
       $or: [{ sender: userId }, { receiver: userId }]
     })
-    .sort({ createdAt: -1 }) // latest first
+    .sort({ createdAt: -1 })
     .populate('sender', 'fullName profilePicture')
     .populate('receiver', 'fullName profilePicture');
 
