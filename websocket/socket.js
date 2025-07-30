@@ -1,6 +1,8 @@
 const socketIo = require('socket.io');
 const jwt = require('jsonwebtoken');
-const User = require('../model/UserRegistrationModels/userModel')
+const User = require('../model/UserRegistrationModels/userModel');
+const Message = require('../model/SocialMediaModels/messageModel')
+
 let io;
 const userSockets = new Map();
 const userStatus = new Map(); 
@@ -19,26 +21,37 @@ const initializeWebSocket = (server) => {
     pingInterval: 25000,
   });
 
-  io.use((socket, next) => {
-    try {
-      const token = socket.handshake.auth.token;
-      if (!token) {
-        return next(new Error('Authentication error: No token provided'));
-      }
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      socket.userId = decoded._id;
+io.use(async (socket, next) => {
 
-      userStatus.set(socket.userId, {
-        status: 'online',
-        lastSeen: Date.now()
-      });
+  const token = socket.handshake.auth?.token;
+  if (!token) {
+    console.warn("❌ No token found in handshake.auth");
+    return next(new Error("Authentication error: No token"));
+  }
 
-      next();
-    } catch (error) {
-      console.error('Socket authentication error:', error);
-      return next(new Error('Authentication error: Invalid token'));
-    }
-  });
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    //console.log("🔓 Token decoded:", decoded);
+
+    socket.userId = decoded._id;
+    //console.log("🆔 Assigned socket.userId:", socket.userId);
+
+    // DB me bhi update karne ki koshish karo abhi
+    const result = await User.findByIdAndUpdate(
+      socket.userId,
+      { status: 'online', lastSeen: null },
+      { new: true }
+    );
+
+    //console.log("✅ DB update result:", result);
+
+    return next();
+  } catch (err) {
+    console.error("❌ JWT verification failed:", err.message);
+    return next(new Error("Authentication error"));
+  }
+});
+
 
   io.on('connection', (socket) => {
     console.log('User connected:', socket.userId);
@@ -48,16 +61,17 @@ const initializeWebSocket = (server) => {
     updateUserStatus(socket.userId, 'online');
 
     // ✅ Add updateStatus here (just before sendMessage)
-  socket.on('updateStatus', ({ status }) => {
+    socket.on('updateStatus', ({ status }) => {
+    //  console.log('🔥 updateStatus received:', status); 
     if (['online', 'offline'].includes(status)) {
       updateUserStatus(socket.userId, status);
-      console.log(`User ${socket.userId} manually updated to ${status}`);
+      //console.log(`User ${socket.userId} manually updated to ${status}`);
     }
   });
 
     socket.on('joinGroup', (groupId) => {
       socket.join(`group:${groupId}`);
-      console.log(`User ${socket.userId} joined group ${groupId}`);
+     // console.log(`User ${socket.userId} joined group ${groupId}`);
     });
 
     socket.on('typing', ({ chatId, receiverId }) => {
@@ -73,22 +87,38 @@ const initializeWebSocket = (server) => {
       }
     });
 
-    socket.on('messageRead', (data) => {
-      const { messageId, senderId } = data;
-      socket.to(senderId.toString()).emit('messageReadReceipt', {
-        messageId,
-        readBy: socket.userId
-      });
+socket.on('messageRead', async (data) => {
+  const { messageId, senderId } = data;
+  try {
+    await Message.findByIdAndUpdate(messageId, {
+      isRead: true,
+      isDelivered: true // Optional: ensure it’s also delivered
     });
+    socket.to(senderId.toString()).emit('messageReadReceipt', {
+      messageId,
+      readBy: socket.userId
+    });
+  } catch (err) {
+    console.error("❌ Failed to update isRead in DB:", err.message);
+  }
+});
 
-    socket.on('messageDelivered', (data) => {
-      const { messageId, senderId } = data;
-      socket.to(senderId.toString()).emit('messageDeliveryStatus', {
-        messageId,
-        status: 'delivered',
-        deliveredAt: new Date()
-      });
+
+  socket.on('messageDelivered', async (data) => {
+  const { messageId, senderId } = data;
+  try {
+    await Message.findByIdAndUpdate(messageId, {
+      isDelivered: true
     });
+    socket.to(senderId.toString()).emit('messageDeliveryStatus', {
+      messageId,
+      status: 'delivered',
+      deliveredAt: new Date()
+    });
+  } catch (err) {
+    console.error("❌ Failed to update isDelivered in DB:", err.message);
+  }
+});
 
     socket.on('typingInGroup', ({ groupId }) => {
       const groupChatController = require('../controllers/SocialMediaControllers/groupChatController');
@@ -160,7 +190,7 @@ const getIo = () => {
   if (!io) {
     throw new Error('Socket.io not initialized');
   }
-  return io;updateUserStatus
+  return io;
 };
 
 const addToMessageQueue = (userId, message) => {
@@ -187,10 +217,20 @@ const updateUserStatus = async (userId, status) => {
 
   // ✅ Update in database
   try {
-    await User.findByIdAndUpdate(userId, {
-      status: statusObj.status,
-      lastSeen: statusObj.lastSeen,
-    });
+    const result = await User.findByIdAndUpdate(
+      userId,
+      {
+        status: statusObj.status,
+        lastSeen: statusObj.lastSeen,
+      },
+      { new: true } // optional: returns updated doc
+    );
+    //console.log("✅ DB update result:", result);
+    if (result) {
+     // console.log(`✅ DB updated: user ${userId} is now ${statusObj.status}`);
+    } else {
+      console.warn(`⚠️ No user found in DB for ID ${userId}`);
+    }
   } catch (err) {
     console.error(`❌ Failed to update user ${userId} status in DB:`, err.message);
   }

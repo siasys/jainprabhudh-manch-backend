@@ -173,8 +173,9 @@ initializeWebSocket(server);
 // Start the job scheduler
 scheduleStoryCleanup();
 
-app.listen(PORT, () => {
-    console.log(`Server is running at PORT ${PORT}`);
+server.listen(PORT, () => {
+    console.log(`✅ Server (HTTP + WebSocket) running on port ${PORT}`);
+
 });
 
 // // Function to delete expired stories every hour

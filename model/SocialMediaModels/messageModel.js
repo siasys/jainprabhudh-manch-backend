@@ -132,6 +132,11 @@ const messageSchema = new mongoose.Schema(
       default: false,
       index: true
     },
+    isDelivered: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
     readAt: {
       type: Date
     },
