@@ -47,6 +47,14 @@ const initializeWebSocket = (server) => {
     socket.join(socket.userId.toString());
     updateUserStatus(socket.userId, 'online');
 
+    // ✅ Add updateStatus here (just before sendMessage)
+  socket.on('updateStatus', ({ status }) => {
+    if (['online', 'offline'].includes(status)) {
+      updateUserStatus(socket.userId, status);
+      console.log(`User ${socket.userId} manually updated to ${status}`);
+    }
+  });
+
     socket.on('joinGroup', (groupId) => {
       socket.join(`group:${groupId}`);
       console.log(`User ${socket.userId} joined group ${groupId}`);
