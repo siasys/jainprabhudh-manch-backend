@@ -508,42 +508,60 @@ exports.getConversation = async (req, res) => {
     const messages = await Message.find({
       $or: [{ sender: userId }, { receiver: userId }]
     })
-    .sort({ createdAt: -1 })
-    .populate('sender', 'fullName profilePicture')
-    .populate('receiver', 'fullName profilePicture');
+      .sort({ createdAt: -1 })
+      .populate('sender', 'fullName profilePicture')
+      .populate('receiver', 'fullName profilePicture');
 
     const conversationMap = new Map();
 
-    // Loop through messages to get latest per conversation
-  messages.forEach((msg, index) => {
-  const isSender = msg.sender && msg.sender._id;
-  const isReceiver = msg.receiver && msg.receiver._id;
+    // Loop through messages to get latest per conversation and unread count
+    messages.forEach((msg) => {
+      const sender = msg.sender?._id?.toString();
+      const receiver = msg.receiver?._id?.toString();
 
-  // console.log(`\n[${index}] Message ID: ${msg._id}`);
-  // console.log("Sender:", msg.sender);
-  // console.log("Receiver:", msg.receiver);
+      if (!sender || !receiver) return;
 
-  if (!isSender || !isReceiver) {
-    console.warn(`Missing sender/receiver data for message ${msg._id}`);
-    return;
-  }
+      // Determine the other participant
+      const otherUserId = sender === userId ? receiver : sender;
 
-  const otherUser = msg.sender._id.toString() === userId
-    ? msg.receiver._id.toString()
-    : msg.sender._id.toString();
+      if (!conversationMap.has(otherUserId)) {
+        conversationMap.set(otherUserId, {
+          lastMessage: msg,
+          unreadCount: 0
+        });
+      }
 
-  if (!conversationMap.has(otherUser)) {
-    conversationMap.set(otherUser, msg);
-  }
-});
+      // Count unread messages sent *to* current user by that `otherUser`
+      if (
+        msg.receiver._id.toString() === userId && // current user is receiver
+        msg.sender._id.toString() === otherUserId && // message came from otherUser
+        msg.isRead === false
+      ) {
+        const entry = conversationMap.get(otherUserId);
+        entry.unreadCount += 1;
+      }
+    });
 
-    const recentChats = Array.from(conversationMap.values());
+    // Build final array
+    const recentChats = Array.from(conversationMap.entries()).map(
+      ([otherUserId, { lastMessage, unreadCount }]) => {
+        return {
+          _id: lastMessage._id,
+          sender: lastMessage.sender,
+          receiver: lastMessage.receiver,
+          message: lastMessage.message,
+          createdAt: lastMessage.createdAt,
+          unreadCount
+        };
+      }
+    );
 
     return successResponse(res, recentChats, 'Recent chats fetched', 200);
   } catch (err) {
     return errorResponse(res, 'Failed to fetch recent chats', 500, err);
   }
 };
+
 exports.getConversations = async (req, res) => {
   try {
     const userId = req.params.userId;

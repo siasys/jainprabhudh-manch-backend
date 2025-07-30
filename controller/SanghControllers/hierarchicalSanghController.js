@@ -527,6 +527,7 @@ const updatePanchMembers = async (req, res) => {
   try {
     const { sanghId } = req.params;
     const { panches } = req.body;
+    const requester = req.user; // assume req.user is set via middleware
 
     console.log("📥 Received Panches:", panches);
 
@@ -541,6 +542,14 @@ const updatePanchMembers = async (req, res) => {
     const sangh = await HierarchicalSangh.findById(sanghId);
     if (!sangh) {
       return res.status(404).json({ success: false, message: 'Sangh not found' });
+    }
+
+    // ✅ Check if user is superadmin or belongs to the sangh
+    if (
+      requester.role !== 'superadmin' &&
+      !requester.sanghRoles.some(role => String(role.sanghId) === sanghId)
+    ) {
+      return res.status(403).json({ success: false, message: 'Unauthorized to update this sangh' });
     }
 
     sangh.panches = [];
@@ -614,7 +623,6 @@ const updatePanchMembers = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
-
 
 // Get Sanghs by level and location
 const getSanghsByLevelAndLocation = asyncHandler(async (req, res) => {

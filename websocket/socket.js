@@ -43,7 +43,7 @@ io.use(async (socket, next) => {
       { new: true }
     );
 
-    //console.log("✅ DB update result:", result);
+    console.log("✅ DB update result:", result);
 
     return next();
   } catch (err) {
