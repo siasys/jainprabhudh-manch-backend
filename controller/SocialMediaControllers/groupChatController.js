@@ -395,9 +395,15 @@ exports.sendGroupMessage = async (req, res) => {
     group.groupMessages.push(newMessage);
     await group.save();
     // Get the last message (the one we just added)
-    const sentMessage = group.groupMessages[group.groupMessages.length - 1];
-    const plainSent = sentMessage.toObject();
-    plainSent.message = decrypt(plainSent.message);
+   const sentMessage = group.groupMessages[group.groupMessages.length - 1];
+  const plainSent = sentMessage.toObject();
+  if (plainSent.message) {
+      try {
+        plainSent.message = decrypt(plainSent.message);
+      } catch (e) {
+        console.warn("Message decryption failed:", e.message);
+      }
+    }
     const senderInfo = group.groupMembers.find(
       member => member.user._id.toString() === sender.toString()
     );
@@ -405,7 +411,7 @@ exports.sendGroupMessage = async (req, res) => {
     const messageData = {
       groupId,
       message: {
-        ...sentMessage.toObject(),
+            ...plainSent,
         sender: {
           _id: senderInfo.user._id,
           fullName: `${senderInfo.user.firstName} ${senderInfo.user.lastName}`,
