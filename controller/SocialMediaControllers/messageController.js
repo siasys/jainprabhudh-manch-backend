@@ -78,19 +78,30 @@ exports.createMessage = async (req, res) => {
       });
       await conversation.save();
     }
+let attachments = [];
 
+if (req.file) {
+  attachments.push({
+    type: 'image',
+    url: convertS3UrlToCDN(req.file.location),
+    name: req.file.originalname,
+    size: req.file.size
+  });
+} else if (req.body.imageUrl) {
+  attachments.push({
+    type: 'image',
+    url: req.body.imageUrl,
+    name: 'forwarded_image.jpg',
+    size: 0
+  });
+}
     // 📦 5. Prepare message data
     const messageData = {
       sender,
       receiver,
       senderType,
       message: message,
-      attachments: req.file ? [{
-        type: 'image',
-        url: convertS3UrlToCDN(req.file.location),
-        name: req.file.originalname,
-        size: req.file.size
-      }] : [],
+      attachments,
       createdAt: new Date()
     };
 
@@ -727,13 +738,14 @@ exports.sendImageMessage = async (req, res) => {
     if (!senderUser || !receiverUser) {
       return res.status(400).json({ message: 'Sender or receiver not found' });
     }
+     const cdnUrl = convertS3UrlToCDN(req.file.location);
     const newMessage = new Message({
       sender,
       receiver,
       message: 'Image',
       attachments: [{
         type: 'image',
-        url: req.file.location,
+        url: cdnUrl,
         name: req.file.originalname,
         size: req.file.size
       }],
