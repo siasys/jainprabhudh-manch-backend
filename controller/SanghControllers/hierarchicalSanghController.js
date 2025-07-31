@@ -1007,7 +1007,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
       jainAadharStatus: 'verified'
     }).populate('jainAadharApplication');
 
-    // if (!user) return errorResponse(res, 'Invalid or unverified Jain Aadhar number', 400);
+    if (!user) return errorResponse(res, 'Invalid or unverified Jain Aadhar number', 400);
 
     if (sangh.members.some(m => m.jainAadharNumber === jainAadharNumber))
       return errorResponse(res, 'Already a member of this Sangh', 400);
