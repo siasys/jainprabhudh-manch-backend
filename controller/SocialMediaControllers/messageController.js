@@ -181,7 +181,6 @@ if (req.file) {
   }
 };
 
-// DELETE /messages/clear/:receiverId
 exports.clearAllMessagesBetweenUsers = async (req, res) => {
   try {
     const senderId = req.user._id;
@@ -198,22 +197,32 @@ exports.clearAllMessagesBetweenUsers = async (req, res) => {
       ]
     });
 
-    // Delete any attachments from S3
+    // ✅ Delete any attachments from S3
     for (const msg of messages) {
       if (msg.attachments && msg.attachments.length > 0) {
         for (const attachment of msg.attachments) {
-          if (attachment.url) {
+          if (attachment.url && attachment.url.includes('.com/')) {
             const key = attachment.url.split('.com/')[1];
-            await s3Client.send(new DeleteObjectCommand({
-              Bucket: process.env.AWS_BUCKET_NAME,
-              Key: key
-            }));
+            if (key) {
+              try {
+                await s3Client.send(new DeleteObjectCommand({
+                  Bucket: process.env.AWS_BUCKET_NAME,
+                  Key: key
+                }));
+              } catch (s3Err) {
+                console.warn("Failed to delete S3 object:", key, s3Err.message);
+              }
+            } else {
+              console.warn("No valid key extracted from URL:", attachment.url);
+            }
+          } else {
+            console.warn("Invalid attachment URL, skipping:", attachment.url);
           }
         }
       }
     }
 
-    // Delete the messages from database
+    // ✅ Delete the messages from database
     await Message.deleteMany({
       $or: [
         { sender: senderId, receiver: receiverId },
@@ -221,16 +230,18 @@ exports.clearAllMessagesBetweenUsers = async (req, res) => {
       ]
     });
 
-    // Notify receiver via socket (optional)
+    // Optional: Notify receiver
     const io = getIo();
     io.to(receiverId.toString()).emit('allMessagesCleared', { senderId });
 
     res.status(200).json({ message: 'All messages between users cleared successfully' });
+
   } catch (error) {
     console.error('Error clearing messages:', error);
     res.status(500).json({ message: 'Error clearing messages', error: error.message });
   }
 };
+
 // PATCH /messages/block-unblock
 exports.blockUnblockUser = async (req, res) => {
   try {
