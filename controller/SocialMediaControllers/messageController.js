@@ -620,32 +620,41 @@ exports.deleteMessageById = async (req, res) => {
     const { id } = req.params;
     const userId = req.user._id;
     const message = await Message.findById(id);
-    // Check if the message exists
+
     if (!message) {
       return res.status(404).json({ message: 'Message not found' });
     }
-    // Verify message ownership
+
     if (message.sender.toString() !== userId.toString()) {
       return res.status(403).json({ message: 'You can only delete your own messages' });
     }
-     // Delete image from S3 if exists
-     if (message.attachments && message.attachments.length > 0) {
+
+    // ✅ Delete attachments if present
+    if (message.attachments && message.attachments.length > 0) {
       for (const attachment of message.attachments) {
-        if (attachment.url) {
+        if (attachment.url && attachment.url.includes('.com/')) {
           const key = attachment.url.split('.com/')[1];
-          await s3Client.send(new DeleteObjectCommand({
-            Bucket: process.env.AWS_BUCKET_NAME,
-            Key: key
-          }));
+          if (key) {
+            try {
+              await s3Client.send(new DeleteObjectCommand({
+                Bucket: process.env.AWS_BUCKET_NAME,
+                Key: key
+              }));
+            } catch (s3Err) {
+              console.warn('S3 deletion failed for key:', key, s3Err.message);
+            }
+          } else {
+            console.warn('No valid S3 key found in URL:', attachment.url);
+          }
         }
       }
     }
-    await message.deleteOne(); // Delete message from database
-    const sender = message.sender.toString();
-    const receiver = message.receiver.toString();
-    // Notify other user about message deletion
+
+    await message.deleteOne();
+
     const io = getIo();
     io.to(message.receiver.toString()).emit('messageDeleted', { messageId: id });
+
     res.status(200).json({ message: 'Message deleted successfully' });
   } catch (error) {
     console.error('Error deleting message:', error);
