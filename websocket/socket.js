@@ -147,6 +147,13 @@ socket.on('messageRead', async (data) => {
 
       if (userSockets.has(receiverId)) {
         io.to(receiverId.toString()).emit('newMessage', formattedMessage);
+
+        io.to(socket.userId.toString()).emit('messageDeliveryStatus', {
+          messageId: data._id,
+          status: 'delivered',
+          deliveredAt: new Date()
+        });
+          Message.findByIdAndUpdate(data._id, { isDelivered: true }).catch(console.error);
       } else {
         addToMessageQueue(receiverId, formattedMessage);
       }
