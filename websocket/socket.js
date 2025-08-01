@@ -93,8 +93,6 @@ socket.on('messageRead', async (data) => {
     await Message.findByIdAndUpdate(messageId, {
       isRead: true,
       isDelivered: true,
-      status: 'read',
-      readAt: new Date()
     });
     socket.to(senderId.toString()).emit('messageReadReceipt', {
       messageId,
@@ -135,37 +133,38 @@ socket.on('messageRead', async (data) => {
       });
     });
 
-    // ✅ NEW: Handle sendMessage from client socket
-  socket.on('sendMessage', async (data) => {
+socket.on('sendMessage', async (data) => {
   const receiverId = data?.receiver?._id || data?.receiver;
   const senderId = socket.userId;
+
   if (!receiverId || !data._id) return;
-console.log('✅ Sending delivery status to sender:', senderId);
+
   const formattedMessage = {
     message: data,
     sender: { _id: senderId }
   };
 
+  // ✅ Don't emit 'newMessage' back to sender
   if (userSockets.has(receiverId)) {
-    // ✅ Send to receiver (new message)
-    io.to(receiverId.toString()).emit('newMessage', formattedMessage);
+    // Send only to receiver
+    if (receiverId !== senderId) {
+      io.to(receiverId.toString()).emit('newMessage', formattedMessage);
+    }
 
-    // ✅ Send delivery status back to sender (double tick grey)
+    // Send delivery status back to sender
     io.to(senderId.toString()).emit('messageDeliveryStatus', {
       messageId: data._id,
       status: 'delivered',
       deliveredAt: new Date()
     });
 
-    // ✅ Update DB also
+    // Update DB
     try {
       await Message.findByIdAndUpdate(data._id, { isDelivered: true });
     } catch (err) {
       console.error('DB update failed for isDelivered:', err.message);
     }
-
   } else {
-    // ✅ User offline → add to queue
     addToMessageQueue(receiverId, formattedMessage);
   }
 });
