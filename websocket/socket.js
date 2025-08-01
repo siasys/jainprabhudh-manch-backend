@@ -1,7 +1,7 @@
 const socketIo = require('socket.io');
 const jwt = require('jsonwebtoken');
 const User = require('../model/UserRegistrationModels/userModel');
-const Message = require('../model/SocialMediaModels/messageModel')
+const {Message} = require('../model/SocialMediaModels/messageModel')
 
 let io;
 const userSockets = new Map();
@@ -92,7 +92,9 @@ socket.on('messageRead', async (data) => {
   try {
     await Message.findByIdAndUpdate(messageId, {
       isRead: true,
-      isDelivered: true // Optional: ensure it’s also delivered
+      isDelivered: true,
+      status: 'read',
+      readAt: new Date()
     });
     socket.to(senderId.toString()).emit('messageReadReceipt', {
       messageId,
@@ -134,30 +136,40 @@ socket.on('messageRead', async (data) => {
     });
 
     // ✅ NEW: Handle sendMessage from client socket
-    socket.on('sendMessage', (data) => {
-      const receiverId = data?.receiver?._id || data?.receiver;
-      if (!receiverId) return;
+  socket.on('sendMessage', async (data) => {
+  const receiverId = data?.receiver?._id || data?.receiver;
+  const senderId = socket.userId;
+  if (!receiverId || !data._id) return;
+console.log('✅ Sending delivery status to sender:', senderId);
+  const formattedMessage = {
+    message: data,
+    sender: { _id: senderId }
+  };
 
-      const formattedMessage = {
-        message: data,
-        sender: {
-          _id: socket.userId
-        }
-      };
+  if (userSockets.has(receiverId)) {
+    // ✅ Send to receiver (new message)
+    io.to(receiverId.toString()).emit('newMessage', formattedMessage);
 
-      if (userSockets.has(receiverId)) {
-        io.to(receiverId.toString()).emit('newMessage', formattedMessage);
-
-        io.to(socket.userId.toString()).emit('messageDeliveryStatus', {
-          messageId: data._id,
-          status: 'delivered',
-          deliveredAt: new Date()
-        });
-          Message.findByIdAndUpdate(data._id, { isDelivered: true }).catch(console.error);
-      } else {
-        addToMessageQueue(receiverId, formattedMessage);
-      }
+    // ✅ Send delivery status back to sender (double tick grey)
+    io.to(senderId.toString()).emit('messageDeliveryStatus', {
+      messageId: data._id,
+      status: 'delivered',
+      deliveredAt: new Date()
     });
+
+    // ✅ Update DB also
+    try {
+      await Message.findByIdAndUpdate(data._id, { isDelivered: true });
+    } catch (err) {
+      console.error('DB update failed for isDelivered:', err.message);
+    }
+
+  } else {
+    // ✅ User offline → add to queue
+    addToMessageQueue(receiverId, formattedMessage);
+  }
+});
+
 
     socket.on('error', (error) => {
       console.error('Socket error:', error);
