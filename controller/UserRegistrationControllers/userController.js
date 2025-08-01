@@ -93,6 +93,7 @@ if (existingUserByPhone) {
             location: {
             country: 'India',
             state: location.state,
+            district: location.district,
             city: location.city
         },
             verificationCode: {

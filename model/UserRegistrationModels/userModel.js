@@ -80,6 +80,9 @@ const userSchema = new mongoose.Schema(
       state: {
         type: String,
       },
+      district:{
+        type: String,
+      },
       city: {
         type: String,
       }
