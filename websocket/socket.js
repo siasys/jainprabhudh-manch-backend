@@ -170,7 +170,26 @@ socket.on('sendMessage', async (data) => {
     addToMessageQueue(receiverId, formattedMessage);
   }
 });
+socket.on('markMessagesRead', async ({ senderId }) => {
+  try {
+    await Message.updateMany(
+      { sender: senderId, receiver: socket.userId, isRead: false },
+      { isRead: true, isDelivered: true }
+    );
 
+    // ✅ Notify sender
+    socket.to(senderId.toString()).emit('messagesReadByReceiver', {
+      readBy: socket.userId,
+      senderId
+    });
+
+    // ✅ Refresh unread count on receiver (self)
+    io.to(socket.userId.toString()).emit('unreadMessageCountUpdate');
+
+  } catch (err) {
+    console.error("❌ Error in markMessagesRead:", err.message);
+  }
+});
 
     socket.on('error', (error) => {
       console.error('Socket error:', error);
