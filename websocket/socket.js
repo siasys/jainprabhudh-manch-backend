@@ -98,6 +98,7 @@ socket.on('messageRead', async (data) => {
       messageId,
       readBy: socket.userId
     });
+      io.to(socket.userId.toString()).emit('unreadMessageCountUpdate');
   } catch (err) {
     console.error("❌ Failed to update isRead in DB:", err.message);
   }
@@ -161,6 +162,7 @@ socket.on('sendMessage', async (data) => {
     // Update DB
     try {
       await Message.findByIdAndUpdate(data._id, { isDelivered: true });
+          io.to(receiverId.toString()).emit('unreadMessageCountUpdate');
     } catch (err) {
       console.error('DB update failed for isDelivered:', err.message);
     }
