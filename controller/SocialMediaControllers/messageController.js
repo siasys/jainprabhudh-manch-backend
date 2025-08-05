@@ -20,8 +20,7 @@ exports.createMessage = async (req, res) => {
     const message = req.body.message;
     const senderType = req.body.senderType || req.user.type;
     const receiverType = req.body.receiverType || 'user';
-
-    // 🛡️ 1. Validate message
+    // 1. Validate message
     if (!message || message.trim() === "") {
       return res.status(400).json({ message: 'Message cannot be empty' });
     }
@@ -50,7 +49,7 @@ exports.createMessage = async (req, res) => {
       }
     }
 
-    // 🎯 3. Fetch receiver (can be user or sangh)
+    // 3. Fetch receiver (can be user or sangh)
     let receiverUser = null;
     let receiverSangh = null;
     if (receiverType === 'sangh') {
@@ -64,8 +63,13 @@ exports.createMessage = async (req, res) => {
         return errorResponse(res, 'Receiver User not found', 400);
       }
     }
-
-    // 💬 4. Create/get conversation
+    if (receiverUser?.blockedUsers?.includes(sender)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are blocked by this user. Message cannot be sent.'
+      });
+    }
+    //  Create/get conversation
     const conversationCacheKey = `conversation:${sender}:${receiver}`;
     let conversation = await getOrSetCache(conversationCacheKey, async () => {
       return await Conversation.findOne({
@@ -139,6 +143,19 @@ if (req.file) {
     const newMessage = new Message(messageData);
     await newMessage.save();
 
+    // Block check before emit
+    const latestBlockMessage = await Message.findOne({
+      $or: [
+        { sender: sender, receiver: receiver },
+        { sender: receiver, receiver: sender }
+      ]
+    }).sort({ createdAt: -1 });
+
+    const isBlocked =
+      (latestBlockMessage?.sender?.toString() === sender && latestBlockMessage?.isBlockedBySender) ||
+      (latestBlockMessage?.receiver?.toString() === sender && latestBlockMessage?.isBlockedByReceiver);
+
+
     // 🔁 7. Update conversation
     conversation.messages.push(newMessage._id);
     conversation.lastMessage = newMessage._id;
@@ -151,18 +168,20 @@ if (req.file) {
     // 🔊 8. Emit socket message
     const decryptedMessage = newMessage.decryptedMessage;
     const io = getIo();
-    io.to(receiver.toString()).emit('newMessage', {
-      message: {
-        ...newMessage.toObject(),
-        message: decryptedMessage
-      },
-      sender: senderInfo
-    });
-
-    // 🎉 9. Success response
+    if (!isBlocked) {
+        io.to(receiver.toString()).emit('newMessage', {
+          message: {
+            ...newMessage.toObject(),
+            message: decryptedMessage
+          },
+          sender: senderInfo
+        });
+      }
+ 
+    // 9. Success response
     return successResponse(res, {
       ...newMessage.toObject(),
-      message: decryptedMessage
+      message: decryptedMessage,
     }, 'Message sent successfully', 201);
 
   } catch (error) {
@@ -183,101 +202,128 @@ if (req.file) {
 
 exports.clearAllMessagesBetweenUsers = async (req, res) => {
   try {
-    const senderId = req.user._id;
+    const userId = req.user._id;
     const receiverId = req.params.receiverId;
+    const { type } = req.body; // 'me' or 'everyone'
 
-    if (!receiverId) {
-      return res.status(400).json({ message: 'Receiver ID is required' });
+    if (!receiverId || !['me', 'everyone'].includes(type)) {
+      return res.status(400).json({ message: 'receiverId and valid type (me/everyone) required' });
     }
 
-    const messages = await Message.find({
-      $or: [
-        { sender: senderId, receiver: receiverId },
-        { sender: receiverId, receiver: senderId }
-      ]
-    });
+    const thirtyDaysFromNow = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    // ✅ Delete any attachments from S3
-    for (const msg of messages) {
-      if (msg.attachments && msg.attachments.length > 0) {
-        for (const attachment of msg.attachments) {
-          if (attachment.url && attachment.url.includes('.com/')) {
-            const key = attachment.url.split('.com/')[1];
-            if (key) {
-              try {
-                await s3Client.send(new DeleteObjectCommand({
-                  Bucket: process.env.AWS_BUCKET_NAME,
-                  Key: key
-                }));
-              } catch (s3Err) {
-                console.warn("Failed to delete S3 object:", key, s3Err.message);
-              }
-            } else {
-              console.warn("No valid key extracted from URL:", attachment.url);
+    if (type === 'me') {
+      // ✅ Mark as deleted only for this user and set future deleteAt
+      await Message.updateMany(
+        {
+          $or: [
+            { sender: userId, receiver: receiverId },
+            { sender: receiverId, receiver: userId }
+          ],
+          isDeletedBy: { $ne: userId }
+        },
+        {
+          $addToSet: { isDeletedBy: userId },
+          $set: { deleteAt: thirtyDaysFromNow }
+        }
+      );
+    } else if (type === 'everyone') {
+      // ✅ Fetch messages
+      const messages = await Message.find({
+        $or: [
+          { sender: userId, receiver: receiverId },
+          { sender: receiverId, receiver: userId }
+        ]
+      });
+
+      // ✅ Delete S3 attachments (but not delete messages from DB)
+      for (const msg of messages) {
+        for (const att of msg.attachments || []) {
+          if (att.url?.includes('.com/')) {
+            const key = att.url.split('.com/')[1];
+            try {
+              await s3Client.send(new DeleteObjectCommand({
+                Bucket: process.env.AWS_BUCKET_NAME,
+                Key: key
+              }));
+            } catch (err) {
+              console.warn('S3 delete error:', key, err.message);
             }
-          } else {
-            console.warn("Invalid attachment URL, skipping:", attachment.url);
           }
         }
       }
+
+      // ✅ Mark as deleted for both users + set future deleteAt
+      await Message.updateMany(
+        {
+          _id: { $in: messages.map(m => m._id) }
+        },
+        {
+          $addToSet: { isDeletedBy: { $each: [userId, receiverId] } },
+          $set: { deleteAt: thirtyDaysFromNow }
+        }
+      );
+
+      // ✅ Notify receiver via socket
+      const io = getIo();
+      io.to(receiverId.toString()).emit('allMessagesCleared', { senderId: userId });
     }
 
-    // ✅ Delete the messages from database
-    await Message.deleteMany({
-      $or: [
-        { sender: senderId, receiver: receiverId },
-        { sender: receiverId, receiver: senderId }
-      ]
-    });
+    return res.status(200).json({ message: 'Messages cleared successfully' });
 
-    // Optional: Notify receiver
-    const io = getIo();
-    io.to(receiverId.toString()).emit('allMessagesCleared', { senderId });
-
-    res.status(200).json({ message: 'All messages between users cleared successfully' });
-
-  } catch (error) {
-    console.error('Error clearing messages:', error);
-    res.status(500).json({ message: 'Error clearing messages', error: error.message });
+  } catch (err) {
+    console.error('Clear message error:', err);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
+
+
 
 // PATCH /messages/block-unblock
 exports.blockUnblockUser = async (req, res) => {
   try {
     const userId = req.user._id; // logged in user
-    const { targetUserId, action } = req.body; // target user id and action = 'block' or 'unblock'
+    const { targetUserId, action } = req.body;
 
     if (!targetUserId || !['block', 'unblock'].includes(action)) {
       return res.status(400).json({ message: 'targetUserId and valid action (block/unblock) are required.' });
     }
 
-    // Convert to ObjectId if needed
-    const userObjId = userId;
-    const targetObjId = targetUserId;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
+    // Block logic
     if (action === 'block') {
-      // Update messages where user is sender => set isBlockedBySender = true
+      // Add targetUserId to blockedUsers
+      if (!user.blockedUsers.includes(targetUserId)) {
+        user.blockedUsers.push(targetUserId);
+        await user.save();
+      }
+
+      // Update message flags
       await Message.updateMany(
-        { sender: userObjId, receiver: targetObjId },
+        { sender: userId, receiver: targetUserId },
         { $set: { isBlockedBySender: true } }
       );
-
-      // Update messages where user is receiver => set isBlockedByReceiver = true
       await Message.updateMany(
-        { sender: targetObjId, receiver: userObjId },
+        { sender: targetUserId, receiver: userId },
         { $set: { isBlockedByReceiver: true } }
       );
 
     } else if (action === 'unblock') {
-      // Set blocked flags false
+      // Remove targetUserId from blockedUsers
+      user.blockedUsers = user.blockedUsers.filter(
+        id => id.toString() !== targetUserId.toString()
+      );
+      await user.save();
+
+      // Reset flags
       await Message.updateMany(
-        { sender: userObjId, receiver: targetObjId },
+        { sender: userId, receiver: targetUserId },
         { $set: { isBlockedBySender: false } }
       );
-
       await Message.updateMany(
-        { sender: targetObjId, receiver: userObjId },
+        { sender: targetUserId, receiver: userId },
         { $set: { isBlockedByReceiver: false } }
       );
     }
@@ -288,6 +334,47 @@ exports.blockUnblockUser = async (req, res) => {
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
+// GET /messages/block-status/:userId/:targetUserId
+// GET /messages/block-status/:userId/:targetUserId
+exports.getBlockStatus = async (req, res) => {
+  try {
+    const { userId, targetUserId } = req.params;
+
+    if (!userId || !targetUserId) {
+      return res.status(400).json({ message: 'Both userId and targetUserId are required' });
+    }
+
+    // Fetch user to check blockedUsers array
+    const user = await User.findById(userId).select('blockedUsers');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if user has blocked the targetUser
+    const isBlockedByList = user.blockedUsers.includes(targetUserId);
+
+    // Check latest message flag (optional support)
+    const lastMessage = await Message.findOne({
+      $or: [
+        { sender: userId, receiver: targetUserId },
+        { sender: targetUserId, receiver: userId }
+      ]
+    }).sort({ createdAt: -1 });
+
+    const isBlockedByMessage =
+      (lastMessage?.sender?.toString() === userId && lastMessage?.isBlockedBySender) ||
+      (lastMessage?.receiver?.toString() === userId && lastMessage?.isBlockedByReceiver);
+
+    // Final result
+    const isBlocked = isBlockedByList || isBlockedByMessage;
+
+    return res.status(200).json({ isBlocked });
+  } catch (err) {
+    console.error("❌ Error checking block status:", err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 
 // Get messages between sender and receiver
 // exports.getMessages = async (req, res) => {
@@ -526,9 +613,19 @@ exports.getConversation = async (req, res) => {
   try {
     const userId = req.params.userId;
 
-    // Get all messages involving the user
     const messages = await Message.find({
-      $or: [{ sender: userId }, { receiver: userId }]
+      $and: [
+        {
+          $or: [{ sender: userId }, { receiver: userId }]
+        },
+        { deletedBy: { $ne: userId } },
+        {
+          $or: [
+            { deleteAt: null },
+            { deleteAt: { $gt: new Date() } }
+          ]
+        }
+      ]
     })
       .sort({ createdAt: -1 })
       .populate('sender', 'fullName profilePicture')
@@ -536,27 +633,26 @@ exports.getConversation = async (req, res) => {
 
     const conversationMap = new Map();
 
-    // Loop through messages to get latest per conversation and unread count
     messages.forEach((msg) => {
       const sender = msg.sender?._id?.toString();
       const receiver = msg.receiver?._id?.toString();
 
       if (!sender || !receiver) return;
 
-      // Determine the other participant
       const otherUserId = sender === userId ? receiver : sender;
 
-      if (!conversationMap.has(otherUserId)) {
-        conversationMap.set(otherUserId, {
-          lastMessage: msg,
-          unreadCount: 0
-        });
-      }
-
-      // Count unread messages sent *to* current user by that `otherUser`
+        if (!conversationMap.has(otherUserId)) {
+    const isMessageExpired = msg.deleteAt && new Date(msg.deleteAt) <= new Date();
+    if (!isMessageExpired) {
+      conversationMap.set(otherUserId, {
+        lastMessage: msg,
+        unreadCount: 0
+      });
+    }
+  }
       if (
-        msg.receiver._id.toString() === userId && // current user is receiver
-        msg.sender._id.toString() === otherUserId && // message came from otherUser
+        msg.receiver._id.toString() === userId &&
+        msg.sender._id.toString() === otherUserId &&
         msg.isRead === false
       ) {
         const entry = conversationMap.get(otherUserId);
@@ -564,7 +660,6 @@ exports.getConversation = async (req, res) => {
       }
     });
 
-    // Build final array
     const recentChats = Array.from(conversationMap.entries()).map(
       ([otherUserId, { lastMessage, unreadCount }]) => {
         return {
@@ -670,6 +765,35 @@ exports.deleteMessageById = async (req, res) => {
   } catch (error) {
     console.error('Error deleting message:', error);
     res.status(500).json({ message: 'Error deleting message', error: error.message });
+  }
+};
+exports.deleteMessageOnlyForMe = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id;
+    const message = await Message.findById(id);
+
+    if (!message) {
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    // ✅ Remove user from a "deletedBy" array
+    if (!message.deletedBy) {
+      message.deletedBy = [];
+    }
+
+    // Already deleted for this user?
+    if (message.deletedBy.includes(userId.toString())) {
+      return res.status(200).json({ message: 'Message already deleted for you' });
+    }
+
+    message.deletedBy.push(userId.toString());
+    await message.save();
+
+    res.status(200).json({ message: 'Message deleted for current user only' });
+  } catch (error) {
+    console.error('Error in delete-for-me:', error.message);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 };
 

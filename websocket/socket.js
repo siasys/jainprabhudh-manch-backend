@@ -209,7 +209,6 @@ socket.on('markMessagesRead', async ({ senderId }) => {
       console.log('User disconnected:', socket.userId);
     });
   });
-
   io.on('reconnect_attempt', () => {
     console.log('Attempting to reconnect...');
   });

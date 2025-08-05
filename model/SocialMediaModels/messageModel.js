@@ -137,7 +137,15 @@ const messageSchema = new mongoose.Schema(
       default: false,
       index: true
     },
-    readAt: {
+    isDeletedBy: {
+      type: [mongoose.Schema.Types.ObjectId],
+      default: []
+    },
+    deletedBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+      readAt: {
       type: Date
     },
     isOnline: { type: Boolean, default: false },
@@ -155,7 +163,7 @@ const messageSchema = new mongoose.Schema(
     type: Boolean,
     default: false
   },
-    deletedAt: Date,
+   deleteAt: { type: Date, default: null },
     // For reply feature
     replyTo: {
       type: mongoose.Schema.Types.ObjectId,

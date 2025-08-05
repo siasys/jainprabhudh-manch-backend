@@ -429,7 +429,7 @@ exports.sendGroupMessage = async (req, res) => {
       group.groupMembers.forEach(member => {
         const memberId = member.user._id.toString();
         io.to(memberId).emit('newGroupMessage', messageData);
-        console.log(`Emitted message to group member: ${memberId}`);
+       // console.log(`Emitted message to group member: ${memberId}`);
       });
     } else {
       console.error('Socket.io instance not available');
@@ -532,7 +532,7 @@ exports.getGroupMessages = async (req, res) => {
       })
       .populate({
         path: 'groupMessages.readBy.user',
-        select: 'firstName lastName fullName profilePicture' // ✅ Populate readBy.user
+        select: 'firstName lastName fullName profilePicture'
       })
       .slice('groupMessages', [skip, parseInt(limit)]);
 
@@ -548,10 +548,15 @@ exports.getGroupMessages = async (req, res) => {
       return errorResponse(res, "Not authorized to view messages", 403);
     }
 
-    const decryptedMessages = group.groupMessages.map(msg => {
-      const plain = msg.toObject({ getters: true });
+    const decryptedMessages = group.groupMessages
+    .filter(msg => {
+      if (!msg.deletedFor) return true;
+      return !msg.deletedFor.map(id => id.toString()).includes(userId.toString());
+    })
+    .map(msg => {
+    const plain = msg.toObject({ getters: true });
 
-      // ✅ Add current user to readBy if not already there
+      //  Add current user to readBy if not already there
       const alreadyRead = msg.readBy.some(r => r.user.toString() === userId.toString());
       if (!alreadyRead) {
         // Add user to the readBy array with the current timestamp
@@ -588,17 +593,37 @@ exports.getGroupMessages = async (req, res) => {
     return errorResponse(res, error.message, 500);
   }
 };
+exports.clearAllGroupMessagesForMe = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const userId = req.user?._id || req.userId;
 
+    const group = await GroupChat.findById(groupId);
+    if (!group) return res.status(404).json({ message: 'Group not found' });
+
+    group.groupMessages.forEach(msg => {
+      if (!msg.deletedFor) msg.deletedFor = [];
+      if (!msg.deletedFor.includes(userId.toString())) {
+        msg.deletedFor.push(userId.toString());
+      }
+    });
+
+    await group.save();
+    return res.status(200).json({ message: 'All group messages cleared for this user.' });
+  } catch (err) {
+    console.error('Clear all messages error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
 
 // 5. Delete Group Message
 exports.deleteGroupMessage = async (req, res) => {
   try {
     const { groupId, messageId } = req.params;
- const userId = req.user?._id || req.userId;
-if (!userId) {
-  return res.status(401).json({ message: "User not found" });
-}
-
+    const userId = req.user?._id || req.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "User not found" });
+    }
     const group = await GroupChat.findById(groupId);
     if (!group) return res.status(404).json({ message: 'Group not found' });
    // Find the message
@@ -657,6 +682,44 @@ if (!userId) {
       return errorResponse(res, error.message, 500);
     }
   };
+
+  exports.deleteGroupMessageOnlyForMe = async (req, res) => {
+  try {
+    const { groupId, messageId } = req.params;
+    const userId = req.user?._id || req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    const group = await GroupChat.findById(groupId);
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
+    }
+
+    const message = group.groupMessages.id(messageId);
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    // Check if deletedFor array exists, else initialize
+    if (!message.deletedFor) {
+      message.deletedFor = [];
+    }
+
+    // Avoid double insert
+    if (!message.deletedFor.includes(userId.toString())) {
+      message.deletedFor.push(userId.toString());
+    }
+
+    await group.save();
+
+    return res.status(200).json({ message: "Message deleted for you only" });
+  } catch (error) {
+    console.error("Error in deleteGroupMessageOnlyForMe:", error.message);
+    return res.status(500).json({ message: "Internal server error", error: error.message });
+  }
+};
 
 // 6. Update Group Message
 exports.updateGroupMessage = async (req, res) => {
@@ -852,6 +915,68 @@ exports.leaveGroup = async (req, res) => {
     });
 
     return successResponse(res, "", "Successfully left the group", 200);
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
+};
+// Remove a user from group (Admin only)
+exports.removeUserFromGroup = async (req, res) => {
+  try {
+    const { groupId, userIdToRemove } = req.body;
+    const adminId = req.user._id;
+
+    const group = await GroupChat.findById(groupId);
+    if (!group) {
+      return errorResponse(res, "Group not found", 404);
+    }
+
+    // Check if requesting user is an admin
+    if (!group.admins.includes(adminId.toString())) {
+      return errorResponse(res, "Only admins can remove members", 403);
+    }
+
+    // Check if user to be removed is in the group
+    const isMember = group.groupMembers.some(
+      member => member.user.toString() === userIdToRemove
+    );
+    if (!isMember) {
+      return errorResponse(res, "User is not a member of this group", 400);
+    }
+
+    // Prevent removing self using this endpoint
+    if (adminId.toString() === userIdToRemove.toString()) {
+      return errorResponse(res, "Use leaveGroup to leave the group yourself", 400);
+    }
+
+    // Remove from members
+    group.groupMembers = group.groupMembers.filter(
+      member => member.user.toString() !== userIdToRemove
+    );
+
+    // Remove from admins (if admin)
+    group.admins = group.admins.filter(
+      adminId => adminId.toString() !== userIdToRemove
+    );
+
+    // If no members left, delete group
+    if (group.groupMembers.length === 0) {
+      await group.deleteOne();
+      return successResponse(res, "", "Group deleted as no members remain", 200);
+    }
+
+    await group.save();
+
+    // Notify members via socket.io
+    const io = getIo();
+    group.groupMembers.forEach(member => {
+      io.to(member.user.toString()).emit('groupMemberRemoved', {
+        groupId,
+        removedUserId: userIdToRemove,
+        by: adminId
+      });
+    });
+
+    return successResponse(res, "", "User removed from group", 200);
   } catch (error) {
     return errorResponse(res, error.message, 500);
   }

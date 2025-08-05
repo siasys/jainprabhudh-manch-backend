@@ -46,6 +46,10 @@ const groupMessageSchema = new mongoose.Schema({
       return value ? decrypt(value) : '';
     }
   },
+   deletedFor: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
    // Media attachments (only images)
    attachments: [{
     type: {

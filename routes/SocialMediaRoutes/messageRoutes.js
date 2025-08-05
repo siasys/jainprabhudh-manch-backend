@@ -1,6 +1,6 @@
 // routes/messageRoutes.js
 const express = require('express');
-const { createMessage, getAllMessages, getMessageById, getMessages, getUnreadMessagesCount, deleteMessagesBySenderId, updateMessagesBySenderId, deleteMessageById, sendImageMessage, updateMessageById, getConversations, getConversation, clearAllMessagesBetweenUsers, blockUnblockUser, broadcastMessage } = require('../../controller/SocialMediaControllers/messageController');
+const { createMessage, getAllMessages, getMessageById, getMessages, getUnreadMessagesCount, deleteMessagesBySenderId, updateMessagesBySenderId, deleteMessageById, sendImageMessage, updateMessageById, getConversations, getConversation, clearAllMessagesBetweenUsers, blockUnblockUser, broadcastMessage, getBlockStatus, deleteMessageOnlyForMe } = require('../../controller/SocialMediaControllers/messageController');
 const {authenticate} = require('../../middlewares/authMiddlewares')
 const upload = require('../../middlewares/upload');
 const { param } = require('express-validator');
@@ -26,8 +26,13 @@ router.get('/conversations/:userId',
   );
 // Get a specific message by its ID
 router.get('/:messageId', getMessageById);
+router.get('/block-status/:userId/:targetUserId', getBlockStatus);
+
 router.delete('/delete/:id', authenticate,deleteMessageById);
-router.delete('/clear/:receiverId', clearAllMessagesBetweenUsers);
+// route
+router.delete('/delete-onlyme/:id', deleteMessageOnlyForMe);
+
+router.patch('/clear/:receiverId', clearAllMessagesBetweenUsers);
 
 // Update messages by senderId
 router.put('/update/:messageId',updateMessageById);

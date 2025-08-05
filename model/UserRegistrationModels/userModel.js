@@ -207,6 +207,8 @@ const userSchema = new mongoose.Schema(
     type: Date,
     default: null,
   },
+  blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+
     sanghRoles: [{
       sanghId: {
         type: mongoose.Schema.Types.ObjectId,

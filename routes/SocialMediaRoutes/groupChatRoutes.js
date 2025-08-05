@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const upload = require('../../middlewares/upload');
-const {createGroupChat, getGroupDetails, getAllGroups, getAllGroupChats, sendGroupMessage, getGroupMessages, deleteGroupMessage, updateGroupDetails, updateGroupMessage, leaveGroup, updateGroupIcon, checkMembership, addMembers, updateGroupName, createOrFindGotraGroup, getAllGotraGroups, getUserGotraGroups, deleteGroupChat, makeAdmin, createOrFindHierarchicalSanghGroup } = require('../../controller/SocialMediaControllers/groupChatController');
+const {createGroupChat, getGroupDetails, getAllGroups, getAllGroupChats, sendGroupMessage, getGroupMessages, deleteGroupMessage, updateGroupDetails, updateGroupMessage, leaveGroup, updateGroupIcon, checkMembership, addMembers, updateGroupName, createOrFindGotraGroup, getAllGotraGroups, getUserGotraGroups, deleteGroupChat, makeAdmin, createOrFindHierarchicalSanghGroup, removeUserFromGroup, deleteGroupMessageOnlyForMe, clearAllGroupMessagesForMe } = require('../../controller/SocialMediaControllers/groupChatController');
 const {authenticate} = require('../../middlewares/authMiddlewares')
 // Apply authentication to all routes
 router.use(authenticate);
@@ -9,6 +9,8 @@ router.use(authenticate);
 router.post('/create', upload.single('groupImage'), createGroupChat);
 router.post('/create-gotra-group', upload.single('groupImage'), createOrFindGotraGroup);
 router.post("/create-hierarchical-sangh-group", createOrFindHierarchicalSanghGroup);
+router.post('/remove-user', removeUserFromGroup);
+
 // Get all groups for a user
 router.get('/user-groups', getAllGroups);
 router.get('/gotra-groups', getUserGotraGroups);
@@ -23,7 +25,11 @@ router.post('/send-message', upload.single('chatImage'), sendGroupMessage);
 router.get('/messages/:groupId', getGroupMessages);
 router.delete('/delete/:groupId', deleteGroupChat);
 // Delete Group Message
+router.delete('/messages/onlyme/clearall/:groupId', clearAllGroupMessagesForMe);
 router.delete('/messages/:groupId/:messageId', deleteGroupMessage);
+router.delete('/messages/onlyme/:groupId/:messageId', deleteGroupMessageOnlyForMe); // 🔥 New
+
+
 // Update Group Details (Name, Image, Members)
 router.put('/update/:groupId', upload.single('groupImage'), updateGroupDetails);
 router.put('/make-admin/:groupId', makeAdmin);
