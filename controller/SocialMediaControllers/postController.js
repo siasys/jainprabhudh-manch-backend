@@ -79,21 +79,22 @@ const createPost = [
 
     // Add refId to corresponding field
     if (type === 'sangh') postData.sanghId = refId;
-    else if (type === 'panch') postData.panchId = refId;
+    else if (type === 'panch') postData.sanghId = refId;
     else if (type === 'sadhu') postData.sadhuId = refId;
     else if (type === 'vyapar') postData.vyaparId = refId;
 
     const post = await Post.create(postData);
-    if (!type) {
+      if (!type) {
       user.posts.push(post._id);
       await user.save();
     } else {
-        if (type === 'sangh') {
-    await Sangh.findByIdAndUpdate(refId, {
-      $push: { posts: post._id },
-    });
+      if (type === 'sangh' || type === 'panch') {
+        await Sangh.findByIdAndUpdate(refId, {
+          $push: { posts: post._id },
+        });
+      }
     }
-  }
+
     await invalidateCache('combinedFeed:*');
     await invalidateCache('combinedFeed:firstPage:limit:10');
 
@@ -180,6 +181,7 @@ const getPostById = asyncHandler(async (req, res) => {
     // 🔁 Type-wise populate
     query = query
       .populate('sanghId', 'name sanghImage')
+      .populate('panchId', 'name sanghImage')
       // .populate('panchId', 'name image')
       // .populate('sadhuId', 'fullName profilePicture')
       // .populate('vyaparId', 'businessName logo');
@@ -221,6 +223,7 @@ const getPostById = asyncHandler(async (req, res) => {
     profilePicture: post.user?.profilePicture,
     type: post.type || null,
     sanghId: post.sanghId || null,
+    panchId: post.panchId || null,
     createdAt: post.createdAt,
   });
 });
@@ -384,7 +387,6 @@ const getAllPosts = async (req, res) => {
     }
 
     const timeCondition = cursor ? { createdAt: { $lt: new Date(cursor) } } : {};
-
     const postsRaw = await Post.find({
       ...timeCondition
     })

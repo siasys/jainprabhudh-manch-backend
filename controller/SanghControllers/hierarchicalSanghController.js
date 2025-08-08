@@ -69,21 +69,16 @@ const switchToUserToken = asyncHandler(async (req, res) => {
 
 const switchToSanghToken = asyncHandler(async (req, res) => {
   const { sanghId } = req.body;
-
   const user = await User.findById(req.user._id);
   if (!user) return res.status(404).json({ message: "User not found" });
-
   const matchedRole = user.sanghRoles.find(role =>
     role.sanghId.toString() === sanghId.toString()
   );
-
   if (!matchedRole) {
     return res.status(403).json({ message: "You don't have access to this Sangh" });
   }
-
   //  Use helper function
   const token = generateSanghToken(user, sanghId);
-
   return res.status(200).json({ token });
 });
 

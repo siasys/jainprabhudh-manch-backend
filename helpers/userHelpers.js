@@ -4,12 +4,11 @@ const passwordValidator = require('password-validator');
 // Create password schema
 const passwordSchema = new passwordValidator();
 passwordSchema
-  .is().min(8)
+  .is().min(4)
   .has().uppercase()
   .has().lowercase()
   .has().digits(1)
   .has().symbols(1)
-  .has().not().spaces();
 
 const validatePassword = (password) => {
   return passwordSchema.validate(password);

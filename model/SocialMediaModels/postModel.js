@@ -18,7 +18,7 @@ const postSchema = new mongoose.Schema(
     },
     panchId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Panch',
+      ref: 'HierarchicalSangh',
     },
     tirthId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -77,7 +77,7 @@ const postSchema = new mongoose.Schema(
         },
         text: {
           type: String,
-          maxlength: 300,
+
         },
         createdAt: {
           type: Date,
@@ -113,7 +113,6 @@ const postSchema = new mongoose.Schema(
 
             text: {
               type: String,
-              maxlength: 300,
             },
             likes: [
             {

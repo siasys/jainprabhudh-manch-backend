@@ -28,15 +28,15 @@ const generateVerificationCode = () =>{
 const registerUser = [
     userValidation.register,
     asyncHandler(async (req, res) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return errorResponse(
-                res,
-                'Validation failed',
-                400,
-                errors.array().map(err => ({ field: err.param, message: err.msg }))
-            );
-        }
+        // const errors = validationResult(req);
+        // if (!errors.isEmpty()) {
+        //     return errorResponse(
+        //         res,
+        //         'Validation failed',
+        //         400,
+        //         errors.array().map(err => ({ field: err.param, message: err.msg }))
+        //     );
+        // }
         const {
             firstName,
             lastName,

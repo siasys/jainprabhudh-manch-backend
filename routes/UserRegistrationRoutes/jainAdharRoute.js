@@ -18,7 +18,8 @@ const {
   getApplicationsReview,
   reviewBySanghPresident,
   sendEmailVerificationOtp,
-  verifyEmailOtp
+  verifyEmailOtp,
+  resendEmailVerificationOtp
 } = require('../../controller/UserRegistrationControllers/jainAdharController');
 const { authMiddleware, canReviewJainAadhar } = require('../../middlewares/authMiddlewares');
 const { canEditJainAadhar } = require('../../middlewares/jainAadharEditPermissions');
@@ -64,6 +65,7 @@ router.post(
 // routes/jainAadharRoutes.js
 router.post('/send-email-otp', sendEmailVerificationOtp);
 router.post('/verify-email-otp', verifyEmailOtp);
+router.post('/resend-email-otp', resendEmailVerificationOtp);
 
 router.get(
   '/status',

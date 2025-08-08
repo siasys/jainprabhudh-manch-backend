@@ -18,12 +18,8 @@ const userValidation = {
     body('lastName').notEmpty().trim().escape()
       .isLength({ min: 2, max: 30 }).withMessage('Last name must be between 2 and 30 characters'),
     //body('phoneNumber').matches(/^\d{10}$/).withMessage('Phone number must be 10 digits'),
-    // body('password')
-    //   .isLength({ min: 8 })
-    //   .matches(/^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*])/)
-    //   .withMessage('Password must contain at least 8 characters, one uppercase, one lowercase, one number, and one special character'),
     //body('birthDate').isISO8601().withMessage('Invalid date format'),
-    body('gender').isIn(['Male', 'Female', 'Other']).withMessage('Invalid gender value'),
+    body('gender').isIn(['Male', 'Female']).withMessage('Invalid gender value'),
   ],
   login: [
     check('fullName')

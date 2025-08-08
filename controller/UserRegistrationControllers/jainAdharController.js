@@ -244,6 +244,38 @@ const verifyEmailOtp = async (req, res) => {
     return errorResponse(res, 'OTP verification failed', 500);
   }
 };
+const resendEmailVerificationOtp = async (req, res) => {
+  const { email, name } = req.body;
+
+  if (!email) return errorResponse(res, 'Email is required', 400);
+
+  try {
+    // Check if email exists in verification DB (optional)
+    const existingRecord = await EmailVerification.findOne({ email });
+    if (!existingRecord) {
+      return errorResponse(res, 'No OTP request found for this email', 404);
+    }
+
+    // Generate new OTP code
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const newExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+
+    // Update record with new code and expiry, reset verification status
+    await EmailVerification.findOneAndUpdate(
+      { email },
+      { code: newCode, expiresAt: newExpiresAt, isVerified: false },
+      { upsert: true }
+    );
+
+    // Send new OTP email
+    await sendVerificationEmail(email, name || 'User', newCode);
+
+    return successResponse(res, null, 'OTP resent to your email');
+  } catch (err) {
+    console.error('Resend OTP Error:', err);
+    return errorResponse(res, 'Failed to resend OTP', 500);
+  }
+};
 
 const verifyJainAadhar = async (req, res) => {
   try {
@@ -900,6 +932,7 @@ module.exports = {
   reviewBySanghPresident,
   getApplicationsReview,
   sendEmailVerificationOtp,
+  resendEmailVerificationOtp,
   verifyEmailOtp,
   createJainAadhar,
   getApplicationStatus,
