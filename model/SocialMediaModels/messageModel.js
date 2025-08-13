@@ -137,10 +137,6 @@ const messageSchema = new mongoose.Schema(
       default: false,
       index: true
     },
-    isDeletedBy: {
-      type: [mongoose.Schema.Types.ObjectId],
-      default: []
-    },
     deletedBy: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

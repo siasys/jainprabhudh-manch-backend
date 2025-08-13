@@ -220,10 +220,10 @@ exports.clearAllMessagesBetweenUsers = async (req, res) => {
             { sender: userId, receiver: receiverId },
             { sender: receiverId, receiver: userId }
           ],
-          isDeletedBy: { $ne: userId }
+          deletedBy: { $ne: userId }
         },
         {
-          $addToSet: { isDeletedBy: userId },
+          $addToSet: { deletedBy: userId },
           $set: { deleteAt: thirtyDaysFromNow }
         }
       );
@@ -259,7 +259,7 @@ exports.clearAllMessagesBetweenUsers = async (req, res) => {
           _id: { $in: messages.map(m => m._id) }
         },
         {
-          $addToSet: { isDeletedBy: { $each: [userId, receiverId] } },
+          $addToSet: { deletedBy: { $each: [userId, receiverId] } },
           $set: { deleteAt: thirtyDaysFromNow }
         }
       );
@@ -618,7 +618,7 @@ exports.getConversation = async (req, res) => {
         {
           $or: [{ sender: userId }, { receiver: userId }]
         },
-        { isDeletedBy: { $ne: userId } },
+        { deletedBy: { $ne: userId } },
         {
           $or: [
             { deleteAt: null },
