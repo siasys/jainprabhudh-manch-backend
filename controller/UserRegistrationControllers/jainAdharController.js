@@ -418,7 +418,7 @@ const getApplicationsForReview = asyncHandler(async (req, res) => {
         // For country president - can review all country-level applications
         if (reviewerLevel === 'country') {
             const applications = await JainAadhar.find({
-                applicationLevel: 'superadmin',  // Country applications are routed to superadmin
+                applicationLevel: 'superadmin',
                 status: 'pending'
             })
             .populate('userId')
@@ -616,9 +616,9 @@ const reviewBySanghPresident = asyncHandler(async (req, res) => {
     const reviewerLevel = level?.toLowerCase();
     const reviewerSanghId = sanghId;
 
-    if (!['district', 'state', 'country'].includes(reviewerLevel)) {
-      return errorResponse(res, 'Only district/state/country level presidents can review', 403);
-    }
+    if (!['city', 'district', 'state', 'country', 'foundation'].includes(reviewerLevel)) {
+  return errorResponse(res, 'Only city/district/state/country/foundation level presidents can review', 403);
+}
 
     const application = await JainAadhar.findById(applicationId);
     if (!application) return errorResponse(res, 'Application not found', 404);
@@ -675,7 +675,60 @@ const reviewBySanghPresident = asyncHandler(async (req, res) => {
     return errorResponse(res, err.message, 500);
   }
 });
+const reviewByAdmin = asyncHandler(async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+    const { status, remarks, userId } = req.body;
 
+    const application = await JainAadhar.findById(applicationId);
+    if (!application) return errorResponse(res, 'Application not found', 404);
+
+    if (application.status !== 'pending') {
+      return errorResponse(res, `This application has already been ${application.status}`, 400);
+    }
+
+    // Directly check from req.user.role
+    if (req.user.role !== 'admin') {
+      return errorResponse(res, 'Not authorized to review this application', 403);
+    }
+
+    application.status = status;
+    application.reviewHistory.push({
+      action: status,
+      by: userId,
+      level: 'admin',
+      sanghId: null,
+      remarks,
+      timestamp: new Date(),
+    });
+
+    application.reviewedBy = {
+      userId,
+      role: 'admin',
+      level: 'admin',
+      sanghId: null,
+    };
+
+    if (status === 'approved') {
+      const jainAadharNumber = await generateJainAadharNumber();
+      application.jainAadharNumber = jainAadharNumber;
+
+      await User.findByIdAndUpdate(application.userId, {
+        jainAadharStatus: 'verified',
+        jainAadharNumber,
+      });
+    } else if (status === 'rejected') {
+      await User.findByIdAndUpdate(application.userId, {
+        jainAadharStatus: 'rejected',
+      });
+    }
+
+    await application.save();
+    return successResponse(res, application, `Application ${status} successfully`);
+  } catch (err) {
+    return errorResponse(res, err.message, 500);
+  }
+});
 
 // Admin: Get detailed application statistics
 const getApplicationStats = asyncHandler(async (req, res) => {
@@ -930,6 +983,7 @@ const editJainAadhar = asyncHandler(async (req, res) => {
 
 module.exports = {
   reviewBySanghPresident,
+  reviewByAdmin,
   getApplicationsReview,
   sendEmailVerificationOtp,
   resendEmailVerificationOtp,

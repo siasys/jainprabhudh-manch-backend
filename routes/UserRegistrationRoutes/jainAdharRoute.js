@@ -19,7 +19,8 @@ const {
   reviewBySanghPresident,
   sendEmailVerificationOtp,
   verifyEmailOtp,
-  resendEmailVerificationOtp
+  resendEmailVerificationOtp,
+  reviewByAdmin
 } = require('../../controller/UserRegistrationControllers/jainAdharController');
 const { authMiddleware, canReviewJainAadhar } = require('../../middlewares/authMiddlewares');
 const { canEditJainAadhar } = require('../../middlewares/jainAadharEditPermissions');
@@ -180,6 +181,7 @@ router.put(
   '/applications/:applicationId/review-by-president',
   reviewBySanghPresident
 );
+router.put('/applications/:applicationId/review-by-admin', reviewByAdmin);
 
 // Edit Jain Aadhar application
 router.put(

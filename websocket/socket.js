@@ -93,6 +93,7 @@ socket.on('messageRead', async (data) => {
     await Message.findByIdAndUpdate(messageId, {
       isRead: true,
       isDelivered: true,
+      readAt: new Date()
     });
     socket.to(senderId.toString()).emit('messageReadReceipt', {
       messageId,
@@ -174,8 +175,9 @@ socket.on('markMessagesRead', async ({ senderId }) => {
   try {
     await Message.updateMany(
       { sender: senderId, receiver: socket.userId, isRead: false },
-      { isRead: true, isDelivered: true }
+       { isRead: true, isDelivered: true, readAt: new Date() }
     );
+    console.log(`✅ Marked messages from ${senderId} to ${socket.userId} as read`);
 
     // ✅ Notify sender
     socket.to(senderId.toString()).emit('messagesReadByReceiver', {

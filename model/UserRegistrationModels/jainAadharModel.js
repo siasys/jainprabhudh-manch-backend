@@ -42,9 +42,7 @@ const jainAadharSchema = new mongoose.Schema(
     husbandWifeName: { type: String },
     marriageDate: { type: String },
     countSons: { type: Number },
-    sonNames: [{ type: String }],
     countDaughters: { type: Number },
-    daughterNames: [{ type: String }],
     mulJain: { type: String, enum: ['Digamber', 'Shwetamber'] },
     panth: {
       type:String
@@ -53,8 +51,6 @@ const jainAadharSchema = new mongoose.Schema(
     mataKaNaam: { type: String },
     brotherCount: { type: String },
     sisterCount: { type: String },
-   brother: [{ type: String }],
-   sister: [{ type: String }],
     education: { type: String },
     job: { type: String },
     jobCompanyName: { type: String },
@@ -119,7 +115,7 @@ const jainAadharSchema = new mongoose.Schema(
       },
       level: {
         type: String,
-        enum: ['superadmin','foundation', 'country', 'state', 'district', 'city', 'area', 'user']
+        enum: ['admin','superadmin','foundation', 'country', 'state', 'district', 'city', 'area', 'user']
       },
       sanghId: {
         type: mongoose.Schema.Types.ObjectId,
