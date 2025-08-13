@@ -8,6 +8,20 @@ const userSockets = new Map();
 const userStatus = new Map(); 
 const messageQueue = new Map();
 
+
+// Helper function to send latest unread count to a user
+const sendUnreadCount = async (userId) => {
+  try {
+    const count = await Message.countDocuments({
+      'receiver._id': new mongoose.Types.ObjectId(userId),
+      isRead: false
+    });
+    io.to(userId.toString()).emit('unreadMessageCountUpdate', { unreadCount: count });
+  } catch (err) {
+    console.error('❌ Failed to send unread count:', err.message);
+  }
+};
+
 const initializeWebSocket = (server) => {
   io = socketIo(server, {
     cors: {
@@ -99,7 +113,8 @@ socket.on('messageRead', async (data) => {
       messageId,
       readBy: socket.userId
     });
-      io.to(socket.userId.toString()).emit('unreadMessageCountUpdate');
+     await sendUnreadCount(receiverId);
+
   } catch (err) {
     console.error("❌ Failed to update isRead in DB:", err.message);
   }
@@ -163,7 +178,7 @@ socket.on('sendMessage', async (data) => {
     // Update DB
     try {
       await Message.findByIdAndUpdate(data._id, { isDelivered: true });
-          io.to(receiverId.toString()).emit('unreadMessageCountUpdate');
+     await sendUnreadCount(receiverId);
     } catch (err) {
       console.error('DB update failed for isDelivered:', err.message);
     }
@@ -179,14 +194,11 @@ socket.on('markMessagesRead', async ({ senderId }) => {
     );
     console.log(`✅ Marked messages from ${senderId} to ${socket.userId} as read`);
 
-    // ✅ Notify sender
     socket.to(senderId.toString()).emit('messagesReadByReceiver', {
       readBy: socket.userId,
       senderId
     });
-
-    // ✅ Refresh unread count on receiver (self)
-    io.to(socket.userId.toString()).emit('unreadMessageCountUpdate');
+      await sendUnreadCount(socket.userId);
 
   } catch (err) {
     console.error("❌ Error in markMessagesRead:", err.message);
