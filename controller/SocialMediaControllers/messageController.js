@@ -618,7 +618,7 @@ exports.getConversation = async (req, res) => {
         {
           $or: [{ sender: userId }, { receiver: userId }]
         },
-        { deletedBy: { $ne: userId } },
+        { isDeletedBy: { $ne: userId } },
         {
           $or: [
             { deleteAt: null },
