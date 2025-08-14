@@ -115,7 +115,7 @@ const jainAadharSchema = new mongoose.Schema(
       },
       level: {
         type: String,
-        enum: ['admin','superadmin','foundation', 'country', 'state', 'district', 'city', 'area', 'user']
+        enum: ['user','admin','superadmin','foundation', 'country', 'state', 'district', 'city', 'area', 'user']
       },
       sanghId: {
         type: mongoose.Schema.Types.ObjectId,
