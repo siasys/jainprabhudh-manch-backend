@@ -687,8 +687,14 @@ const reviewByAdmin = asyncHandler(async (req, res) => {
       return errorResponse(res, `This application has already been ${application.status}`, 400);
     }
 
-    // Directly check from req.user.role
-    if (req.user.role !== 'admin') {
+    // ✅ Allowed reviewers (user IDs)
+    const allowedReviewers = [
+      '688378b981449c14306611d7',
+      '68837378f698f83ab109f019',
+      '6883812f016032eba93b4a0b'
+    ];
+
+    if (!allowedReviewers.includes(req.user._id.toString())) {
       return errorResponse(res, 'Not authorized to review this application', 403);
     }
 
@@ -696,7 +702,7 @@ const reviewByAdmin = asyncHandler(async (req, res) => {
     application.reviewHistory.push({
       action: status,
       by: userId,
-      level: 'admin',
+      level: 'user', // level ko user rakha
       sanghId: null,
       remarks,
       timestamp: new Date(),
@@ -704,8 +710,8 @@ const reviewByAdmin = asyncHandler(async (req, res) => {
 
     application.reviewedBy = {
       userId,
-      role: 'admin',
-      level: 'admin',
+      role: 'user', // role ko user rakha
+      level: 'user',
       sanghId: null,
     };
 
