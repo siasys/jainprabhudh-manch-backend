@@ -691,7 +691,8 @@ const reviewByAdmin = asyncHandler(async (req, res) => {
     const allowedReviewers = [
       '688378b981449c14306611d7',
       '68837378f698f83ab109f019',
-      '6883812f016032eba93b4a0b'
+      '6883812f016032eba93b4a0b',
+      '6874fa87237fcfa631771cbf'
     ];
 
     if (!allowedReviewers.includes(req.user._id.toString())) {

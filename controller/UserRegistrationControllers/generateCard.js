@@ -29,20 +29,19 @@ const generateJainAadharCard = async (req, res) => {
     if (application.userProfile) {
       const profileRes = await axios.get(application.userProfile, { responseType: 'arraybuffer' });
       const profileImg = await loadImage(profileRes.data);
-      ctx.drawImage(profileImg, 40, 210, 240, 240);
+      ctx.drawImage(profileImg, 30, 180, 250, 260);
     }
 
     ctx.fillStyle = 'black';
     ctx.font = '26px Georgia';
-    ctx.fillText(application.name || 'N/A', 490, 170);
-    ctx.fillText(application.pitaOrpatiName || 'N/A', 490, 224);
-    ctx.fillText(application.dob || 'N/A', 490, 268);
-    ctx.fillText(application.mulJain || 'N/A', 490, 317);
-    ctx.fillText(application.panth || 'N/A', 490, 362);
-    ctx.fillText(application.subCaste || 'N/A', 490, 408);
-    ctx.fillText(application.gotra || 'N/A', 490, 460);
+    ctx.fillText(application.name || 'N/A', 490, 190);
+    ctx.fillText(application.pitaOrpatiName || 'N/A', 490, 245);
+    ctx.fillText(application.dob || 'N/A', 490, 300);
+    ctx.fillText(application.mulJain || 'N/A', 490, 365);
+    ctx.fillText(application.panth || 'N/A', 490, 425);
 
-    ctx.font = 'bold 25px Georgia';
+
+    ctx.font = 'bold 30px Georgia';
     ctx.fillText(application.jainAadharNumber || 'N/A', 350, 560);
 
     // === BACK SIDE ===
@@ -51,7 +50,7 @@ const generateJainAadharCard = async (req, res) => {
 
     ctx.fillStyle = 'black';
     ctx.font = '26px Georgia';
-    const xPos = 280;
+    const xPos = 290;
     const addressLine1 = application.location?.address || 'N/A';
     const addressLine2 = `${application.location?.city || 'N/A'}, ${application.location?.pinCode || ''}`.trim();
     ctx.fillText(addressLine1, xPos, height + 230);
