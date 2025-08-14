@@ -13,6 +13,7 @@ const { sendVerificationEmail, sendPasswordResetEmail } = require('../../service
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 const { isPasswordMatched, validatePassword, getPasswordErrors } = require('../../helpers/userHelpers');
 const stateCityData = require("./stateCityData");
+const EmailVerification = require("../../model/UserRegistrationModels/EmailVerification");
 
 // const authLimiter = rateLimit({
 //     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -25,111 +26,56 @@ const generateVerificationCode = () =>{
     return Math.floor(100000 + Math.random() * 900000).toString();
   };
 // Register new user with enhanced security
-const registerUser = [
-    userValidation.register,
-    asyncHandler(async (req, res) => {
-        // const errors = validationResult(req);
-        // if (!errors.isEmpty()) {
-        //     return errorResponse(
-        //         res,
-        //         'Validation failed',
-        //         400,
-        //         errors.array().map(err => ({ field: err.param, message: err.msg }))
-        //     );
-        // }
-        const {
-            firstName,
-            lastName,
-            email,
-            phoneNumber,
-            password,
-            birthDate,
-            gender,
-            location,
-        } = req.body;
-        // Check if user already exists
-const existingUserByEmail = await User.findOne({ email });
+const registerUser = asyncHandler(async (req, res) => {
+    const {
+        firstName,
+        lastName,
+        email,
+        phoneNumber,
+        password,
+        birthDate,
+        gender,
+        location,
+    } = req.body;
 
-if (existingUserByEmail) {
-  if (existingUserByEmail.accountStatus === 'deactivated') {
-    // Delete the deactivated account to allow re-registration
-    await User.deleteOne({ _id: existingUserByEmail._id });
-  } else if (existingUserByEmail.isEmailVerified) {
-    return errorResponse(res, 'User with this email already exists', 400);
-  } else {
-    // Delete unverified user
-    await User.deleteOne({ _id: existingUserByEmail._id });
-  }
-}
-
-const existingUserByPhone = await User.findOne({ phoneNumber });
-
-if (existingUserByPhone) {
-  if (existingUserByPhone.accountStatus === 'deactivated') {
-    await User.deleteOne({ _id: existingUserByPhone._id });
-  } else {
+    // Check if email already verified user exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+        return errorResponse(res, 'User with this email already exists', 400);
+    }
+    const existingPhoneUser = await User.findOne({ phoneNumber });
+if (existingPhoneUser) {
     return errorResponse(res, 'User with this phone number already exists', 400);
-  }
 }
 
-        // Generate verification code
-        const verificationCode = generateVerificationCode();
-        const codeExpiry = new Date();
-        codeExpiry.setMinutes(codeExpiry.getMinutes() + 30); 
-        // Enhanced name formatting
-        const fullName = lastName.toLowerCase() === 'jain' 
-            ? `${firstName} Jain`
-            : `${firstName} Jain (${lastName})`;
-        
-        const newUser = await User.create({
-            firstName,
-            lastName,
-            fullName,
-            phoneNumber,
-            email,
-            password,
-            birthDate,
-            gender,
-            location: {
-            country: 'India',
-            state: location.state,
-            district: location.district,
-            city: location.city
-        },
-            verificationCode: {
-                code: verificationCode,
-                expiresAt: codeExpiry
-            },
-            lastLogin: new Date(),
-            accountStatus: 'active',
-            registrationStep: 'initial'
-        });
-            // Send verification email
-            try {
-                await sendVerificationEmail(email, firstName, verificationCode);
-            } catch (error) {
-                // Don't fail registration if email fails, but log the error
-                console.error('Error sending verification email:', error);
-            }    
-        // const token = generateToken(newUser);
-        // newUser.token = token;
-        await newUser.save();
-        const userResponse = newUser.toObject();
-        delete userResponse.password;
-        delete userResponse.__v;
-        delete userResponse.verificationCode;
-        return successResponse(
-            res, 
-            {
-                user: userResponse,
-                verificationCode: newUser.verificationCode,
-                nextStep: 'verify_email'
-            },
-            'User registered successfully. Please verify your email.',
-            201
-        );
-    })
-];
+    // Check if already pending verification
+    let pending = await EmailVerification.findOne({ email });
+    if (pending && pending.isVerified === false) {
+        await EmailVerification.deleteOne({ email }); // remove old pending record
+    }
+
+    // Generate OTP
+    const verificationCode = generateVerificationCode();
+    const codeExpiry = new Date(Date.now() + 30 * 60 * 1000);
+
+    // Save in EmailVerification collection
+    await EmailVerification.create({
+        email,
+        code: verificationCode,
+        expiresAt: codeExpiry,
+        isVerified: false,
+        tempUserData: { firstName, lastName, phoneNumber, password, birthDate, gender, location }
+    });
+
+    try {
+        await sendVerificationEmail(email, firstName, verificationCode);
+        return successResponse(res, {}, 'Verification code sent. Please verify your email.');
+    } catch (error) {
+        console.error('Email send error:', error);
+        return errorResponse(res, 'Failed to send verification email', 500);
+    }
+});
+
 const sendVerificationCode = asyncHandler(async (req, res) => {
     const { email } = req.body;
 
@@ -167,6 +113,62 @@ const sendVerificationCode = asyncHandler(async (req, res) => {
         return errorResponse(res, 'Failed to send verification email', 500);
     }
 });
+const verifyEmails = asyncHandler(async (req, res) => {
+    const { email, code } = req.body;
+
+    const record = await EmailVerification.findOne({ email });
+    if (!record) return errorResponse(res, 'No pending verification found', 404);
+
+    if (record.isVerified) return errorResponse(res, 'Email already verified', 400);
+
+    if (record.code !== code) return errorResponse(res, 'Invalid verification code', 400);
+
+    if (new Date() > record.expiresAt) {
+        return errorResponse(res, 'Verification code expired', 400);
+    }
+
+    // Mark verified
+    record.isVerified = true;
+    await record.save();
+
+    // Create user in main User collection
+    const { firstName, lastName, phoneNumber, password, birthDate, gender, location } = record.tempUserData;
+    const fullName = lastName.toLowerCase() === 'jain'
+        ? `${firstName} Jain`
+        : `${firstName} Jain (${lastName})`;
+
+    const newUser = await User.create({
+        firstName,
+        lastName,
+        fullName,
+        phoneNumber,
+        email,
+        password,
+        birthDate,
+        gender,
+        location: {
+            country: 'India',
+            state: location.state,
+            district: location.district,
+            city: location.city
+        },
+        isEmailVerified: true,
+        lastLogin: new Date(),
+        accountStatus: 'active',
+        registrationStep: 'initial'
+    });
+
+    const token = generateToken(newUser);
+    newUser.token = token;
+    await newUser.save();
+
+    const userResponse = newUser.toObject();
+    delete userResponse.password;
+    delete userResponse.__v;
+
+    return successResponse(res, { user: userResponse, token }, 'Email verified and user created');
+});
+
 // Verify email with verification code
 const verifyEmail = asyncHandler(async (req, res) => {
     const { email, code } = req.body;
@@ -882,6 +884,7 @@ module.exports = {
     logoutUser,
     searchUsers,
     verifyEmail,
+    verifyEmails,
     resendVerificationCode,
     requestPasswordReset,
     resetPassword,

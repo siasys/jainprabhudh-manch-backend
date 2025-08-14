@@ -49,7 +49,7 @@ const postSchema = new mongoose.Schema(
     text:{
       type:String
     },
-      hashtags: [{ type: String }],
+    hashtags: [{ type: String }],
     emoji: {
     type: String,
     default: "",

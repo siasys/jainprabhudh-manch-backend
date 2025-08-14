@@ -45,7 +45,7 @@ const generateJainAadharCard = async (req, res) => {
     ctx.fillText(application.jainAadharNumber || 'N/A', 350, 560);
 
     // === BACK SIDE ===
-    const backTemplate = await loadImage(path.join(__dirname, '../../Public/Shravak_back.jpeg'));
+    const backTemplate = await loadImage(path.join(__dirname, '../../Public/Shravak_back.jpg'));
     ctx.drawImage(backTemplate, 0, height + GAP_BETWEEN_CARDS, width, height);
 
     ctx.fillStyle = 'black';
@@ -63,7 +63,7 @@ const generateJainAadharCard = async (req, res) => {
     }
 
     ctx.font = 'bold 26px Georgia';
-    ctx.fillText('Jain Prabuddh Manch Trust', 280, (height * 2) - 115);
+    ctx.fillText('Jain Prabuddh Manch Trust', 300, (height * 2) - 112);
 
     // === QR Code ===
     const qrUrl = `https://jainprabhudh-manch-backend.onrender.com/api/generate-card/verify/jain-shravak/${application.jainAadharNumber}`;

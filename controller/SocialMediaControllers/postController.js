@@ -1,5 +1,6 @@
 const Post = require('../../model/SocialMediaModels/postModel');
 const User = require('../../model/UserRegistrationModels/userModel');
+const UserInterest = require('../../model/SocialMediaModels/UserInterest');
 const asyncHandler = require('express-async-handler');
 const upload = require('../../middlewares/upload');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
@@ -40,9 +41,11 @@ const createPost = [
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-
     const { caption, userId, hashtags,type, refId } = req.body;
-    const parsedHashtags = hashtags ? JSON.parse(hashtags) : [];
+    const parsedHashtags = hashtags
+    ? JSON.parse(hashtags).map(tag => tag.toLowerCase())
+    : [];
+
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -58,7 +61,6 @@ const createPost = [
         media.push({ url: convertS3UrlToCDN(file.location), type: 'video' });
       });
     }
-
     // Save or update hashtags
     for (const tag of parsedHashtags) {
       await Hashtag.findOneAndUpdate(
@@ -372,6 +374,7 @@ const getPostById = asyncHandler(async (req, res) => {
 // };
 
 // Get all posts (Modified)
+
 const getAllPosts = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 5;
@@ -386,23 +389,51 @@ const getAllPosts = async (req, res) => {
       }, 'User not found');
     }
 
+    // Get user interests
+    const interestDoc = await UserInterest.findOne({ user: userId });
+    const userHashtags = interestDoc ? interestDoc.hashtags : [];
+
+    // Cursor for pagination
     const timeCondition = cursor ? { createdAt: { $lt: new Date(cursor) } } : {};
+
+    // Fetch posts
     const postsRaw = await Post.find({
       ...timeCondition
     })
       .populate('user', 'firstName lastName fullName profilePicture friends accountStatus')
       .populate('sanghId', 'name sanghImage')
-      .sort({ createdAt: -1 })
-      .limit(limit)
       .lean();
 
-    const posts = postsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
+    // Filter out deactivated accounts
+    let posts = postsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
 
+    // Score calculation: match hashtags with user interests
+    posts = posts.map(post => {
+      let score = 0;
+      if (post.hashtags && post.hashtags.length) {
+        post.hashtags.forEach(tag => {
+          const match = userHashtags.find(h => h.name === tag);
+          if (match) score += match.score;
+        });
+      }
+      // Newer posts get small bonus
+      const ageHours = (Date.now() - new Date(post.createdAt)) / (1000 * 60 * 60);
+      score += Math.max(0, 48 - ageHours) * 0.1; // bonus for recency
+      return { ...post, _score: score };
+    });
+
+    // Sort by score first, then by date
+    posts.sort((a, b) => b._score - a._score || new Date(b.createdAt) - new Date(a.createdAt));
+
+    // Apply limit
+    posts = posts.slice(0, limit);
+
+    // Pagination cursor
     const nextCursor = posts.length > 0
       ? posts[posts.length - 1].createdAt.toISOString()
       : null;
 
-    // Ensure default empty friends array
+    // Default empty friends array
     posts.forEach(post => {
       if (post.user && !post.user.friends) {
         post.user.friends = [];
@@ -423,7 +454,6 @@ const getAllPosts = async (req, res) => {
   }
 };
 
-
 // Function to toggle like on a post
 const toggleLike = [
   asyncHandler(async (req, res) => {
@@ -432,17 +462,41 @@ const toggleLike = [
     if (!userId) {
       return res.status(400).json({ message: 'User ID is required' });
     }
+
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+
     const post = await Post.findById(postId).populate('user');
     if (!post) {
       return res.status(404).json({ message: 'Post not found' });
     }
+
     const isLiked = post.likes.includes(userId);
+
     if (isLiked) {
+      // ---- Unlike ----
       post.likes = post.likes.filter((id) => id.toString() !== userId);
+
+      // UserInterest score reduce
+      if (post.hashtags && post.hashtags.length) {
+        let interestDoc = await UserInterest.findOne({ user: userId });
+        if (interestDoc) {
+          post.hashtags.forEach(tag => {
+            const lowerTag = tag.toLowerCase();
+            const existingTag = interestDoc.hashtags.find(h => h.name === lowerTag);
+            if (existingTag) {
+              existingTag.score += 1;
+            } else {
+              interestDoc.hashtags.push({ name: lowerTag, score: 1 });
+            }
+          });
+
+          await interestDoc.save();
+        }
+      }
+
       // Notification delete karein
       await Notification.findOneAndDelete({
         senderId: userId,
@@ -450,25 +504,47 @@ const toggleLike = [
         type: 'like',
         postId: postId, 
       });
+
     } else {
-      // Like add karein
+      // ---- Like ----
       post.likes.push(userId);
-      // Notification create aur save karein
+
+      // UserInterest score increase
+      if (post.hashtags && post.hashtags.length) {
+        let interestDoc = await UserInterest.findOne({ user: userId });
+        if (!interestDoc) {
+          interestDoc = new UserInterest({ user: userId, hashtags: [] });
+        }
+        post.hashtags.forEach(tag => {
+          const existingTag = interestDoc.hashtags.find(h => h.name === tag);
+          if (existingTag) {
+            existingTag.score += 1;
+          } else {
+            interestDoc.hashtags.push({ name: tag, score: 1 });
+          }
+        });
+        await interestDoc.save();
+      }
+
+      // Notification create
       const notification = new Notification({
         senderId: userId,
-        receiverId: post.user._id, // Fix: user ka _id lena zaroori hai
+        receiverId: post.user._id,
         type: 'like',
-       message:"liked your post.",
-         postId: postId,
+        message: "liked your post.",
+        postId: postId,
       });
       await notification.save();
-      // Socket notification send karein
+
+      // Socket notification send
       const io = getIo();
       io.to(post.user._id.toString()).emit('newNotification', notification);
     }
+
     await post.save();
     await invalidateCache(`post:${postId}`);
     await invalidateCache(`postLikes:${postId}`);
+
     res.status(200).json({
       message: isLiked ? 'Like removed' : 'Post liked',
       likesCount: post.likes.length,

@@ -21,7 +21,8 @@ const {
     verifyChangeEmail,
     changePassword,
     getCitiesByState,
-    getUserByJainAadharNumber
+    getUserByJainAadharNumber,
+    verifyEmails
 } = require('../../controller/UserRegistrationControllers/userController');
 const { authMiddleware, checkAccess, authenticate } = require('../../middlewares/authMiddlewares');
 const upload = require('../../middlewares/upload');
@@ -64,6 +65,7 @@ router.post('/register',
 );
 router.post('/verification-email',sendVerificationCode)
 router.post('/verify-email', verifyEmail);
+router.post('/verify-emails', verifyEmails);
 router.post('/resend-code', resendVerificationCode);
 //router.get('/cities', getAllCities);
 router.get('/location', getCitiesByState);

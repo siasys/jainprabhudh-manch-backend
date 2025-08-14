@@ -5,6 +5,7 @@ const EmailVerificationSchema = new mongoose.Schema({
   code: { type: String, required: true },
   expiresAt: { type: Date, required: true },
   isVerified: { type: Boolean, default: false },
+  tempUserData: { type: Object }
 });
 
 module.exports = mongoose.model('EmailVerification', EmailVerificationSchema);
