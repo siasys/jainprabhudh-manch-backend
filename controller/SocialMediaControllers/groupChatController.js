@@ -260,8 +260,6 @@ exports.createOrFindHierarchicalSanghGroup = async (req, res) => {
 
 
 
-
-
 // all groups
 exports.getAllGroups = async (req, res) => {
   try {
@@ -272,8 +270,9 @@ exports.getAllGroups = async (req, res) => {
       'groupMembers.user': userId,
       isGotraGroup: false
     })
-    .populate('groupMembers.user', 'firstName fullName lastName profilePicture')
-    .populate('creator', 'firstName lastName fullName profilePicture');
+      .populate('groupMembers.user', 'firstName fullName lastName profilePicture')
+      .populate('creator', 'firstName lastName fullName profilePicture')
+      .populate('groupMessages'); // <-- agar groupMessages populate karna hai
 
     // ✅ Fetch gotra group (either user is member OR creator)
     const gotraGroup = await GroupChat.findOne({
@@ -283,8 +282,9 @@ exports.getAllGroups = async (req, res) => {
         { creator: userId }
       ]
     })
-    .populate('groupMembers.user', 'firstName fullName lastName profilePicture')
-    .populate('creator', 'firstName lastName fullName profilePicture');
+      .populate('groupMembers.user', 'firstName fullName lastName profilePicture')
+      .populate('creator', 'firstName lastName fullName profilePicture')
+      .populate('groupMessages');
 
     // ✅ CDN convert
     normalGroups.forEach(group => {
@@ -297,8 +297,14 @@ exports.getAllGroups = async (req, res) => {
       gotraGroup.groupImage = convertS3UrlToCDN(gotraGroup.groupImage);
     }
 
-    const allGroups = [...normalGroups];
+    let allGroups = [...normalGroups];
     if (gotraGroup) allGroups.push(gotraGroup);
+
+    // ✅ Add groupMessage count
+    allGroups = allGroups.map(group => ({
+      ...group.toObject(),
+      messageCount: group.groupMessages ? group.groupMessages.length : 0
+    }));
 
     res.status(200).json({ groups: allGroups });
   } catch (error) {
@@ -306,6 +312,7 @@ exports.getAllGroups = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 
 // Fetch All Gotra Groups
@@ -520,8 +527,7 @@ exports.getGroupMessages = async (req, res) => {
   try {
     const { groupId } = req.params;
     const { page = 1, limit = 20 } = req.query;
-   const userId = req.user?._id || req.userId;
-
+    const userId = req.user?._id || req.userId;
 
     const skip = (page - 1) * limit;
 
@@ -549,25 +555,24 @@ exports.getGroupMessages = async (req, res) => {
       return errorResponse(res, "Not authorized to view messages", 403);
     }
 
-    const decryptedMessages = group.groupMessages
+   // ✅ Decrypt & update readBy
+const decryptedMessages = await Promise.all(
+  group.groupMessages
     .filter(msg => {
       if (!msg.deletedFor) return true;
       return !msg.deletedFor.map(id => id.toString()).includes(userId.toString());
     })
-    .map(msg => {
-    const plain = msg.toObject({ getters: true });
+    .map(async (msg) => {
+      const plain = msg.toObject({ getters: true });
 
-      //  Add current user to readBy if not already there
+      // ✅ Check if already read
       const alreadyRead = msg.readBy.some(r => r.user.toString() === userId.toString());
+
       if (!alreadyRead) {
-        // Add user to the readBy array with the current timestamp
         msg.readBy.push({ user: userId, readAt: new Date() });
       }
 
-      // Update the message in the database after modifying the readBy field
-      msg.save();
-
-      // ✅ Handle attachments and CDN conversion
+      // ✅ Convert attachments to CDN url
       if (plain.attachments && plain.attachments.length > 0) {
         plain.attachments = plain.attachments.map(att => ({
           ...att,
@@ -576,24 +581,26 @@ exports.getGroupMessages = async (req, res) => {
       }
 
       return plain;
-    });
+    })
+);
 
-    // Save updated group with the modified readBy info
-    await group.save();
+await group.save();
 
-    return successResponse(res, {
-      messages: decryptedMessages,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total: group.groupMessages.length
-      }
-    }, "", 200);
+return successResponse(res, {
+  messages: decryptedMessages,
+  pagination: {
+    page: parseInt(page),
+    limit: parseInt(limit),
+    total: group.groupMessages.length
+  }
+}, "", 200);
+
   } catch (error) {
     console.error('Get group messages error:', error);
     return errorResponse(res, error.message, 500);
   }
 };
+
 exports.clearAllGroupMessagesForMe = async (req, res) => {
   try {
     const { groupId } = req.params;

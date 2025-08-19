@@ -30,15 +30,20 @@ const userSchema = new mongoose.Schema(
         message: props => `${props.value} is not a valid email address!`
       }
     },
-    isEmailVerified: {
+    isPhoneVerified: {
       type: Boolean,
-      default: false
+      default: false,
     },
-    tempEmailChange: {
-  email: String,
-  code: String,
-  expiresAt: Date,
-},
+    isEmailVerified:{
+       type: Boolean,
+      default: false,
+    },
+    tempPhoneChange: {
+      phoneNumber: String,
+      code: String,
+      expiresAt: Date,
+    },
+
     verificationCode: {
       code: String,
       expiresAt: Date

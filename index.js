@@ -78,7 +78,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended:false}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-// ✅ Serve app-version.json as static file
+// Serve app-version.json as static file
 app.use('/app-version', express.static(path.join(__dirname, 'app-version.json')));
 // Session configuration for payment flow
 app.use(session({

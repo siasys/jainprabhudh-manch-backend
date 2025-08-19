@@ -31,7 +31,6 @@ const sendVerificationEmail = async (email, name, code) => {
         </div>
       `,
     });
-    
     return response;
   } catch (error) {
     console.error('Error sending verification email:', error);

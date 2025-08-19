@@ -9,6 +9,8 @@ const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 const { sendVerificationEmail } = require('../../services/nodemailerEmailService');
 
 const EmailVerification = require('../../model/UserRegistrationModels/EmailVerification');
+const { sendVerificationSms } = require('../../services/smsHelper');
+const SharavakOtpVerification = require('../../model/UserRegistrationModels/SharavakOtpVerification');
 
 // Check if user has existing application
 // const checkExistingApplication = asyncHandler(async (req, res, next) => {
@@ -28,25 +30,35 @@ const determineApplicationLevel = (location) => {
 };
 // Create Jain Aadhar application with level-based routing
 const createJainAadhar = asyncHandler(async (req, res) => {
-    try {
-      const email = req.body.contactDetails?.email;
-      const enteredOtp = req.body.otp;
+     try {
+    const number = req.body.contactDetails?.number; // ✅ number field
+    const enteredOtp = req.body.otp;
 
-  if (!email || !enteredOtp) {
-    return errorResponse(res, 'Email and OTP are required for verification', 400);
-  }
+    if (!number || !enteredOtp) {
+      return errorResponse(res, 'Mobile number and OTP are required for verification', 400);
+    }
 
-  const otpEntry = await EmailVerification.findOne({ email });
+    // SharavakOtpVerification se record fetch
+    const otpEntry = await SharavakOtpVerification.findOne({ phoneNumber: number });
 
-  if (!otpEntry || otpEntry.code !== enteredOtp || new Date(otpEntry.expiresAt) < new Date()) {
-    return errorResponse(res, 'Invalid or expired OTP', 400);
-  }
+    if (!otpEntry) {
+      return errorResponse(res, 'No OTP sent to this mobile number', 404);
+    }
 
-  // Mark email as verified
-  otpEntry.isVerified = true;
-  await otpEntry.save();
+    if (otpEntry.code !== enteredOtp) {
+      return errorResponse(res, 'Incorrect OTP', 400);
+    }
 
-  req.body.isEmailVerified = true;
+    if (new Date() > otpEntry.expiresAt) {
+      return errorResponse(res, 'OTP expired', 400);
+    }
+
+    // Mark OTP as verified
+    otpEntry.isVerified = true;
+    await otpEntry.save();
+
+    // Flag user submission as verified
+    req.body.isPhoneVerified = true;
 
 const { location } = req.body;
 let applicationLevel = 'city';
@@ -188,7 +200,112 @@ if (req.body.applicationLevel && req.body.reviewingSanghId) {
         return errorResponse(res, error.message, 500);
     }
 });
+const sendSharavakOtp = asyncHandler(async (req, res) => {
+  let { phoneNumber, name } = req.body;
 
+  if (!phoneNumber) {
+    return errorResponse(res, 'Phone number is required', 400);
+  }
+
+  // Remove non-digits
+  phoneNumber = phoneNumber.replace(/\D/g, '');
+
+  // DB me sirf last 10 digits store karo
+  const dbNumber = phoneNumber.slice(-10);
+
+  // SMS bhejne ke liye 91 prefix lagao
+  const smsNumber = '91' + dbNumber;
+
+  // Generate 6-digit OTP
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+
+  try {
+    // ✅ SMS bhejna
+    await sendVerificationSms(smsNumber, code, name || 'User');
+
+    // ✅ DB me store (sirf 10 digits)
+    await SharavakOtpVerification.findOneAndUpdate(
+      { phoneNumber: dbNumber },
+      { code, expiresAt, isVerified: false },
+      { upsert: true }
+    );
+
+    return successResponse(res, null, 'OTP sent to your mobile number');
+  } catch (err) {
+    console.error('Sharavak OTP send error:', err);
+    return errorResponse(res, 'Failed to send OTP', 500);
+  }
+});
+
+const resendSharavakOtp = asyncHandler(async (req, res) => {
+  const { phoneNumber, name } = req.body;
+
+  if (!phoneNumber) {
+    return errorResponse(res, 'Phone number is required', 400);
+  }
+
+  try {
+    // Check if record exists in SharavakOtpVerification
+    const existingRecord = await SharavakOtpVerification.findOne({ phoneNumber });
+    if (!existingRecord) {
+      return errorResponse(res, 'No OTP request found for this mobile number', 404);
+    }
+
+    // Generate new 6-digit OTP
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const newExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
+
+    // Update record with new code & expiry, reset verification
+    await SharavakOtpVerification.findOneAndUpdate(
+      { phoneNumber },
+      { code: newCode, expiresAt: newExpiresAt, isVerified: false },
+      { upsert: true }
+    );
+
+    // Send OTP via SMS
+    await sendVerificationSms(phoneNumber, newCode, name || 'User');
+
+    return successResponse(res, null, 'OTP resent to your mobile number');
+  } catch (err) {
+    console.error('Resend Sharavak OTP Error:', err);
+    return errorResponse(res, 'Failed to resend OTP', 500);
+  }
+});
+
+const verifySharavakOtp = asyncHandler(async (req, res) => {
+  const { phoneNumber, code } = req.body;
+
+  if (!phoneNumber || !code) {
+    return errorResponse(res, 'Phone number and OTP code are required', 400);
+  }
+
+  try {
+    // SharavakOtpVerification se record fetch
+    const record = await SharavakOtpVerification.findOne({ phoneNumber });
+
+    if (!record) {
+      return errorResponse(res, 'No OTP sent to this mobile number', 404);
+    }
+
+    if (record.code !== code) {
+      return errorResponse(res, 'Incorrect OTP', 400);
+    }
+
+    if (new Date() > record.expiresAt) {
+      return errorResponse(res, 'OTP expired', 400);
+    }
+
+    // Mark OTP as verified
+    record.isVerified = true;
+    await record.save();
+
+    return successResponse(res, null, 'Mobile number verified successfully');
+  } catch (err) {
+    console.error('Sharavak OTP verification error:', err);
+    return errorResponse(res, 'OTP verification failed', 500);
+  }
+});
 const sendEmailVerificationOtp = async (req, res) => {
   const { email, name } = req.body;
 
@@ -687,7 +804,7 @@ const reviewByAdmin = asyncHandler(async (req, res) => {
       return errorResponse(res, `This application has already been ${application.status}`, 400);
     }
 
-    // ✅ Allowed reviewers (user IDs)
+    //Allowed reviewers (user IDs)
     const allowedReviewers = [
       '688378b981449c14306611d7',
       '68837378f698f83ab109f019',
@@ -1007,5 +1124,8 @@ module.exports = {
   reviewApplicationByLevel,
   getVerifiedMembers,
   editJainAadhar,
-  verifyJainAadhar
+  verifyJainAadhar,
+  sendSharavakOtp,
+  verifySharavakOtp,
+  resendSharavakOtp
 };

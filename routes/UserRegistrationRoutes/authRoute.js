@@ -22,7 +22,12 @@ const {
     changePassword,
     getCitiesByState,
     getUserByJainAadharNumber,
-    verifyEmails
+    verifyEmails,
+    verifyOtp,
+    verifyResetPassword,
+    requestPasswordResetMobile,
+    sendChangePhoneOtp,
+    verifyChangePhone
 } = require('../../controller/UserRegistrationControllers/userController');
 const { authMiddleware, checkAccess, authenticate } = require('../../middlewares/authMiddlewares');
 const upload = require('../../middlewares/upload');
@@ -67,10 +72,13 @@ router.post('/verification-email',sendVerificationCode)
 router.post('/verify-email', verifyEmail);
 router.post('/verify-emails', verifyEmails);
 router.post('/resend-code', resendVerificationCode);
+router.post("/verify-otp", verifyOtp);
 //router.get('/cities', getAllCities);
 router.get('/location', getCitiesByState);
 
 // Password reset
+router.post('/password-reset', requestPasswordResetMobile);
+router.post('/verify-reset-password', verifyResetPassword);
 router.post('/request-password-reset', requestPasswordReset);
 router.post('/reset-password', resetPassword);
 router.post('/login',loginUser);
@@ -81,6 +89,8 @@ router.use(authMiddleware);
 router.post('/logout', logoutUser);
 router.post('/switch-to-user', authMiddleware, switchToUserToken);
 // router.use(checkAccess);
+router.post('/send-change-number-otp', sendChangePhoneOtp);
+router.post('/verify-change-number', verifyChangePhone);
 router.post('/send-change-email-otp', sendChangeEmailOtp);
 router.post('/verify-change-email', verifyChangeEmail);
 // Search users endpoint for suggestion/complaint recipient selection

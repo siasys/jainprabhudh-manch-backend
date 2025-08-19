@@ -1,6 +1,7 @@
 
 const User = require("../../model/UserRegistrationModels/userModel");
-const Block = require('../../model/Block User/Block')
+const Block = require('../../model/Block User/Block');
+const MobileOtpVerification = require('../../model/UserRegistrationModels/MobileOtpVerification');
 const asyncHandler = require("express-async-handler");
 const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
@@ -14,6 +15,7 @@ const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 const { isPasswordMatched, validatePassword, getPasswordErrors } = require('../../helpers/userHelpers');
 const stateCityData = require("./stateCityData");
 const EmailVerification = require("../../model/UserRegistrationModels/EmailVerification");
+const { sendVerificationSms } = require("../../services/smsHelper");
 
 // const authLimiter = rateLimit({
 //     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -27,53 +29,79 @@ const generateVerificationCode = () =>{
   };
 // Register new user with enhanced security
 const registerUser = asyncHandler(async (req, res) => {
-    const {
-        firstName,
-        lastName,
-        email,
-        phoneNumber,
-        password,
-        birthDate,
-        gender,
-        location,
-    } = req.body;
+  const { firstName, lastName, phoneNumber, email, password, birthDate, gender, location } = req.body;
 
-    // Check if email already verified user exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-        return errorResponse(res, 'User with this email already exists', 400);
-    }
-    const existingPhoneUser = await User.findOne({ phoneNumber });
-if (existingPhoneUser) {
+  // Check if phone number already exists
+  const existingPhoneUser = await User.findOne({ phoneNumber });
+  if (existingPhoneUser) {
     return errorResponse(res, 'User with this phone number already exists', 400);
-}
+  }
 
-    // Check if already pending verification
-    let pending = await EmailVerification.findOne({ email });
-    if (pending && pending.isVerified === false) {
-        await EmailVerification.deleteOne({ email }); // remove old pending record
-    }
+  // If old OTP exists, delete it
+  let pending = await MobileOtpVerification.findOne({ phoneNumber });
+  if (pending && pending.isVerified === false) {
+    await MobileOtpVerification.deleteOne({ phoneNumber });
+  }
 
-    // Generate OTP
-    const verificationCode = generateVerificationCode();
-    const codeExpiry = new Date(Date.now() + 30 * 60 * 1000);
+  // Generate OTP
+  const verificationCode = generateVerificationCode();
+  const codeExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 min expiry
 
-    // Save in EmailVerification collection
-    await EmailVerification.create({
-        email,
-        code: verificationCode,
-        expiresAt: codeExpiry,
-        isVerified: false,
-        tempUserData: { firstName, lastName, phoneNumber, password, birthDate, gender, location }
-    });
+  // Save in DB
+  await MobileOtpVerification.create({
+    phoneNumber,
+    code: verificationCode,
+    expiresAt: codeExpiry,
+    isVerified: false,
+    tempUserData: { firstName, lastName, phoneNumber, email, password, birthDate, gender, location }
+  });
 
-    try {
-        await sendVerificationEmail(email, firstName, verificationCode);
-        return successResponse(res, {}, 'Verification code sent. Please verify your email.');
-    } catch (error) {
-        console.error('Email send error:', error);
-        return errorResponse(res, 'Failed to send verification email', 500);
-    }
+  // Send SMS
+  try {
+   await sendVerificationSms(phoneNumber, verificationCode, firstName);
+    return successResponse(res, {}, 'Verification OTP sent on mobile. Please verify.');
+  } catch (error) {
+    console.error('SMS send error:', error);
+    return errorResponse(res, 'Failed to send verification OTP', 500);
+  }
+});
+const verifyOtp = asyncHandler(async (req, res) => { 
+  const { phoneNumber, otp } = req.body;
+
+  // ✅ Fetch latest OTP request for this number
+  const record = await MobileOtpVerification.findOne({ phoneNumber }).sort({ createdAt: -1 });
+  if (!record) return errorResponse(res, "No OTP request found for this number", 400);
+
+  // ✅ Strict boolean check
+  if (record.isVerified === true) return errorResponse(res, "Already verified", 400);
+
+  if (record.expiresAt < new Date()) return errorResponse(res, "OTP expired", 400);
+
+  if (record.code !== otp) return errorResponse(res, "Invalid OTP", 400);
+
+  // ✅ Mark OTP as verified
+  record.isVerified = true;
+  await record.save();
+
+  // ✅ Create user and mark phone as verified
+  const { firstName, lastName, phoneNumber: phone, email, password, birthDate, gender, location } = record.tempUserData;
+
+  const newUser = await User.create({
+    firstName,
+    lastName,
+    phoneNumber: phone,
+    email,
+    password,
+    birthDate,
+    gender,
+    location,
+    isPhoneVerified: true,
+    isEmailVerified: true
+  });
+
+  const token = generateToken(newUser._id);
+
+  return successResponse(res, { user: newUser, token }, "User registered successfully");
 });
 
 const sendVerificationCode = asyncHandler(async (req, res) => {
@@ -300,6 +328,80 @@ const verifyChangeEmail = asyncHandler(async (req, res) => {
 
   return successResponse(res, null, 'Email updated and verified successfully');
 });
+
+const sendChangePhoneOtp = asyncHandler(async (req, res) => {
+  const { newPhoneNumber } = req.body;
+
+  if (!newPhoneNumber) {
+    return errorResponse(res, 'New mobile number is required', 400);
+  }
+
+  // Check if phone number already exists
+  const existingUser = await User.findOne({ phoneNumber: newPhoneNumber });
+  if (existingUser) {
+    return errorResponse(res, 'Mobile number already in use', 400);
+  }
+
+  const user = await User.findById(req.user._id);
+  if (!user) return errorResponse(res, 'User not found', 404);
+
+  // Generate 6-digit OTP
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+
+  user.tempPhoneChange = {
+    phoneNumber: newPhoneNumber,
+    code,
+    expiresAt
+  };
+
+  await user.save();
+
+  try {
+    // Send OTP via SMS
+    await sendVerificationSms(newPhoneNumber, code, user.firstName);
+
+    return successResponse(res, {}, 'OTP sent to new mobile number');
+  } catch (error) {
+    console.error('Error sending verification SMS:', error);
+    return errorResponse(res, 'Failed to send OTP', 500);
+  }
+});
+
+const verifyChangePhone = asyncHandler(async (req, res) => {
+  const { code } = req.body;
+
+  if (!code) return errorResponse(res, 'Verification code is required', 400);
+
+  const user = await User.findById(req.user._id);
+  if (!user) return errorResponse(res, 'User not found', 404);
+
+  const temp = user.tempPhoneChange;
+
+  if (!temp || !temp.phoneNumber || !temp.code) {
+    return errorResponse(res, 'No phone change request found', 400);
+  }
+
+  if (new Date() > temp.expiresAt) {
+    return errorResponse(res, 'Verification code expired', 400);
+  }
+
+  if (temp.code !== code) {
+    return errorResponse(res, 'Invalid verification code', 400);
+  }
+
+  // Update phone number
+  user.phoneNumber = temp.phoneNumber;
+  user.tempPhoneChange = undefined;
+
+  // Mark phone verified; consider either email or phone verification sufficient
+  if (!user.isPhoneVerified) user.isPhoneVerified = true;
+  if (!user.isEmailVerified) user.isEmailVerified = true; // optional, depends on your logic
+
+  await user.save();
+
+  return successResponse(res, null, 'Mobile number updated and verified successfully');
+});
 // Resend verification code
 const resendVerificationCode = asyncHandler(async (req, res) => {
     const { email } = req.body;
@@ -343,6 +445,50 @@ const resendVerificationCode = asyncHandler(async (req, res) => {
         200
     );
 });
+// Request password reset via mobile number
+const requestPasswordResetMobile = asyncHandler(async (req, res) => {
+  const { phoneNumber } = req.body; // mobile number
+
+  if (!phoneNumber) {
+    return errorResponse(res, 'Mobile number is required', 400);
+  }
+
+  const user = await User.findOne({ phoneNumber });
+
+  // Security-friendly response
+  if (!user) {
+    return errorResponse(res, 'This mobile number is not registered', 404);
+  }
+// ✅ Check if either mobile or email is verified
+if (!user.isPhoneVerified && !user.isEmailVerified) {
+    return errorResponse(
+        res,
+        'Please verify your mobile number before resetting your password',
+        403
+    );
+}
+
+  // Generate 6-digit OTP
+  const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const codeExpiry = new Date();
+  codeExpiry.setMinutes(codeExpiry.getMinutes() + 30);
+
+  user.resetPasswordCode = {
+    code: resetCode,
+    expiresAt: codeExpiry
+  };
+  await user.save();
+
+  try {
+    // Send SMS using existing function
+    await sendVerificationSms(phoneNumber, resetCode, user.firstName || 'User');
+  } catch (error) {
+    console.error('Error sending password reset SMS:', error);
+    return errorResponse(res, 'Failed to send password reset OTP', 500);
+  }
+
+  return successResponse(res, {}, 'Password reset OTP has been sent to your mobile number');
+});
 
 // Request password reset
 const requestPasswordReset = asyncHandler(async (req, res) => {
@@ -384,7 +530,39 @@ const requestPasswordReset = asyncHandler(async (req, res) => {
 
     return successResponse(res, {}, 'Password reset code has been sent to your email');
 });
+// Verify reset code and reset password via mobile number
+const verifyResetPassword = asyncHandler(async (req, res) => {
+  const { phoneNumber, code, newPassword } = req.body;
 
+  if (!phoneNumber || !code || !newPassword) {
+    return errorResponse(res, 'Mobile number, reset code, and new password are required', 400);
+  }
+
+  const user = await User.findOne({ phoneNumber });
+
+  if (!user) {
+    return errorResponse(res, 'User not found', 404);
+  }
+
+  if (!user.resetPasswordCode || !user.resetPasswordCode.code) {
+    return errorResponse(res, 'Reset code not found. Please request a new one.', 400);
+  }
+
+  if (new Date() > user.resetPasswordCode.expiresAt) {
+    return errorResponse(res, 'Reset code has expired. Please request a new one.', 400);
+  }
+
+  if (user.resetPasswordCode.code !== code) {
+    return errorResponse(res, 'Invalid reset code', 400);
+  }
+
+  // Update password and clear reset code
+  user.password = newPassword;
+  user.resetPasswordCode = undefined;
+  await user.save();
+
+  return successResponse(res, {}, 'Password has been reset successfully', 200);
+});
 
 // Verify reset code and reset password
 const resetPassword = asyncHandler(async (req, res) => {
@@ -426,59 +604,64 @@ const resetPassword = asyncHandler(async (req, res) => {
 });
 
 const loginUser = [
-   // authLimiter,
-    userValidation.login,
+    // authLimiter,
+    userValidation.login, // isme bhi phoneNumber field expect karwao
     asyncHandler(async (req, res) => {
-    const { email, password } = req.body;
+        const { phoneNumber, password } = req.body; // email -> phoneNumber
 
-    try {
-            const user = await User.findOne({ email });
+        try {
+            // DB me user ko phoneNumber se dhundho
+            const user = await User.findOne({ phoneNumber });
 
             if (!user) {
-                return errorResponse(res, "Email not found", 401);
+                return errorResponse(res, "Phone number not found", 401);
             }
-              const isMatch = await user.isPasswordMatched(password);
-              if (!isMatch) {
+
+            const isMatch = await user.isPasswordMatched(password);
+            if (!isMatch) {
                 return errorResponse(res, "Incorrect password", 401);
-              }
-
-            if (!user.isEmailVerified) {
-                return errorResponse(res, "Please verify your email before logging in", 401, {
-                    requiresEmailVerification: true
-                });
             }
-        // Generate tokens
-        const token = generateToken(user);
-        user.token = token;
-        user.lastLogin = new Date();
-        await user.save();
 
-        const userResponse = user.toObject();
-        delete userResponse.password;
-        delete userResponse.__v;
+          if (!user.isEmailVerified && !user.isPhoneVerified) {
+            return errorResponse(res, "Please verify your email or phone number before logging in", 401, {
+                requiresVerification: true
+            });
+        }
 
-          // Prepare role information for the response
-          const roleInfo = {
-            hasSanghRoles: user.sanghRoles && user.sanghRoles.length > 0,
-            hasPanchRoles: user.panchRoles && user.panchRoles.length > 0,
-            hasTirthRoles: user.tirthRoles && user.tirthRoles.length > 0,
-            hasVyaparRoles: user.vyaparRoles && user.vyaparRoles.length > 0
-        };
 
-        return successResponse(
-            res,
-            {
-                user: userResponse,
-                token: token,
-                roles: roleInfo
-            },
-            "Login successful",
-            200
-        );
-    } catch (error) {
-        return errorResponse(res, "Login failed", 500, error.message);
-    }
-})
+            // Generate token
+            const token = generateToken(user);
+            user.token = token;
+            user.lastLogin = new Date();
+            await user.save();
+
+            const userResponse = user.toObject();
+            delete userResponse.password;
+            delete userResponse.__v;
+
+            // Prepare role info
+            const roleInfo = {
+                hasSanghRoles: user.sanghRoles && user.sanghRoles.length > 0,
+                hasPanchRoles: user.panchRoles && user.panchRoles.length > 0,
+                hasTirthRoles: user.tirthRoles && user.tirthRoles.length > 0,
+                hasVyaparRoles: user.vyaparRoles && user.vyaparRoles.length > 0
+            };
+
+            return successResponse(
+                res,
+                {
+                    user: userResponse,
+                    token,
+                    roles: roleInfo
+                },
+                "Login successful",
+                200
+            );
+
+        } catch (error) {
+            return errorResponse(res, "Login failed", 500, error.message);
+        }
+    })
 ];
 
 const getAllUsers = asyncHandler(async (req, res) => {
@@ -872,6 +1055,7 @@ const searchUsers = asyncHandler(async (req, res) => {
 module.exports = {
     registerUser,
     loginUser,
+    verifyOtp,
     getCitiesByState,
     getAllUsers,
     getUserById,
@@ -887,8 +1071,12 @@ module.exports = {
     verifyEmails,
     resendVerificationCode,
     requestPasswordReset,
+    requestPasswordResetMobile,
     resetPassword,
+    verifyResetPassword,
     sendVerificationCode,
     sendChangeEmailOtp,
+    sendChangePhoneOtp,
+    verifyChangePhone,
     verifyChangeEmail
 };

@@ -20,7 +20,10 @@ const {
   sendEmailVerificationOtp,
   verifyEmailOtp,
   resendEmailVerificationOtp,
-  reviewByAdmin
+  reviewByAdmin,
+  sendSharavakOtp,
+  verifySharavakOtp,
+  resendSharavakOtp
 } = require('../../controller/UserRegistrationControllers/jainAdharController');
 const { authMiddleware, canReviewJainAadhar } = require('../../middlewares/authMiddlewares');
 const { canEditJainAadhar } = require('../../middlewares/jainAadharEditPermissions');
@@ -66,6 +69,9 @@ router.post(
 // routes/jainAadharRoutes.js
 router.post('/send-email-otp', sendEmailVerificationOtp);
 router.post('/verify-email-otp', verifyEmailOtp);
+router.post('/send-mobile-otp', sendSharavakOtp);
+router.post('/verify-mobile-otp', verifySharavakOtp);
+router.post('/resend-mobile-otp', resendSharavakOtp);
 router.post('/resend-email-otp', resendEmailVerificationOtp);
 
 router.get(
