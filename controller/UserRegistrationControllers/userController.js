@@ -604,74 +604,73 @@ const resetPassword = asyncHandler(async (req, res) => {
 });
 
 const loginUser = [
-    userValidation.login, // phoneNumber field expect karwao
-    asyncHandler(async (req, res) => {
-        let { phoneNumber, password } = req.body;
+  userValidation.login,
+  asyncHandler(async (req, res) => {
+    let { phoneNumber, password } = req.body;
 
-        if (!phoneNumber) {
-            return errorResponse(res, "Phone number is required", 400);
-        }
+    if (!phoneNumber) {
+      return errorResponse(res, "Phone number is required", 400);
+    }
 
-        // Remove non-digit characters
-        phoneNumber = phoneNumber.replace(/\D/g, '');
+    // Normalize number (sirf digits rakho)
+    phoneNumber = phoneNumber.replace(/\D/g, "");
+    const last10Digits = phoneNumber.slice(-10);
 
-        // Ensure last 10 digits
-        const last10Digits = phoneNumber.slice(-10);
+    // Possible formats
+    const plainNumber = last10Digits;          // e.g. "7415147930"
+    const withPrefix = "+91" + last10Digits;   // e.g. "+917415147930"
 
-        // Prefix +91 for DB search
-        const searchNumber = '+91' + last10Digits;
+    try {
+      // DB me dono format check karo
+      const user = await User.findOne({
+        phoneNumber: { $in: [plainNumber, withPrefix] }
+      });
 
-        try {
-            // DB me user dhundho
-            const user = await User.findOne({ phoneNumber: searchNumber });
+      if (!user) {
+        return errorResponse(res, "Phone number not found", 401);
+      }
 
-            if (!user) {
-                return errorResponse(res, "Phone number not found", 401);
-            }
+      const isMatch = await user.isPasswordMatched(password);
+      if (!isMatch) {
+        return errorResponse(res, "Incorrect password", 401);
+      }
 
-            const isMatch = await user.isPasswordMatched(password);
-            if (!isMatch) {
-                return errorResponse(res, "Incorrect password", 401);
-            }
+      if (!user.isEmailVerified && !user.isPhoneVerified) {
+        return errorResponse(
+          res,
+          "Please verify your email or phone number before logging in",
+          401,
+          { requiresVerification: true }
+        );
+      }
 
-            if (!user.isEmailVerified && !user.isPhoneVerified) {
-                return errorResponse(res, "Please verify your email or phone number before logging in", 401, {
-                    requiresVerification: true
-                });
-            }
+      // Generate token
+      const token = generateToken(user);
+      user.token = token;
+      user.lastLogin = new Date();
+      await user.save();
 
-            // Generate token
-            const token = generateToken(user);
-            user.token = token;
-            user.lastLogin = new Date();
-            await user.save();
+      const userResponse = user.toObject();
+      delete userResponse.password;
+      delete userResponse.__v;
 
-            const userResponse = user.toObject();
-            delete userResponse.password;
-            delete userResponse.__v;
+      const roleInfo = {
+        hasSanghRoles: user.sanghRoles?.length > 0,
+        hasPanchRoles: user.panchRoles?.length > 0,
+        hasTirthRoles: user.tirthRoles?.length > 0,
+        hasVyaparRoles: user.vyaparRoles?.length > 0,
+      };
 
-            const roleInfo = {
-                hasSanghRoles: user.sanghRoles?.length > 0,
-                hasPanchRoles: user.panchRoles?.length > 0,
-                hasTirthRoles: user.tirthRoles?.length > 0,
-                hasVyaparRoles: user.vyaparRoles?.length > 0
-            };
-
-            return successResponse(
-                res,
-                {
-                    user: userResponse,
-                    token,
-                    roles: roleInfo
-                },
-                "Login successful",
-                200
-            );
-
-        } catch (error) {
-            return errorResponse(res, "Login failed", 500, error.message);
-        }
-    })
+      return successResponse(
+        res,
+        { user: userResponse, token, roles: roleInfo },
+        "Login successful",
+        200
+      );
+    } catch (error) {
+      return errorResponse(res, "Login failed", 500, error.message);
+    }
+  }),
 ];
 
 const getAllUsers = asyncHandler(async (req, res) => {
