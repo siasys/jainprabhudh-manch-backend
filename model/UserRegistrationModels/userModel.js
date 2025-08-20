@@ -43,7 +43,11 @@ const userSchema = new mongoose.Schema(
       code: String,
       expiresAt: Date,
     },
-
+    tempEmailChange: {
+      email: { type: String },
+      code: { type: String },
+      expiresAt: { type: Date }
+    },
     verificationCode: {
       code: String,
       expiresAt: Date

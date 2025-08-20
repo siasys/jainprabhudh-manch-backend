@@ -28,8 +28,12 @@ const generateVerificationCode = () =>{
     return Math.floor(100000 + Math.random() * 900000).toString();
   };
 // Register new user with enhanced security
+// Register new user with enhanced security 
 const registerUser = asyncHandler(async (req, res) => {
   const { firstName, lastName, phoneNumber, email, password, birthDate, gender, location } = req.body;
+
+  // Generate fullName
+  const fullName = `${firstName || ''} ${lastName || ''}`.trim();
 
   // Check if phone number already exists
   const existingPhoneUser = await User.findOne({ phoneNumber });
@@ -53,18 +57,29 @@ const registerUser = asyncHandler(async (req, res) => {
     code: verificationCode,
     expiresAt: codeExpiry,
     isVerified: false,
-    tempUserData: { firstName, lastName, phoneNumber, email, password, birthDate, gender, location }
+    tempUserData: {
+      firstName,
+      lastName,
+      fullName,
+      phoneNumber,
+      email,
+      password,
+      birthDate,
+      gender,
+      location
+    }
   });
 
   // Send SMS
   try {
-   await sendVerificationSms(phoneNumber, verificationCode, firstName);
+    await sendVerificationSms(phoneNumber, verificationCode, firstName);
     return successResponse(res, {}, 'Verification OTP sent on mobile. Please verify.');
   } catch (error) {
     console.error('SMS send error:', error);
     return errorResponse(res, 'Failed to send verification OTP', 500);
   }
 });
+
 const verifyOtp = asyncHandler(async (req, res) => { 
   const { phoneNumber, otp } = req.body;
 
@@ -320,10 +335,11 @@ const verifyChangeEmail = asyncHandler(async (req, res) => {
     return errorResponse(res, 'Invalid verification code', 400);
   }
 
-  // Update email
+  // Update email and clear temp request
   user.email = temp.email;
-  user.tempEmailChange = undefined;
+  user.tempEmailChange = undefined; // clear temp data
   user.isEmailVerified = true;
+
   await user.save();
 
   return successResponse(res, null, 'Email updated and verified successfully');
@@ -447,27 +463,36 @@ const resendVerificationCode = asyncHandler(async (req, res) => {
 });
 // Request password reset via mobile number
 const requestPasswordResetMobile = asyncHandler(async (req, res) => {
-  const { phoneNumber } = req.body; // mobile number
+  let { phoneNumber } = req.body;
 
   if (!phoneNumber) {
     return errorResponse(res, 'Mobile number is required', 400);
   }
+  // Clean number (remove spaces, +, - etc.)
+  phoneNumber = phoneNumber.replace(/\D/g, '');
 
-  const user = await User.findOne({ phoneNumber });
+  // Ensure last 10 digits
+  const last10Digits = phoneNumber.slice(-10);
 
-  // Security-friendly response
+  // Try finding with both formats
+  const user = await User.findOne({
+    $or: [
+      { phoneNumber: last10Digits },        // direct 10 digit
+      { phoneNumber: `+91${last10Digits}` } // +91 ke sath
+    ]
+  });
+
   if (!user) {
     return errorResponse(res, 'This mobile number is not registered', 404);
   }
-// ✅ Check if either mobile or email is verified
-if (!user.isPhoneVerified && !user.isEmailVerified) {
-    return errorResponse(
-        res,
-        'Please verify your mobile number before resetting your password',
-        403
-    );
-}
 
+  if (!user.isPhoneVerified && !user.isEmailVerified) {
+    return errorResponse(
+      res,
+      'Please verify your mobile number before resetting your password',
+      403
+    );
+  }
   // Generate 6-digit OTP
   const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
   const codeExpiry = new Date();
@@ -480,8 +505,8 @@ if (!user.isPhoneVerified && !user.isEmailVerified) {
   await user.save();
 
   try {
-    // Send SMS using existing function
-    await sendVerificationSms(phoneNumber, resetCode, user.firstName || 'User');
+    //  Always send OTP to +91XXXXXXXXXX format (safe)
+    await sendVerificationSms(`+91${last10Digits}`, resetCode, user.firstName || 'User');
   } catch (error) {
     console.error('Error sending password reset SMS:', error);
     return errorResponse(res, 'Failed to send password reset OTP', 500);
@@ -531,14 +556,27 @@ const requestPasswordReset = asyncHandler(async (req, res) => {
     return successResponse(res, {}, 'Password reset code has been sent to your email');
 });
 // Verify reset code and reset password via mobile number
+// Verify reset code and reset password via mobile number 
 const verifyResetPassword = asyncHandler(async (req, res) => {
-  const { phoneNumber, code, newPassword } = req.body;
+  let { phoneNumber, code, newPassword } = req.body;
 
   if (!phoneNumber || !code || !newPassword) {
     return errorResponse(res, 'Mobile number, reset code, and new password are required', 400);
   }
 
-  const user = await User.findOne({ phoneNumber });
+  // ✅ Clean number (remove spaces, +, - etc.)
+  phoneNumber = phoneNumber.replace(/\D/g, '');
+
+  // ✅ Ensure last 10 digits
+  const last10Digits = phoneNumber.slice(-10);
+
+  // ✅ Try finding with both formats
+  const user = await User.findOne({
+    $or: [
+      { phoneNumber: last10Digits },        // stored without +91
+      { phoneNumber: `+91${last10Digits}` } // stored with +91
+    ]
+  });
 
   if (!user) {
     return errorResponse(res, 'User not found', 404);
@@ -556,13 +594,15 @@ const verifyResetPassword = asyncHandler(async (req, res) => {
     return errorResponse(res, 'Invalid reset code', 400);
   }
 
-  // Update password and clear reset code
+  // ✅ Update password and clear reset code
   user.password = newPassword;
   user.resetPasswordCode = undefined;
   await user.save();
 
   return successResponse(res, {}, 'Password has been reset successfully', 200);
 });
+
+
 
 // Verify reset code and reset password
 const resetPassword = asyncHandler(async (req, res) => {
