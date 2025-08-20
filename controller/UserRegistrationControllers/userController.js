@@ -604,14 +604,26 @@ const resetPassword = asyncHandler(async (req, res) => {
 });
 
 const loginUser = [
-    // authLimiter,
-    userValidation.login, // isme bhi phoneNumber field expect karwao
+    userValidation.login, // phoneNumber field expect karwao
     asyncHandler(async (req, res) => {
-        const { phoneNumber, password } = req.body; // email -> phoneNumber
+        let { phoneNumber, password } = req.body;
+
+        if (!phoneNumber) {
+            return errorResponse(res, "Phone number is required", 400);
+        }
+
+        // Remove non-digit characters
+        phoneNumber = phoneNumber.replace(/\D/g, '');
+
+        // Ensure last 10 digits
+        const last10Digits = phoneNumber.slice(-10);
+
+        // Prefix +91 for DB search
+        const searchNumber = '+91' + last10Digits;
 
         try {
-            // DB me user ko phoneNumber se dhundho
-            const user = await User.findOne({ phoneNumber });
+            // DB me user dhundho
+            const user = await User.findOne({ phoneNumber: searchNumber });
 
             if (!user) {
                 return errorResponse(res, "Phone number not found", 401);
@@ -622,12 +634,11 @@ const loginUser = [
                 return errorResponse(res, "Incorrect password", 401);
             }
 
-          if (!user.isEmailVerified && !user.isPhoneVerified) {
-            return errorResponse(res, "Please verify your email or phone number before logging in", 401, {
-                requiresVerification: true
-            });
-        }
-
+            if (!user.isEmailVerified && !user.isPhoneVerified) {
+                return errorResponse(res, "Please verify your email or phone number before logging in", 401, {
+                    requiresVerification: true
+                });
+            }
 
             // Generate token
             const token = generateToken(user);
@@ -639,12 +650,11 @@ const loginUser = [
             delete userResponse.password;
             delete userResponse.__v;
 
-            // Prepare role info
             const roleInfo = {
-                hasSanghRoles: user.sanghRoles && user.sanghRoles.length > 0,
-                hasPanchRoles: user.panchRoles && user.panchRoles.length > 0,
-                hasTirthRoles: user.tirthRoles && user.tirthRoles.length > 0,
-                hasVyaparRoles: user.vyaparRoles && user.vyaparRoles.length > 0
+                hasSanghRoles: user.sanghRoles?.length > 0,
+                hasPanchRoles: user.panchRoles?.length > 0,
+                hasTirthRoles: user.tirthRoles?.length > 0,
+                hasVyaparRoles: user.vyaparRoles?.length > 0
             };
 
             return successResponse(
