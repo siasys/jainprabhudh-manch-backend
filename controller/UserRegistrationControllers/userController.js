@@ -27,13 +27,26 @@ const { sendVerificationSms } = require("../../services/smsHelper");
 const generateVerificationCode = () =>{
     return Math.floor(100000 + Math.random() * 900000).toString();
   };
-// Register new user with enhanced security
+
+  // Function to generate fullName dynamically
+function generateFullName(firstName, lastName) {
+  if (!firstName) firstName = '';
+  if (!lastName) lastName = '';
+  if (lastName.toLowerCase() === 'jain') {
+    return `${firstName} ${lastName}`.trim(); // Sejal Jain
+  } else if (lastName) {
+    return `${firstName} Jain (${lastName})`.trim(); // Sejal Jain (Bhawsar)
+  } else {
+    return `${firstName} Jain`.trim(); // Agar lastName empty ho
+  }
+}
+
 // Register new user with enhanced security 
 const registerUser = asyncHandler(async (req, res) => {
   const { firstName, lastName, phoneNumber, email, password, birthDate, gender, location } = req.body;
 
   // Generate fullName
-  const fullName = `${firstName || ''} ${lastName || ''}`.trim();
+  const fullName = generateFullName(firstName, lastName);
 
   // Check if phone number already exists
   const existingPhoneUser = await User.findOne({ phoneNumber });
@@ -104,6 +117,7 @@ const verifyOtp = asyncHandler(async (req, res) => {
   const newUser = await User.create({
     firstName,
     lastName,
+    fullName: generateFullName(firstName, lastName),
     phoneNumber: phone,
     email,
     password,
