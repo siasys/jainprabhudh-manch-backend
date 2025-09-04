@@ -1,7 +1,17 @@
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 
-
+const sanghTeamRoles = [
+  'sanghSarakshak',
+  'sanghMargdarshak',
+  'sanghUpadhyaksh',
+  'sanghSanghthanSachive',
+  'sanghSahsachive',
+  'sanghKoshadhyksha',
+  'sanghPracharak',
+  'sanghKarykarmPramukh',
+  'sanghKaryakariniSadasya'
+];
 const officeBearerSchema = new mongoose.Schema({
     role: {
         type: String,
@@ -161,6 +171,60 @@ const memberSchema = new mongoose.Schema({
         default: 'pending'
     }
 });
+// 🔹 Sangh Team Schema
+const sanghTeamSchema = new mongoose.Schema({
+  role: {
+    type: String,
+    enum: sanghTeamRoles,
+    required: true,
+  },
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  name: {
+    type: String,
+  },
+  jainAadharNumber: {
+    type: String,
+    required: true,
+  },
+  email: String,
+  phoneNumber: String,
+  userImage: String,
+  address: {
+    street: String,
+    city: String,
+    district: String,
+    state: String,
+    pincode: String,
+  },
+  appointmentDate: {
+    type: Date,
+    default: Date.now,
+    required: true,
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'paid', 'overdue'],
+    default: 'pending',
+  },
+  termEndDate: {
+    type: Date,
+    default: () =>
+      new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000), // 2 years from appointment
+    required: true,
+  },
+  status: {
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'active',
+  },
+  description: {
+    type: String,
+    default: '',
+  },
+});
 
 const hierarchicalSanghSchema = new mongoose.Schema({
     name: {
@@ -236,6 +300,7 @@ const hierarchicalSanghSchema = new mongoose.Schema({
         default: null
     },
     officeBearers: [officeBearerSchema],
+    sanghTeams: [sanghTeamSchema],
     membersCount:{
         type:String
     },

@@ -20,22 +20,18 @@ const hasLevelAccess = (userLevel, targetLevel, isSuperAdmin = false) => {
     if (userLevel === 'country') {
         return levelHierarchy['country'].includes(targetLevel);
     }
-    
     // If user is at state level, they can create any level below state
     if (userLevel === 'state') {
         return levelHierarchy['state'].includes(targetLevel);
     }
-    
     // If user is at district level, they can create any level below district
     if (userLevel === 'district') {
         return levelHierarchy['district'].includes(targetLevel);
     }
-    
     // If user is at city level, they can only create area level
     if (userLevel === 'city') {
         return targetLevel === 'area';
     }
-    
     // Area level users cannot create any Sangh
     return false;
 };
@@ -96,7 +92,7 @@ const isOfficeBearer = asyncHandler(async (req, res, next) => {
 
         // Check if user has any office bearer role for this Sangh
         const hasOfficeBearerRole = req.user.sanghRoles && Array.isArray(req.user.sanghRoles) && req.user.sanghRoles.some(role => 
-            role.sanghId.toString() === sanghId && 
+            role.sanghId.toString() === sanghId &&
             ['president', 'secretary', 'treasurer'].includes(role.role)
         );
 
@@ -142,7 +138,6 @@ const canReviewJainAadharByLocation = asyncHandler(async (req, res, next) => {
     try {
         const { state, district, city, area } = req.body.location;
         const userId = req.user._id;
-        
         // Find all Sanghs where user is an office bearer
         const userSanghs = await HierarchicalSangh.find({
             'officeBearers': {
@@ -171,22 +166,22 @@ const canReviewJainAadharByLocation = asyncHandler(async (req, res, next) => {
                     }
                     break;
                 case 'district':
-                    if (sangh.location.state === state && 
+                    if (sangh.location.state === state &&
                         sangh.location.district === district) {
                         hasAuthority = true;
                     }
                     break;
                 case 'city':
-                    if (sangh.location.state === state && 
-                        sangh.location.district === district && 
+                    if (sangh.location.state === state &&
+                        sangh.location.district === district &&
                         sangh.location.city === city) {
                         hasAuthority = true;
                     }
                     break;
                 case 'area':
-                    if (sangh.location.state === state && 
-                        sangh.location.district === district && 
-                        sangh.location.city === city && 
+                    if (sangh.location.state === state &&
+                        sangh.location.district === district &&
+                        sangh.location.city === city &&
                         sangh.location.area === area) {
                         hasAuthority = true;
                     }
@@ -198,11 +193,11 @@ const canReviewJainAadharByLocation = asyncHandler(async (req, res, next) => {
                 break;
             }
         }
-        
+
         if (!hasAuthority) {
             return errorResponse(res, 'You do not have authority to review applications from this location', 403);
         }
-        
+
         next();
     } catch (error) {
         return errorResponse(res, error.message, 500);
@@ -214,12 +209,10 @@ const canPostAsSangh = asyncHandler(async (req, res, next) => {
     try {
         const sanghId = req.params.sanghId;
         const userId = req.user._id;
-        
         const sangh = await HierarchicalSangh.findById(sanghId);
         if (!sangh) {
             return errorResponse(res, 'Sangh not found', 404);
         }
-        
         const officeBearer = sangh.officeBearers.find(
             bearer => bearer.userId.toString() === userId.toString() && bearer.status === 'active'
         );
@@ -240,7 +233,6 @@ const isPanchMember = async (req, res, next) => {
     try {
         const panchId = req.params.panchId;
         const userId = req.user._id;
-        
         // If user is superadmin, allow access
         if (req.user.role === 'superadmin' || req.user.role === 'admin') {
             // Still need to find the Panch group to attach to req

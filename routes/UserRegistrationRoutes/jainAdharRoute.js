@@ -23,7 +23,8 @@ const {
   reviewByAdmin,
   sendSharavakOtp,
   verifySharavakOtp,
-  resendSharavakOtp
+  resendSharavakOtp,
+  getCheckShravk
 } = require('../../controller/UserRegistrationControllers/jainAdharController');
 const { authMiddleware, canReviewJainAadhar } = require('../../middlewares/authMiddlewares');
 const { canEditJainAadhar } = require('../../middlewares/jainAadharEditPermissions');
@@ -33,19 +34,9 @@ const rateLimit = require('express-rate-limit');
 const { body, param, query } = require('express-validator');
 const { generateJainAadharCard } = require('../../controller/UserRegistrationControllers/generateCard');
 
-// Rate limiting for application submission
-// const applicationLimiter = rateLimit({
-//   windowMs: 24 * 60 * 60 * 1000, // 24 hours
-//   max: 3, // limit each IP to 1 application per day
-//   message: {
-//     success: false,
-//     message: 'Too many applications. Please try again tomorrow.'
-//   },
-//   standardHeaders: true,
-//   keyGenerator: (req) => req.user ? req.user.id : req.ip // Use user ID if available
-// });
 
-// Rate limiting for status checks
+router.get('/check-id', getCheckShravk);
+
 const statusCheckLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // limit each IP to 10 requests per 15 minutes

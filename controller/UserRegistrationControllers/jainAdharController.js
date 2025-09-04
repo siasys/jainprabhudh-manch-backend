@@ -31,7 +31,7 @@ const determineApplicationLevel = (location) => {
 // Create Jain Aadhar application with level-based routing
 const createJainAadhar = asyncHandler(async (req, res) => {
      try {
-    const number = req.body.contactDetails?.number; // ✅ number field
+    const number = req.body.contactDetails?.number;
     const enteredOtp = req.body.otp;
 
     if (!number || !enteredOtp) {
@@ -62,13 +62,13 @@ const createJainAadhar = asyncHandler(async (req, res) => {
 
 const { location } = req.body;
 let applicationLevel = 'city';
-let reviewingSanghId = req.body.reviewingSanghId || null; // ✅ pehle declare karo
+let reviewingSanghId = req.body.reviewingSanghId || null;
 
 if (!location || !location.state) {
   return errorResponse(res, 'State is required in location data', 400);
 }
 
-// ✅ Use frontend values if available
+//  Use frontend values if available
 if (req.body.applicationLevel && req.body.reviewingSanghId) {
   applicationLevel = req.body.applicationLevel;
   reviewingSanghId = req.body.reviewingSanghId;
@@ -89,6 +89,7 @@ if (req.body.applicationLevel && req.body.reviewingSanghId) {
       const query = {
         level: applicationLevel,
         status: 'active',
+         sanghType: 'main',
       };
 
       if (applicationLevel === 'district') {
@@ -104,7 +105,7 @@ if (req.body.applicationLevel && req.body.reviewingSanghId) {
         // Handle fallback escalation
         const tryFallbackLevels = async (levels) => {
           for (const level of levels) {
-            let sanghQuery = { level, status: 'active' };
+            let sanghQuery = { level, status: 'active',sanghType: 'main' };
 
             if (level === 'district') {
               sanghQuery['location.district'] = location.district;
@@ -463,17 +464,54 @@ const getApplicationsReview = asyncHandler(async (req, res) => {
     return errorResponse(res, 'Error fetching applications', 500, error.message);
   }
 });
+const getCheckShravk = asyncHandler(async (req, res) => {
+  try {
+    const { shravakId } = req.query;
+
+    if (!shravakId || shravakId.trim() === "") {
+      return errorResponse(res, "Shravak Id is required", 400);
+    }
+    // check shravakId against jainAdharNumber
+    const record = await JainAadhar.findOne({ jainAadharNumber: shravakId });
+
+    if (!record) {
+      return errorResponse(res, "Shravak Id not valid", 404);
+    }
+    return successResponse(
+      res,
+      { jainAadharNumber: record.jainAadharNumber, name: record.name },
+      "Shravak Id valid",
+      200
+    );
+  } catch (error) {
+    return errorResponse(res, "Error checking Shravak Id", 500, error.message);
+  }
+});
 
 // Admin: Get all applications
 const getAllApplications = asyncHandler(async (req, res) => {
   try {
-    const applications = await JainAadhar.find()
-      .populate('userId', 'firstName lastName fullName email')
-      .sort('-createdAt');
+    const { search } = req.query;
 
-    return successResponse(res, applications, 'Applications retrieved successfully', 200, applications.length);
+    let filter = {};
+
+    if (search && search.trim() !== "") {
+      filter = {
+        name: { $regex: search, $options: "i" }
+      };
+    }
+    const applications = await JainAadhar.find(filter)
+      .populate("userId", "firstName lastName fullName email accountType businessName")
+      .sort("-createdAt");
+    return successResponse(
+      res,
+      applications,
+      "Applications retrieved successfully",
+      200,
+      applications.length
+    );
   } catch (error) {
-    return errorResponse(res, 'Error fetching applications', 500, error.message);
+    return errorResponse(res, "Error fetching applications", 500, error.message);
   }
 });
 
@@ -508,7 +546,6 @@ const getApplicationsForReview = asyncHandler(async (req, res) => {
             .populate('userId')
             .populate('reviewingSanghId', 'name level location')
             .sort('-createdAt');
-            
             return successResponse(res, applications, 'Applications retrieved successfully');
         }
 
@@ -523,7 +560,7 @@ const getApplicationsForReview = asyncHandler(async (req, res) => {
 
             return successResponse(res, applications, 'Applications retrieved successfully');
         }
-         // ✅ Normal user - Can only see their own applications
+         // Normal user - Can only see their own applications
          if (reviewerLevel === "user") {
             const applications = await JainAadhar.find({ userId: userId })
                 .populate("userId")
@@ -1115,6 +1152,7 @@ module.exports = {
   createJainAadhar,
   getApplicationStatus,
   getAllApplications,
+  getCheckShravk,
   getApplicationsForReview,
   reviewApplication,
   getApplicationStats,

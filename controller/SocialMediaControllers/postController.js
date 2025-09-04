@@ -131,7 +131,7 @@ const getPostsByUser = asyncHandler(async (req, res) => {
   }
   const posts = await getOrSetCache(cacheKey, async () => {
     return await Post.find({ user: userId })
-      .populate('user', 'firstName lastName fullName profilePicture')
+      .populate('user', 'firstName lastName fullName profilePicture accountType')
       .populate('sanghId', 'name sanghImage')
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -169,15 +169,15 @@ const getPostById = asyncHandler(async (req, res) => {
 
   const post = await getOrSetCache(`post:${postId}`, async () => {
     let query = Post.findById(postId)
-      .populate('user', 'firstName lastName fullName profilePicture')
+      .populate('user', 'firstName lastName fullName profilePicture accountType businessName')
       .populate({
         path: 'comments.user',
-        select: 'firstName lastName fullName profilePicture',
+        select: 'firstName lastName fullName profilePicture accountType businessName',
       })
       .populate({
         path: 'comments.replies.user',
         model: 'User',
-        select: 'firstName lastName fullName profilePicture',
+        select: 'firstName lastName fullName profilePicture accountType businessName',
       });
 
     // 🔁 Type-wise populate
@@ -372,16 +372,14 @@ const getPostById = asyncHandler(async (req, res) => {
 //     return errorResponse(res, 'Failed to fetch posts', 500, error.message);
 //   }
 // };
-
-// Get all posts (Modified)
-
+// Get all post new loading logic
 const getAllPosts = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 5;
     const cursor = req.query.cursor;
     const userId = req.query.userId;
 
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).lean();
     if (!user) {
       return successResponse(res, {
         posts: [],
@@ -389,63 +387,44 @@ const getAllPosts = async (req, res) => {
       }, 'User not found');
     }
 
-    // Get user interests
-    const interestDoc = await UserInterest.findOne({ user: userId });
+    const interestDoc = await UserInterest.findOne({ user: userId }).lean();
     const userHashtags = interestDoc ? interestDoc.hashtags : [];
 
-    // Cursor for pagination
-    const timeCondition = cursor ? { createdAt: { $lt: new Date(cursor) } } : {};
+    // Pagination query with limit
+    const query = cursor
+      ? { createdAt: { $lt: new Date(cursor) } }
+      : {};
 
-    // Fetch posts
-    const postsRaw = await Post.find({
-      ...timeCondition
-    })
-      .populate('user', 'firstName lastName fullName profilePicture friends accountStatus')
+    // Use MongoDB sort + limit instead of JS slice
+    let postsRaw = await Post.find(query)
+      .populate('user', 'firstName lastName fullName profilePicture accountStatus accountType businessName')
       .populate('sanghId', 'name sanghImage')
+      .sort({ createdAt: -1 })   // MongoDB pe sort karo
+      .limit(limit)
       .lean();
 
     // Filter out deactivated accounts
     let posts = postsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
 
-    // Score calculation: match hashtags with user interests
+    // Calculate score if needed (can be optimized further)
     posts = posts.map(post => {
       let score = 0;
-      if (post.hashtags && post.hashtags.length) {
+      if (post.hashtags?.length) {
         post.hashtags.forEach(tag => {
           const match = userHashtags.find(h => h.name === tag);
           if (match) score += match.score;
         });
       }
-      // Newer posts get small bonus
-      const ageHours = (Date.now() - new Date(post.createdAt)) / (1000 * 60 * 60);
-      score += Math.max(0, 48 - ageHours) * 0.1; // bonus for recency
       return { ...post, _score: score };
     });
 
-    // Sort by score first, then by date
-    posts.sort((a, b) => b._score - a._score || new Date(b.createdAt) - new Date(a.createdAt));
-
-    // Apply limit
-    posts = posts.slice(0, limit);
-
-    // Pagination cursor
     const nextCursor = posts.length > 0
       ? posts[posts.length - 1].createdAt.toISOString()
       : null;
 
-    // Default empty friends array
-    posts.forEach(post => {
-      if (post.user && !post.user.friends) {
-        post.user.friends = [];
-      }
-    });
-
     return successResponse(res, {
       posts,
-      pagination: {
-        nextCursor,
-        hasMore: posts.length === limit
-      }
+      pagination: { nextCursor, hasMore: posts.length === limit }
     }, 'All posts fetched successfully');
 
   } catch (error) {
@@ -453,6 +432,88 @@ const getAllPosts = async (req, res) => {
     return errorResponse(res, 'Failed to fetch posts', 500, error.message);
   }
 };
+
+
+// Get all posts (Modified)
+
+// const getAllPosts = async (req, res) => {
+//   try {
+//     const limit = parseInt(req.query.limit) || 5;
+//     const cursor = req.query.cursor;
+//     const userId = req.query.userId;
+
+//     const user = await User.findById(userId);
+//     if (!user) {
+//       return successResponse(res, {
+//         posts: [],
+//         pagination: { nextCursor: null, hasMore: false }
+//       }, 'User not found');
+//     }
+
+//     // Get user interests
+//     const interestDoc = await UserInterest.findOne({ user: userId });
+//     const userHashtags = interestDoc ? interestDoc.hashtags : [];
+
+//     // Cursor for pagination
+//     const timeCondition = cursor ? { createdAt: { $lt: new Date(cursor) } } : {};
+
+//     // Fetch posts
+//     const postsRaw = await Post.find({
+//       ...timeCondition
+//     })
+//       .populate('user', 'firstName lastName fullName profilePicture friends accountStatus accountType businessName')
+//       .populate('sanghId', 'name sanghImage')
+//       .lean();
+
+//     // Filter out deactivated accounts
+//     let posts = postsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
+
+//     // Score calculation: match hashtags with user interests
+//     posts = posts.map(post => {
+//       let score = 0;
+//       if (post.hashtags && post.hashtags.length) {
+//         post.hashtags.forEach(tag => {
+//           const match = userHashtags.find(h => h.name === tag);
+//           if (match) score += match.score;
+//         });
+//       }
+//       // Newer posts get small bonus
+//       const ageHours = (Date.now() - new Date(post.createdAt)) / (1000 * 60 * 60);
+//       score += Math.max(0, 48 - ageHours) * 0.1; // bonus for recency
+//       return { ...post, _score: score };
+//     });
+
+//     // Sort by score first, then by date
+//     posts.sort((a, b) => b._score - a._score || new Date(b.createdAt) - new Date(a.createdAt));
+
+//     // Apply limit
+//     posts = posts.slice(0, limit);
+
+//     // Pagination cursor
+//     const nextCursor = posts.length > 0
+//       ? posts[posts.length - 1].createdAt.toISOString()
+//       : null;
+
+//     // Default empty friends array
+//     posts.forEach(post => {
+//       if (post.user && !post.user.friends) {
+//         post.user.friends = [];
+//       }
+//     });
+
+//     return successResponse(res, {
+//       posts,
+//       pagination: {
+//         nextCursor,
+//         hasMore: posts.length === limit
+//       }
+//     }, 'All posts fetched successfully');
+
+//   } catch (error) {
+//     console.error("Error in getAllPosts:", error);
+//     return errorResponse(res, 'Failed to fetch posts', 500, error.message);
+//   }
+// };
 
 // Function to toggle like on a post
 const toggleLike = [
@@ -479,6 +540,11 @@ const toggleLike = [
       // ---- Unlike ----
       post.likes = post.likes.filter((id) => id.toString() !== userId);
 
+       user.activity.likes = user.activity.likes.filter(
+        (like) => like.postId.toString() !== postId
+      );
+      await user.save();
+
       // UserInterest score reduce
       if (post.hashtags && post.hashtags.length) {
         let interestDoc = await UserInterest.findOne({ user: userId });
@@ -502,13 +568,17 @@ const toggleLike = [
         senderId: userId,
         receiverId: post.user._id,
         type: 'like',
-        postId: postId, 
+        postId: postId,
       });
 
     } else {
       // ---- Like ----
       post.likes.push(userId);
 
+      if (!user.activity.likes.some(like => like.postId.toString() === postId)) {
+        user.activity.likes.push({ postId });
+        await user.save();
+      }
       // UserInterest score increase
       if (post.hashtags && post.hashtags.length) {
         let interestDoc = await UserInterest.findOne({ user: userId });
@@ -557,7 +627,7 @@ const getLikedUsers = asyncHandler(async (req, res) => {
 
   const post = await Post.findById(postId).populate({
     path: 'likes',
-    select: 'fullName profilePicture', // only needed fields
+    select: 'fullName profilePicture businessName accountType', // only needed fields
   });
 
   if (!post) {
@@ -739,6 +809,11 @@ const addComment = async (req, res) => {
     };
     post.comments.push(comment);
     await post.save();
+    // User activity update
+    if (!user.activity.comments.some(c => c.postId.toString() === postId)) {
+      user.activity.comments.push({ postId });
+      await user.save();
+    }
     await invalidateCache(`post:${postId}`);
     await invalidateCache(`postComments:${postId}`);
     await post.populate('comments.user', 'firstName lastName fullName profilePicture');

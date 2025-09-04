@@ -1,11 +1,11 @@
 
 const express = require('express');
-const { 
-    registerUser, 
-    getAllUsers, 
-    getUserById, 
+const {
+    registerUser,
+    getAllUsers,
+    getUserById,
     updateUserById,
-    loginUser, 
+    loginUser,
     updatePrivacy,
     uploadProfilePicture,
     skipProfilePicture,
@@ -27,7 +27,13 @@ const {
     verifyResetPassword,
     requestPasswordResetMobile,
     sendChangePhoneOtp,
-    verifyChangePhone
+    verifyChangePhone,
+    verifyRegisterOtp,
+    verifyOtpMobileEmail,
+    sendOtp,
+    registerFinalUser,
+    resendOtp,
+    getUserActivityByType
 } = require('../../controller/UserRegistrationControllers/userController');
 const { authMiddleware, checkAccess, authenticate } = require('../../middlewares/authMiddlewares');
 const upload = require('../../middlewares/upload');
@@ -68,10 +74,15 @@ router.post('/register',
     ],
     registerUser
 );
+router.post('/register-user', registerFinalUser);
+router.post('/send-otp', sendOtp);
+router.post('/resend-otp', resendOtp);
+router.post('/verify-email-mobile-otp', verifyOtpMobileEmail);
 router.post('/verification-email',sendVerificationCode)
 router.post('/verify-email', verifyEmail);
 router.post('/verify-emails', verifyEmails);
 router.post('/resend-code', resendVerificationCode);
+router.post("/register-verify", verifyRegisterOtp);// ui me bhi api change krna he
 router.post("/verify-otp", verifyOtp);
 //router.get('/cities', getAllCities);
 router.get('/location', getCitiesByState);
@@ -96,6 +107,7 @@ router.post('/verify-change-email', verifyChangeEmail);
 // Search users endpoint for suggestion/complaint recipient selection
 router.get('/search', searchUsers);
 router.get('/', getAllUsers);
+router.get("/:id/activity/:type", getUserActivityByType);
 router.get('/by-jain-aadhar/:number', getUserByJainAadharNumber);
 
 router.post('/change-password', changePassword);

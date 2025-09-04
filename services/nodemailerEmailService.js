@@ -10,21 +10,26 @@ const transporter = nodemailer.createTransport({
 });
 
 const sendVerificationEmail = async (email, name, code) => {
-  const html = renderEmailTemplate('verification', { name, code });
+   const userName = name && name.trim() ? name : "User";
+  const html = renderEmailTemplate('verification', { 
+    name: userName,
+    code
+  });
   return transporter.sendMail({
     from: process.env.EMAIL_FROM,
     to: email,
-    subject: 'Verify Your Email - Jain Prabhuddh Manch',
+    subject: 'Verify Your Email - Jain Prabuddh Manch',
     html
   });
 };
+
 
 const sendWelcomeEmail = async (email, name) => {
   const html = renderEmailTemplate('welcome', { name });
   return transporter.sendMail({
     from: process.env.EMAIL_FROM,
     to: email,
-    subject: 'Welcome to Jain Prabhuddh Manch 🎉',
+    subject: 'Welcome to Jain Prabuddh Manch 🎉',
     html
   });
 };
@@ -34,7 +39,7 @@ const sendPasswordResetEmail = async (email, name, code) => {
   return transporter.sendMail({
     from: process.env.EMAIL_FROM,
     to: email,
-    subject: 'Reset Your Password - Jain Prabhuddh Manch',
+    subject: 'Reset Your Password - Jain Prabuddh Manch',
     html
   });
 };

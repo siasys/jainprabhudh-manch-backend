@@ -3,16 +3,100 @@ const { Message, encrypt, decrypt } = require('../../model/SocialMediaModels/mes
 const User = require('../../model/UserRegistrationModels/userModel');
 const Conversation = require('../../model/SocialMediaModels/conversationModel');
 const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
+const Post = require('../../model/SocialMediaModels/postModel');
 const mongoose = require('mongoose');
 const {getIo, getUserStatus}  = require('../../websocket/socket');
 const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { getOrSetCache,invalidateCache } = require('../../utils/cache');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
+const expressAsyncHandler = require('express-async-handler');
+
+exports.sharePost = async (req, res) => {
+  try {
+    const sender = req.body.sender?.toString();
+    const receiver = req.body.receiver?.toString();
+    const postId = req.body.postId;
+    const optionalText = req.body.optionalText || "";
+
+    if (!postId) {
+      return res.status(400).json({ message: "postId is required" });
+    }
+    if (!sender || !receiver) {
+      return res.status(400).json({ message: "sender and receiver are required" });
+    }
+
+    // ✅ Sender authorization check
+    if (sender !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Sender ID must match authenticated user",
+      });
+    }
+
+    const receiverUser = await User.findById(receiver);
+    if (!receiverUser) {
+      return res.status(404).json({ message: "Receiver User not found" });
+    }
+    if (receiverUser?.blockedUsers?.includes(sender)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are blocked by this user. Cannot share post.",
+      });
+    }
+
+    // ✅ Find Post
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    // ✅ Prepare attachments from post.media
+    const attachments = [];
+    if (Array.isArray(post.media) && post.media.length > 0) {
+      post.media.forEach((m) => {
+        if (m.type === "image" && m.url) {
+          attachments.push({
+            type: "image",
+            url: m.url,
+            name: "shared_post.jpg",
+            size: 0,
+          });
+        }
+      });
+    }
+
+    // ✅ New message (direct in Message collection)
+    const messageData = {
+      sender,
+      receiver,
+      messageType: "post",
+      post: post._id,
+      message: optionalText, // optional caption text
+      attachments,
+      createdAt: new Date(),
+    };
+
+    const newMessage = new Message(messageData);
+    await newMessage.save();
+
+    // ✅ Emit socket (direct to receiver)
+    const io = getIo();
+    io.to(receiver.toString()).emit("newMessage", {
+      message: newMessage.toObject(),
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: newMessage,
+    });
+  } catch (error) {
+    console.error("Error sharing post:", error);
+    return res.status(500).json({ success: false, message: "Error sharing post" });
+  }
+};
 
 // Create a new message
-// controllers/messageController.js
-
 exports.createMessage = async (req, res) => {
   try {
     const sender = req.body.sender.trim();
@@ -588,8 +672,8 @@ exports.getAllMessages = async (req, res) => {
       return await Message.find({
         $or: [{ sender: userId }, { receiver: userId }],
       })
-        .populate('sender', 'firstName lastName profilePicture')
-        .populate('receiver', 'firstName lastName profilePicture')
+        .populate('sender', 'firstName lastName profilePicture accountType businessName')
+        .populate('receiver', 'firstName lastName profilePicture accountType businessName')
         .sort({ createdAt: -1 });
     }, 60); // Cache for 1 minute
 
@@ -628,8 +712,8 @@ exports.getConversation = async (req, res) => {
       ]
     })
       .sort({ createdAt: -1 })
-      .populate('sender', 'fullName profilePicture')
-      .populate('receiver', 'fullName profilePicture');
+      .populate('sender', 'fullName profilePicture accountType businessName')
+      .populate('receiver', 'fullName profilePicture accountType businessName');
 
     const conversationMap = new Map();
 

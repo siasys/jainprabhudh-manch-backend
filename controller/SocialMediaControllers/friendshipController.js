@@ -32,9 +32,10 @@ const followUser = asyncHandler(async (req, res) => {
 const getFollowRequests = asyncHandler(async (req, res) => {
     const { userId } = req.params;
     const requests = await Friendship.find({ following: userId, followStatus: 'following' })
-        .populate('follower', 'firstName lastName fullName profilePicture');
+        .populate('follower', 'firstName lastName fullName profilePicture accountType businessName');
     res.json({ success: true, requests });
 });
+
 // Get Follow Status Between Two Users
 const getFollowStatus = asyncHandler(async (req, res) => {
     const { followerId, followingId } = req.params;
@@ -86,54 +87,72 @@ const unfollowUser = asyncHandler(async (req, res) => {
         return res.status(500).json({ message: "Error deleting notification or updating friends list" });
     }
 });
+
 const getFollowers = asyncHandler(async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const followers = await Friendship.find({ following: userId })
-            .populate('follower', 'firstName lastName fullName profilePicture');
-        res.status(200).json({
-            success: true,
-            count: followers.length,
-            followers: followers.map(f => ({
-                id: f.follower._id,
-                firstName: f.follower.firstName,
-                lastName: f.follower.lastName,
-                fullName: f.follower.fullName,
-                profilePicture: f.follower.profilePicture,
-                followStatus: f.followStatus
-            }))
-        });
-    } catch (error) {
-        console.error("Error fetching followers:", error);
-        res.status(500).json({ success: false, message: "Internal Server Error" });
-    }
+  const { userId } = req.params;
+  try {
+    const followers = await Friendship.find({ following: userId })
+      .populate('follower', 'firstName lastName fullName profilePicture accountType businessName');
+
+    res.status(200).json({
+      success: true,
+      count: followers.length,
+      followers: followers.map(f => {
+        const follower = f.follower;
+        return {
+          id: follower._id,
+          firstName: follower.firstName,
+          lastName: follower.lastName,
+          fullName: follower.fullName,
+          profilePicture: follower.profilePicture,
+          followStatus: f.followStatus,
+          accountType: follower.accountType,
+          businessName: follower.businessName,
+          displayName: follower.accountType === "business"
+            ? follower.businessName
+            : follower.fullName,
+        };
+      })
+    });
+  } catch (error) {
+    console.error("Error fetching followers:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
 });
 
 const getFollowing = asyncHandler(async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const following = await Friendship.find({ follower: userId })
-            .populate('following', 'firstName lastName fullName profilePicture'); 
+  const { userId } = req.params;
+  try {
+    const following = await Friendship.find({ follower: userId })
+      .populate('following', 'firstName lastName fullName profilePicture accountType businessName');
 
-        // 🔐 Filter out any broken references (null following)
-        const validFollowing = following.filter(f => f.following);
+    // 🔐 Filter out any broken references (null following)
+    const validFollowing = following.filter(f => f.following);
 
-        res.status(200).json({
-            success: true,
-            count: validFollowing.length,
-            following: validFollowing.map(f => ({
-                id: f.following._id,
-                firstName: f.following.firstName,
-                lastName: f.following.lastName,
-                fullName: f.following.fullName,
-                profilePicture: f.following.profilePicture,
-                followStatus: f.followStatus
-            }))
-        });
-    } catch (error) {
-        console.error("Error fetching following:", error);
-        res.status(500).json({ success: false, message: "Internal Server Error" });
-    }
+    res.status(200).json({
+      success: true,
+      count: validFollowing.length,
+      following: validFollowing.map(f => {
+        const user = f.following;
+        return {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          fullName: user.fullName,
+          profilePicture: user.profilePicture,
+          followStatus: f.followStatus,
+          accountType: user.accountType,
+          businessName: user.businessName,
+          displayName: user.accountType === "business"
+            ? user.businessName
+            : user.fullName,
+        };
+      })
+    });
+  } catch (error) {
+    console.error("Error fetching following:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
 });
 
 // Check if a user is following another user
@@ -169,7 +188,7 @@ const acceptFollowRequest = asyncHandler(async (req, res) => {
 const rejectFollowRequest = expressAsyncHandler(async (req, res) => {
   const { followerId, followingId } = req.body;
 
-  // ✅ Find the existing request with 'pending' status
+  // Find the existing request with 'pending' status
   const existingRequest = await Friendship.findOne({
     follower: followerId,
     following: followingId,
@@ -183,7 +202,7 @@ const rejectFollowRequest = expressAsyncHandler(async (req, res) => {
     });
   }
 
-  // ✅ Convert followStatus to 'following'
+  // Convert followStatus to 'following'
   existingRequest.followStatus = 'following';
   await existingRequest.save();
 

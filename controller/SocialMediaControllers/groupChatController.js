@@ -84,9 +84,9 @@ exports.getGroupDetails = async (req, res) => {
     }
 
     const group = await GroupChat.findById(groupId)
-      .populate("groupMembers.user", "firstName lastName fullName profilePicture")
-      .populate('creator', 'firstName lastName fullName profilePicture')
-      .populate('admins', 'firstName lastName fullName profilePicture');
+      .populate("groupMembers.user", "firstName lastName fullName profilePicture accountType businessName")
+      .populate('creator', 'firstName lastName fullName profilePicture accountType businessName')
+      .populate('admins', 'firstName lastName fullName profilePicture accountType businessName');
 
     if (!group) {
       return res.status(404).json({ message: "Group not found." });
@@ -270,9 +270,9 @@ exports.getAllGroups = async (req, res) => {
       'groupMembers.user': userId,
       isGotraGroup: false
     })
-      .populate('groupMembers.user', 'firstName fullName lastName profilePicture')
-      .populate('creator', 'firstName lastName fullName profilePicture')
-      .populate('groupMessages'); // <-- agar groupMessages populate karna hai
+      .populate('groupMembers.user', 'firstName fullName lastName profilePicture accountType businessName')
+      .populate('creator', 'firstName lastName fullName profilePicture accountType businessName')
+      .populate('groupMessages');
 
     // ✅ Fetch gotra group (either user is member OR creator)
     const gotraGroup = await GroupChat.findOne({
@@ -312,8 +312,6 @@ exports.getAllGroups = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-
-
 
 // Fetch All Gotra Groups
 exports.getUserGotraGroups = async (req, res) => {

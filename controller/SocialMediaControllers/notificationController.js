@@ -39,7 +39,7 @@ exports.getNotifications = async (req, res) => {
       .sort({ createdAt: -1 })
       .populate({
         path: "senderId",
-        select: "firstName lastName fullName profilePicture privacy",
+        select: "firstName lastName fullName profilePicture privacy accountType businessName",
       })
       .populate({
         path: "postId",

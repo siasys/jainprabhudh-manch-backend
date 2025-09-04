@@ -6,30 +6,39 @@ const userSchema = new mongoose.Schema(
   {
     firstName: {
       type: String,
-      required: [true, 'First name is required'],
+     // required: [true, 'First name is required'],
      // trim: true,
     },
     lastName: {
       type: String,
-      required: [true, 'Last name is required'],
+     // required: [true, 'Last name is required'],
     },
     fullName: {
       type: String,
       required: false,
     },
-    email: {
-      type: String,
-     // required: [true, 'Email is required'],
-      unique: true,
-      trim: true,
-      lowercase: true,
-      validate: {
-        validator: function(v) {
-          return validator.isEmail(v);
-        },
-        message: props => `${props.value} is not a valid email address!`
-      }
+    businessName:{
+    type: String,
     },
+    businessDate:{
+    type: Date,
+    },
+    shravakId:{
+      type: String,
+    },
+    email: {
+    type: String,
+    unique: true,
+    trim: true,
+    lowercase: true,
+    validate: {
+      validator: function(v) {
+        if (!v) return true;
+        return validator.isEmail(v);
+      },
+      message: props => `${props.value} is not a valid email address!`
+    }
+  },
     isPhoneVerified: {
       type: Boolean,
       default: false,
@@ -58,27 +67,32 @@ const userSchema = new mongoose.Schema(
     },
     birthDate: {
       type: Date,
-      required: [true, 'Birth date is required'],
+     // required: [true, 'Birth date is required'],
     },
     gender: {
       type: String,
       enum: ['Male', 'Female'],
-      required: [true, 'Gender is required'],
     },
     phoneNumber: {
       type: String,
+       unique: true
       // validate: {
       //   validator: function (v) {
       //     return /\d{10}/.test(v);
       //   },
       //   message: props => `${props.value} is not a valid phone number!`
       // },
-      required: [true, 'Phone number is required'],
+     // required: [true, 'Phone number is required'],
       
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
+     // required: [true, 'Password is required'],
+    },
+     accountType: {
+      type: String,
+      enum: ["user", "business"],
+      default: "user",
     },
       location: {
       country: {
@@ -109,6 +123,10 @@ const userSchema = new mongoose.Schema(
     privacy: {
       type: String,
       default: 'public',
+    },
+    token: {
+      type: String,
+      default: null
     },
     lastLogin: {
       type: Date,
@@ -188,9 +206,16 @@ const userSchema = new mongoose.Schema(
         ref: 'Story',
       },
     ],
-    token: {
-      type: String,
-      default: null
+    activity: {
+      likes: [
+        { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }
+      ],
+      comments: [
+        { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }
+      ],
+      shares: [
+        { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }
+      ]
     },
     deletedAt: { type: Date },
     loginAttempts: {
@@ -224,7 +249,22 @@ const userSchema = new mongoose.Schema(
       },
       role: {
         type: String,
-        enum: ['president', 'secretary', 'treasurer', 'member','panchMember']
+        enum: [
+        'president',
+        'secretary',
+        'treasurer',
+        'member',
+        'panchMember',
+        'sanghSarakshak',
+        'sanghMargdarshak',
+        'sanghUpadhyaksh',
+        'sanghSanghthanSachive',
+        'sanghSahsachive',
+        'sanghKoshadhyksha',
+        'sanghPracharak',
+        'sanghKarykarmPramukh',
+        'sanghKaryakariniSadasya'
+      ]
       },
       level: {
         type: String,

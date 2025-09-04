@@ -6,15 +6,15 @@ const sendVerificationSms = async (phoneNumber, otp, firstName) => {
   const TEMPLATE_ID = process.env.DLT_TEMPLATE_ID;
   const SENDER_ID = process.env.SMS_SENDER_ID;
 
-  // Ensure only digits
   phoneNumber = phoneNumber.replace(/\D/g, '');
 
-  // Add 91 prefix only if not already present
   if (!phoneNumber.startsWith('91')) {
     phoneNumber = '91' + phoneNumber.slice(-10);
   }
 
-  const message = `Dear ${firstName}, your OTP for verification is ${otp}. Please do not share it with anyone. Jain Prabuddh Manch Trust`;
+  const name = firstName && firstName.trim() ? firstName : "User";
+
+  const message = `Dear ${name}, your OTP for verification is ${otp}. Please do not share it with anyone. Jain Prabuddh Manch Trust`;
 
   const url = "https://www.smsgatewayhub.com/api/mt/SendSMS";
 
@@ -26,7 +26,7 @@ const sendVerificationSms = async (phoneNumber, otp, firstName) => {
     flashsms: 0,
     number: phoneNumber,
     text: message,
-    route: 13,
+    route: 54,
     EntityId: ENTITY_ID,
     dlttemplateid: TEMPLATE_ID,
   };

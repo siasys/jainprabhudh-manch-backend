@@ -91,6 +91,12 @@ const messageSchema = new mongoose.Schema(
       default: '',
       trim: true
     },
+      post: { type: mongoose.Schema.Types.ObjectId, ref: "Post" },
+      messageType: {
+        type: String,
+        default: "post"
+      },
+
      // Media attachments (only images)
      attachments: [{
       type: {

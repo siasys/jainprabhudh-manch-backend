@@ -30,72 +30,474 @@ const generateVerificationCode = () =>{
 
   // Function to generate fullName dynamically
 function generateFullName(firstName, lastName) {
+    if (!firstName && !lastName) {
+    return "";
+  }
+
   if (!firstName) firstName = '';
   if (!lastName) lastName = '';
   if (lastName.toLowerCase() === 'jain') {
-    return `${firstName} ${lastName}`.trim(); // Sejal Jain
+    return `${firstName} ${lastName}`.trim();
   } else if (lastName) {
-    return `${firstName} Jain (${lastName})`.trim(); // Sejal Jain (Bhawsar)
+    return `${firstName} Jain (${lastName})`.trim();
   } else {
-    return `${firstName} Jain`.trim(); // Agar lastName empty ho
+    return `${firstName} Jain`.trim();
   }
 }
-
-// Register new user with enhanced security 
 const registerUser = asyncHandler(async (req, res) => {
-  const { firstName, lastName, phoneNumber, email, password, birthDate, gender, location } = req.body;
+  const {
+    firstName,
+    lastName,
+    phoneNumber,
+    email,
+    password,
+    birthDate,
+    accountType,
+  } = req.body;
 
-  // Generate fullName
+  if (!phoneNumber && !email) {
+    return errorResponse(res, "Phone number or email is required", 400);
+  }
+
   const fullName = generateFullName(firstName, lastName);
 
-  // Check if phone number already exists
-  const existingPhoneUser = await User.findOne({ phoneNumber });
-  if (existingPhoneUser) {
-    return errorResponse(res, 'User with this phone number already exists', 400);
-  }
-
-  // If old OTP exists, delete it
-  let pending = await MobileOtpVerification.findOne({ phoneNumber });
-  if (pending && pending.isVerified === false) {
-    await MobileOtpVerification.deleteOne({ phoneNumber });
-  }
-
-  // Generate OTP
-  const verificationCode = generateVerificationCode();
-  const codeExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 min expiry
-
-  // Save in DB
-  await MobileOtpVerification.create({
-    phoneNumber,
-    code: verificationCode,
-    expiresAt: codeExpiry,
-    isVerified: false,
-    tempUserData: {
-      firstName,
-      lastName,
-      fullName,
-      phoneNumber,
-      email,
-      password,
-      birthDate,
-      gender,
-      location
+  // Check duplicates
+  if (phoneNumber) {
+    const existingPhoneUser = await User.findOne({ phoneNumber });
+    if (existingPhoneUser) {
+      return errorResponse(res, "User with this phone number already exists", 400);
     }
-  });
+  }
 
-  // Send SMS
-  try {
+  if (email) {
+    const existingEmailUser = await User.findOne({ email });
+    if (existingEmailUser) {
+      return errorResponse(res, "User with this email already exists", 400);
+    }
+  }
+
+  // Save in OTP/email-verification collection
+  const verificationCode = generateVerificationCode();
+  const codeExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+  let tempData = {
+    firstName: firstName || "",
+    lastName: lastName || "",
+    fullName: fullName || "",
+    phoneNumber,
+    email,
+    password,
+    birthDate,
+    accountType,
+  };
+
+  if (phoneNumber) {
+    await MobileOtpVerification.create({
+      phoneNumber,
+      code: verificationCode,
+      expiresAt: codeExpiry,
+      isVerified: false,
+      tempUserData: tempData,
+    });
+
     await sendVerificationSms(phoneNumber, verificationCode, firstName);
-    return successResponse(res, {}, 'Verification OTP sent on mobile. Please verify.');
-  } catch (error) {
-    console.error('SMS send error:', error);
-    return errorResponse(res, 'Failed to send verification OTP', 500);
+    return successResponse(res, {}, "Verification OTP sent on mobile. Please verify.");
+  }
+
+  if (email) {
+    await EmailVerification.create({
+      email,
+      code: verificationCode,
+      expiresAt: codeExpiry,
+      isVerified: false,
+      tempUserData: tempData,
+    });
+
+    await sendVerificationEmail(email, verificationCode, firstName);
+    return successResponse(res, {}, "Verification OTP sent on email. Please verify.");
+  }
+});
+const verifyRegisterOtp = asyncHandler(async (req, res) => {
+  const { phoneNumber, email, otp } = req.body;
+
+  if (!phoneNumber && !email) {
+    return errorResponse(res, "Phone number or email is required", 400);
+  }
+
+  if (!otp) {
+    return errorResponse(res, "OTP is required", 400);
+  }
+
+  // ✅ Mobile OTP Verify
+  if (phoneNumber) {
+    const otpRecord = await MobileOtpVerification.findOne({ phoneNumber }).sort({ createdAt: -1 });
+
+    if (!otpRecord) {
+      return errorResponse(res, "OTP not found, please request again", 404);
+    }
+
+    if (otpRecord.isVerified) {
+      return errorResponse(res, "OTP already verified", 400);
+    }
+
+    if (otpRecord.expiresAt < Date.now()) {
+      return errorResponse(res, "OTP expired, please request again", 400);
+    }
+
+    if (otpRecord.code !== otp) {
+      return errorResponse(res, "Invalid OTP", 400);
+    }
+
+    // ✅ Mark OTP verified
+    otpRecord.isVerified = true;
+    await otpRecord.save();
+
+    // ✅ Create final user with phone verified flag
+    const newUser = await User.create({
+      ...otpRecord.tempUserData,
+      isPhoneVerified: true,
+    });
+
+    return successResponse(res, newUser, "Phone OTP verified successfully, user created.");
+  }
+
+  // ✅ Email OTP Verify
+  if (email) {
+    const otpRecord = await EmailVerification.findOne({ email }).sort({ createdAt: -1 });
+
+    if (!otpRecord) {
+      return errorResponse(res, "OTP not found, please request again", 404);
+    }
+
+    if (otpRecord.isVerified) {
+      return errorResponse(res, "OTP already verified", 400);
+    }
+
+    if (otpRecord.expiresAt < Date.now()) {
+      return errorResponse(res, "OTP expired, please request again", 400);
+    }
+
+    if (otpRecord.code !== otp) {
+      return errorResponse(res, "Invalid OTP", 400);
+    }
+
+    // ✅ Mark OTP verified
+    otpRecord.isVerified = true;
+    await otpRecord.save();
+
+    // ✅ Create final user with email verified flag
+    const newUser = await User.create({
+      ...otpRecord.tempUserData,
+      isEmailVerified: true,
+    });
+
+    return successResponse(res, newUser, "Email OTP verified successfully, user created.");
   }
 });
 
-const verifyOtp = asyncHandler(async (req, res) => { 
-  const { phoneNumber, otp } = req.body;
+const registerFinalUser = asyncHandler(async (req, res) => {
+  let { userData } = req.body;
 
+  if (!userData) {
+    return errorResponse(res, "User data is required", 400);
+  }
+
+  if (typeof userData === "string") {
+    userData = JSON.parse(userData);
+  }
+
+  const {
+    firstName,
+    lastName,
+    fullName,
+    birthDate,
+    email,
+    phoneNumber,
+    accountType,
+    businessName,
+    businessDate,
+    shravakId,
+    password,
+    isEmailVerified = false,
+    isPhoneVerified = false,
+  } = userData;
+
+  // ✅ Duplicate check only for the field user is using
+  if (phoneNumber && (!email || email.trim() === "")) {
+    const existingPhoneUser = await User.findOne({ phoneNumber: String(phoneNumber) });
+    if (existingPhoneUser) {
+      return errorResponse(res, "User with this phone number already exists", 400);
+    }
+  }
+
+  if (email && (!phoneNumber || phoneNumber.trim() === "")) {
+    const existingEmailUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingEmailUser) {
+      return errorResponse(res, "User with this email already exists", 400);
+    }
+  }
+
+  // ✅ Create user object based on accountType
+  let newUserData = {
+    email: email || null,
+    phoneNumber: phoneNumber || null,
+    accountType,
+    isEmailVerified,
+    isPhoneVerified,
+    password
+  };
+
+  if (accountType === "business") {
+    newUserData.businessName = businessName;
+    newUserData.businessDate = businessDate;
+    newUserData.shravakId = shravakId;
+  } else {
+    newUserData.firstName = firstName;
+    newUserData.lastName = lastName;
+    newUserData.fullName = fullName;
+    newUserData.birthDate = birthDate;
+  }
+
+  // ✅ Create user in DB
+  const newUser = await User.create(newUserData);
+
+  // ✅ Generate token
+  const token = generateToken(newUser);
+  newUser.token = token;
+  await newUser.save();
+
+  // ✅ Prepare response
+  const userResponse = newUser.toObject();
+  delete userResponse.password;
+  delete userResponse.__v;
+
+  return successResponse(
+    res,
+    { newUser: userResponse, token },
+    "User registered successfully."
+  );
+});
+
+
+// Register new user with enhanced security 
+// const registerUser = asyncHandler(async (req, res) => {
+//   const { firstName, lastName, phoneNumber, email, password, birthDate, gender, location } = req.body;
+
+//   // Generate fullName
+//   const fullName = generateFullName(firstName, lastName);
+
+//   // Check if phone number already exists
+//   const existingPhoneUser = await User.findOne({ phoneNumber });
+//   if (existingPhoneUser) {
+//     return errorResponse(res, 'User with this phone number already exists', 400);
+//   }
+
+//   // If old OTP exists, delete it
+//   let pending = await MobileOtpVerification.findOne({ phoneNumber });
+//   if (pending && pending.isVerified === false) {
+//     await MobileOtpVerification.deleteOne({ phoneNumber });
+//   }
+
+//   // Generate OTP
+//   const verificationCode = generateVerificationCode();
+//   const codeExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 min expiry
+
+//   // Save in DB
+//   await MobileOtpVerification.create({
+//     phoneNumber,
+//     code: verificationCode,
+//     expiresAt: codeExpiry,
+//     isVerified: false,
+//     tempUserData: {
+//       firstName,
+//       lastName,
+//       fullName,
+//       phoneNumber,
+//       email,
+//       password,
+//       birthDate,
+//       gender,
+//       location
+//     }
+//   });
+
+//   // Send SMS
+//   try {
+//     await sendVerificationSms(phoneNumber, verificationCode, firstName);
+//     return successResponse(res, {}, 'Verification OTP sent on mobile. Please verify.');
+//   } catch (error) {
+//     console.error('SMS send error:', error);
+//     return errorResponse(res, 'Failed to send verification OTP', 500);
+//   }
+// });
+// Register woith mobile new modal
+const sendOtp = asyncHandler(async (req, res) => {
+  const { phoneNumber, email } = req.body;
+
+  if (!phoneNumber && !email) {
+    return errorResponse(res, "Phone number or email is required", 400);
+  }
+
+  // 📱 Phone number case
+  if (phoneNumber) {
+    const existingUser = await User.findOne({ phoneNumber: String(phoneNumber) });
+    if (existingUser) {
+      return errorResponse(res, "User with this phone number already exists", 400);
+    }
+
+    await MobileOtpVerification.deleteMany({ phoneNumber, isVerified: false });
+
+    const verificationCode = generateVerificationCode();
+    const codeExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+    await MobileOtpVerification.create({
+      phoneNumber,
+      code: verificationCode,
+      expiresAt: codeExpiry,
+      isVerified: false,
+    });
+
+    await sendVerificationSms(phoneNumber, verificationCode);
+    return successResponse(res, {}, "Verification OTP sent on mobile 📱");
+  }
+
+  // 📧 Email case
+  if (email) {
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingUser) {
+      return errorResponse(res, "User with this email already exists", 400);
+    }
+
+    await EmailVerification.deleteMany({ email, isVerified: false });
+
+    const verificationCode = generateVerificationCode();
+    const codeExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+    try {
+      await EmailVerification.create({
+        email,
+        code: verificationCode,
+        expiresAt: codeExpiry,
+        isVerified: false,
+      });
+
+      await sendVerificationEmail(email, verificationCode);
+      return successResponse(res, {}, "Verification OTP sent on email 📧");
+    } catch (err) {
+      if (err.code === 11000) {
+        return errorResponse(res, "User with this email already exists", 400);
+      }
+      console.error("Email OTP error:", err);
+      return errorResponse(res, "Something went wrong while sending OTP", 500);
+    }
+  }
+});
+// Resend OTP (for phone or email)
+const resendOtp = asyncHandler(async (req, res) => {
+  const { phoneNumber, email } = req.body;
+
+  if (!phoneNumber && !email) {
+    return errorResponse(res, "Phone number or email is required", 400);
+  }
+
+  // 📱 Phone number case
+  if (phoneNumber) {
+    const existingOtp = await MobileOtpVerification.findOne({ phoneNumber });
+
+    if (!existingOtp) {
+      return errorResponse(res, "No OTP request found for this phone number", 404);
+    }
+
+    // Purana OTP delete
+    await MobileOtpVerification.deleteMany({ phoneNumber });
+
+    const verificationCode = generateVerificationCode();
+    const codeExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+    await MobileOtpVerification.create({
+      phoneNumber,
+      code: verificationCode,
+      expiresAt: codeExpiry,
+      isVerified: false,
+    });
+
+    await sendVerificationSms(phoneNumber, verificationCode);
+    return successResponse(res, {}, "OTP resent on mobile 📱");
+  }
+
+  // Email case
+  if (email) {
+    const existingOtp = await EmailVerification.findOne({ email: email.toLowerCase() });
+
+    if (!existingOtp) {
+      return errorResponse(res, "No OTP request found for this email", 404);
+    }
+
+    // Purana OTP delete
+    await EmailVerification.deleteMany({ email });
+
+    const verificationCode = generateVerificationCode();
+    const codeExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+    try {
+      await EmailVerification.create({
+        email: email.toLowerCase(),
+        code: verificationCode,
+        expiresAt: codeExpiry,
+        isVerified: false,
+      });
+
+      await sendVerificationEmail(email, verificationCode);
+      return successResponse(res, {}, "OTP resent on email 📧");
+    } catch (err) {
+      console.error("Email OTP resend error:", err);
+      return errorResponse(res, "Something went wrong while resending OTP", 500);
+    }
+  }
+});
+
+const verifyOtpMobileEmail = asyncHandler(async (req, res) => {
+  const { phoneNumber, email, otp } = req.body;
+
+  let record;
+
+  if (phoneNumber) {
+    // ✅ Get OTP by phone
+    record = await MobileOtpVerification.findOne({ phoneNumber }).sort({ createdAt: -1 });
+    if (!record) return errorResponse(res, "No OTP request found for this number", 400);
+  } else if (email) {
+    // ✅ Get OTP by email
+    record = await EmailVerification.findOne({ email }).sort({ createdAt: -1 });
+    if (!record) return errorResponse(res, "No OTP request found for this email", 400);
+  } else {
+    return errorResponse(res, "Phone number or email is required", 400);
+  }
+
+  // ✅ Already verified
+  if (record.isVerified === true) return errorResponse(res, "Already verified", 400);
+
+  // ✅ Expired
+  if (record.expiresAt < new Date()) return errorResponse(res, "OTP expired", 400);
+
+  // ✅ Wrong OTP
+  if (record.code !== otp) return errorResponse(res, "Invalid OTP", 400);
+
+  // ✅ Mark OTP as verified
+  record.isVerified = true;
+  await record.save();
+
+  // ✅ Respond back (User creation ab alag API me hoga)
+  if (phoneNumber) {
+    return successResponse(res, { phoneNumber }, "Phone number verified successfully ✅");
+  }
+
+  if (email) {
+    return successResponse(res, { email }, "Email verified successfully ✅");
+  }
+});
+
+const verifyOtp = asyncHandler(async (req, res) => {
+  const { phoneNumber, otp } = req.body;
   // ✅ Fetch latest OTP request for this number
   const record = await MobileOtpVerification.findOne({ phoneNumber }).sort({ createdAt: -1 });
   if (!record) return errorResponse(res, "No OTP request found for this number", 400);
@@ -491,8 +893,8 @@ const requestPasswordResetMobile = asyncHandler(async (req, res) => {
   // Try finding with both formats
   const user = await User.findOne({
     $or: [
-      { phoneNumber: last10Digits },        // direct 10 digit
-      { phoneNumber: `+91${last10Digits}` } // +91 ke sath
+      { phoneNumber: last10Digits },
+      { phoneNumber: `+91${last10Digits}` }
     ]
   });
 
@@ -569,8 +971,8 @@ const requestPasswordReset = asyncHandler(async (req, res) => {
 
     return successResponse(res, {}, 'Password reset code has been sent to your email');
 });
+
 // Verify reset code and reset password via mobile number
-// Verify reset code and reset password via mobile number 
 const verifyResetPassword = asyncHandler(async (req, res) => {
   let { phoneNumber, code, newPassword } = req.body;
 
@@ -657,31 +1059,105 @@ const resetPassword = asyncHandler(async (req, res) => {
     );
 });
 
+// const loginUser = [
+//   userValidation.login,
+//   asyncHandler(async (req, res) => {
+//     let { phoneNumber, password } = req.body;
+
+//     if (!phoneNumber) {
+//       return errorResponse(res, "Phone number is required", 400);
+//     }
+
+//     // Normalize number (sirf digits rakho)
+//     phoneNumber = phoneNumber.replace(/\D/g, "");
+//     const last10Digits = phoneNumber.slice(-10);
+
+//     // Possible formats
+//     const plainNumber = last10Digits;          // e.g. "7415147930"
+//     const withPrefix = "+91" + last10Digits;   // e.g. "+917415147930"
+
+//     try {
+//       // DB me dono format check karo
+//       const user = await User.findOne({
+//         phoneNumber: { $in: [plainNumber, withPrefix] }
+//       });
+
+//       if (!user) {
+//         return errorResponse(res, "Phone number not found", 401);
+//       }
+
+//       const isMatch = await user.isPasswordMatched(password);
+//       if (!isMatch) {
+//         return errorResponse(res, "Incorrect password", 401);
+//       }
+
+//       if (!user.isEmailVerified && !user.isPhoneVerified) {
+//         return errorResponse(
+//           res,
+//           "Please verify your email or phone number before logging in",
+//           401,
+//           { requiresVerification: true }
+//         );
+//       }
+
+//       // Generate token
+//       const token = generateToken(user);
+//       user.token = token;
+//       user.lastLogin = new Date();
+//       await user.save();
+
+//       const userResponse = user.toObject();
+//       delete userResponse.password;
+//       delete userResponse.__v;
+
+//       const roleInfo = {
+//         hasSanghRoles: user.sanghRoles?.length > 0,
+//         hasPanchRoles: user.panchRoles?.length > 0,
+//         hasTirthRoles: user.tirthRoles?.length > 0,
+//         hasVyaparRoles: user.vyaparRoles?.length > 0,
+//       };
+
+//       return successResponse(
+//         res,
+//         { user: userResponse, token, roles: roleInfo },
+//         "Login successful",
+//         200
+//       );
+//     } catch (error) {
+//       return errorResponse(res, "Login failed", 500, error.message);
+//     }
+//   }),
+// ];
+
+// login with number and email
 const loginUser = [
   userValidation.login,
   asyncHandler(async (req, res) => {
-    let { phoneNumber, password } = req.body;
+    let { phoneNumber, email, password } = req.body;
 
-    if (!phoneNumber) {
-      return errorResponse(res, "Phone number is required", 400);
+    if (!phoneNumber && !email) {
+      return errorResponse(res, "Phone number or email is required", 400);
     }
 
-    // Normalize number (sirf digits rakho)
-    phoneNumber = phoneNumber.replace(/\D/g, "");
-    const last10Digits = phoneNumber.slice(-10);
+    let query = {};
+    if (phoneNumber) {
+      // Normalize number (sirf digits rakho)
+      phoneNumber = phoneNumber.replace(/\D/g, "");
+      const last10Digits = phoneNumber.slice(-10);
 
-    // Possible formats
-    const plainNumber = last10Digits;          // e.g. "7415147930"
-    const withPrefix = "+91" + last10Digits;   // e.g. "+917415147930"
+      const plainNumber = last10Digits;
+      const withPrefix = "+91" + last10Digits;
+
+      query.phoneNumber = { $in: [plainNumber, withPrefix] };
+    } else if (email) {
+      query.email = email.toLowerCase(); // case-insensitive email
+    }
 
     try {
-      // DB me dono format check karo
-      const user = await User.findOne({
-        phoneNumber: { $in: [plainNumber, withPrefix] }
-      });
+      const user = await User.findOne(query);
 
       if (!user) {
-        return errorResponse(res, "Phone number not found", 401);
+        return errorResponse(res, "User not found", 401);
       }
 
       const isMatch = await user.isPasswordMatched(password);
@@ -708,16 +1184,13 @@ const loginUser = [
       delete userResponse.password;
       delete userResponse.__v;
 
-      const roleInfo = {
-        hasSanghRoles: user.sanghRoles?.length > 0,
-        hasPanchRoles: user.panchRoles?.length > 0,
-        hasTirthRoles: user.tirthRoles?.length > 0,
-        hasVyaparRoles: user.vyaparRoles?.length > 0,
-      };
+      // ✅ Add token directly into user object
+      userResponse.token = token;
 
+      // ✅ Send entire user object as data (roles info is inside user if needed)
       return successResponse(
         res,
-        { user: userResponse, token, roles: roleInfo },
+        userResponse,
         "Login successful",
         200
       );
@@ -740,6 +1213,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
       { firstName: searchRegex },
       { lastName: searchRegex },
       { fullName: searchRegex },
+      { businessName: searchRegex },
       { city: searchRegex }
     ];
   }
@@ -792,10 +1266,10 @@ const getAllUsers = asyncHandler(async (req, res) => {
 // Enhanced user profile retrieval
 const getUserById = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    
+
     const user = await User.findById(id)
         .select('-password -__v')
-        .populate('friends', 'firstName lastName profilePicture')
+        .populate('friends', 'firstName lastName profilePicture accountType businessName')
         .populate({
             path: 'posts',
             select: '-__v',
@@ -814,6 +1288,53 @@ const getUserById = asyncHandler(async (req, res) => {
     userResponse.postCount = user.posts.length;
 
     res.json(userResponse);
+});
+
+// New: Get User Activity by type
+const getUserActivityByType = asyncHandler(async (req, res) => {
+  const { id, type } = req.params;
+
+  if (!["likes", "comments", "shares"].includes(type)) {
+    return res.status(400).json({ error: "Invalid activity type" });
+  }
+
+  const user = await User.findById(id).populate(
+    `activity.${type}.postId`,
+    "caption media createdAt postedBy"
+  );
+
+  if (!user) {
+    return res.status(404).json({ error: "User not found" });
+  }
+
+  // extract posts
+  const activities = user.activity[type] || [];
+  const posts = activities
+    .map((a) => {
+      if (a.postId) {
+        const post = a.postId.toObject ? a.postId.toObject() : a.postId;
+
+        // ✅ convert S3 urls to CDN (media array handle)
+        if (post.media && Array.isArray(post.media)) {
+          post.media = post.media.map((m) => ({
+            ...m,
+            url: convertS3UrlToCDN(m.url),
+          }));
+        }
+
+        return {
+          _id: post._id,
+          caption: post.caption || "",
+          media: post.media || [],
+          createdAt: post.createdAt,
+          postedBy: post.postedBy,
+        };
+      }
+      return null;
+    })
+    .filter((p) => p !== null);
+
+  res.json({ posts });
 });
 
 // Get user by Jain Aadhar Number
@@ -967,7 +1488,7 @@ const updatePrivacy = asyncHandler(async (req, res) => {
 // Upload profile picture with registration step tracking
 const uploadProfilePicture = asyncHandler(async (req, res) => {
     try {
-        const userId = req.user._id;
+        const userId = req.user?._id || req.body.userId;
         let imageUrl = null;
 
         if (req.file) {
@@ -1141,5 +1662,11 @@ module.exports = {
     sendChangeEmailOtp,
     sendChangePhoneOtp,
     verifyChangePhone,
-    verifyChangeEmail
+    verifyChangeEmail,
+    verifyRegisterOtp,
+    verifyOtpMobileEmail,
+    sendOtp,
+    registerFinalUser,
+    resendOtp,
+    getUserActivityByType
 };

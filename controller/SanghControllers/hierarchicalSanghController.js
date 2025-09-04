@@ -404,10 +404,96 @@ const getHierarchy = asyncHandler(async (req, res) => {
         return errorResponse(res, error.message, 500);
     }
 });
+// const updateSanghDetails = async (req, res) => {
+//   try {
+//     const { sanghId } = req.params;
+//     const { name, officeAddress, officeBearers } = req.body;
+
+//     const sangh = await HierarchicalSangh.findById(sanghId);
+//     if (!sangh) return res.status(404).json({ success: false, message: 'Sangh not found' });
+
+//     if (name) sangh.name = name;
+
+//     if (officeAddress) {
+//       sangh.officeAddress = {
+//         ...sangh.officeAddress,
+//         ...officeAddress
+//       };
+//     }
+//     if (Array.isArray(officeBearers)) {
+//       sangh.officeBearers = [];
+//       for (const ob of officeBearers) {
+//         if (!ob?.role || !ob?.userId) continue;
+//       const addr = ob.address || {};
+//       const bearerData = {
+//         role: ob.role,
+//         userId: ob.userId,
+//         name: ob.name,
+//         jainAadharNumber: ob.jainAadharNumber,
+//         mobileNumber: ob.phoneNumber,
+//         email: ob.email || '',
+//         userImage: ob.userImage,
+//         paymentStatus: ob.paymentStatus || 'pending',
+//         status: 'active',
+//         description: ob.description || '',
+//         appointmentDate: new Date(),
+//         termEndDate: new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000),
+//         level: sangh.level,
+//         sanghType: sangh.sanghType || 'main',
+//         address: {
+//           street: ob.address?.street || '',
+//           city: ob.address?.city || '',
+//           district: ob.address?.district || '',
+//           state: ob.address?.state || '',
+//           pincode: ob.address?.pincode || ''
+//         }
+//       };
+
+
+//         // ✅ Update User's sanghRoles as well
+//         const user = await User.findById(ob.userId);
+//         if (user) {
+//           const roleIndex = user.sanghRoles.findIndex(
+//             (r) => r.sanghId?.toString() === sanghId
+//           );
+
+//           if (roleIndex !== -1) {
+//             user.sanghRoles[roleIndex].role = ob.role; // ✅ role change: 'member' => 'president' etc.
+//           } else {
+//             // if not present, add new
+//             user.sanghRoles.push({
+//               sanghId,
+//               role: ob.role,
+//               level: sangh.level,
+//               sanghType: sangh.sanghType || 'main'
+//             });
+//           }
+
+//           await user.save();
+//         }
+
+//         sangh.officeBearers.push(bearerData);
+//       }
+//     }
+
+//     await sangh.save();
+
+//     return res.json({
+//       success: true,
+//       message: 'Sangh updated successfully',
+//       data: sangh
+//     });
+
+//   } catch (error) {
+//     console.error("❌ Error updating sangh:", error);
+//     return res.status(500).json({ success: false, message: 'Internal server error' });
+//   }
+// };
+
 const updateSanghDetails = async (req, res) => {
   try {
     const { sanghId } = req.params;
-    const { name, officeAddress, officeBearers } = req.body;
+    const { name, officeAddress, officeBearers, sanghTeams } = req.body;
 
     const sangh = await HierarchicalSangh.findById(sanghId);
     if (!sangh) return res.status(404).json({ success: false, message: 'Sangh not found' });
@@ -420,61 +506,85 @@ const updateSanghDetails = async (req, res) => {
         ...officeAddress
       };
     }
+
+    /** ========== Update Office Bearers ========== */
     if (Array.isArray(officeBearers)) {
       sangh.officeBearers = [];
       for (const ob of officeBearers) {
         if (!ob?.role || !ob?.userId) continue;
-      const addr = ob.address || {};
-      const bearerData = {
-        role: ob.role,
-        userId: ob.userId,
-        name: ob.name,
-        jainAadharNumber: ob.jainAadharNumber,
-        mobileNumber: ob.phoneNumber,
-        email: ob.email || '',
-        userImage: ob.userImage,
-        paymentStatus: ob.paymentStatus || 'pending',
-        status: 'active',
-        description: ob.description || '',
-        appointmentDate: new Date(),
-        termEndDate: new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000),
-        level: sangh.level,
-        sanghType: sangh.sanghType || 'main',
-        address: {
-          street: ob.address?.street || '',
-          city: ob.address?.city || '',
-          district: ob.address?.district || '',
-          state: ob.address?.state || '',
-          pincode: ob.address?.pincode || ''
-        }
-      };
-
-
-        // ✅ Update User's sanghRoles as well
-        const user = await User.findById(ob.userId);
-        if (user) {
-          const roleIndex = user.sanghRoles.findIndex(
-            (r) => r.sanghId?.toString() === sanghId
-          );
-
-          if (roleIndex !== -1) {
-            user.sanghRoles[roleIndex].role = ob.role; // ✅ role change: 'member' => 'president' etc.
-          } else {
-            // if not present, add new
-            user.sanghRoles.push({
-              sanghId,
-              role: ob.role,
-              level: sangh.level,
-              sanghType: sangh.sanghType || 'main'
-            });
+        const bearerData = {
+          role: ob.role,
+          userId: ob.userId,
+          name: ob.name,
+          jainAadharNumber: ob.jainAadharNumber,
+          phoneNumber: ob.phoneNumber,
+          email: ob.email || '',
+          userImage: ob.userImage,
+          paymentStatus: ob.paymentStatus || 'pending',
+          status: 'active',
+          description: ob.description || '',
+          appointmentDate: new Date(),
+          termEndDate: new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000),
+          level: sangh.level,
+          sanghType: sangh.sanghType || 'main',
+          address: {
+            street: ob.address?.street || '',
+            city: ob.address?.city || '',
+            district: ob.address?.district || '',
+            state: ob.address?.state || '',
+            pincode: ob.address?.pincode || ''
           }
+        };
 
-          await user.save();
-        }
+        // ✅ Update User sanghRoles
+        await assignRoleToUser(ob.userId, sanghId, ob.role, sangh.level, sangh.sanghType);
 
         sangh.officeBearers.push(bearerData);
       }
     }
+
+    /** ========== Update Sangh Teams ========== */
+   if (Array.isArray(sanghTeams)) {
+  for (const st of sanghTeams) {
+    if (!st?.role || !st?.userId) continue;
+
+  const exists = sangh.sanghTeams.some(
+    (team) => team.role === st.role && String(team.userId) === String(st.userId)
+  );
+
+    if (exists) continue;
+
+    const teamData = {
+      role: st.role,
+      userId: st.userId,
+      name: st.name,
+      jainAadharNumber: st.jainAadharNumber,
+      phoneNumber: st.phoneNumber,
+      email: st.email || '',
+      userImage: st.userImage,
+      paymentStatus: st.paymentStatus || 'pending',
+      status: 'active',
+      description: st.description || '',
+      appointmentDate: new Date(),
+      termEndDate: new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000),
+      level: sangh.level,
+      sanghType: sangh.sanghType || 'main',
+      address: {
+        street: st.address?.street || '',
+        city: st.address?.city || '',
+        district: st.address?.district || '',
+        state: st.address?.state || '',
+        pincode: st.address?.pincode || ''
+      }
+    };
+
+    // ✅ Update User sanghRoles
+    await assignRoleToUser(st.userId, sanghId, st.role, sangh.level, sangh.sanghType);
+
+    // Append new member
+    sangh.sanghTeams.push(teamData);
+  }
+}
 
     await sangh.save();
 
@@ -486,6 +596,72 @@ const updateSanghDetails = async (req, res) => {
 
   } catch (error) {
     console.error("❌ Error updating sangh:", error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+/** 🔹 Helper function: Assign role to User */
+const assignRoleToUser = async (userId, sanghId, role, level, sanghType) => {
+  const user = await User.findById(userId);
+  if (user) {
+    const roleIndex = user.sanghRoles.findIndex(
+      (r) => r.sanghId?.toString() === sanghId
+    );
+
+    if (roleIndex !== -1) {
+      user.sanghRoles[roleIndex].role = role;
+    } else {
+      user.sanghRoles.push({
+        sanghId,
+        role,
+        level,
+        sanghType: sanghType || 'main'
+      });
+    }
+
+    await user.save();
+  }
+};
+const deleteSanghTeamMember = async (req, res) => {
+  try {
+    const { sanghId, memberId } = req.params;
+
+    const sangh = await HierarchicalSangh.findById(sanghId);
+    if (!sangh) return res.status(404).json({ success: false, message: 'Sangh not found' });
+
+    // Find member by _id or userId
+    const memberIndex = sangh.sanghTeams.findIndex(
+      (m) => String(m._id) === String(memberId) || String(m.userId) === String(memberId)
+    );
+
+    if (memberIndex === -1) {
+      return res.status(404).json({ success: false, message: 'Member not found in Sangh Team' });
+    }
+
+    const removedMember = sangh.sanghTeams.splice(memberIndex, 1)[0];
+
+    // Update only this user's sanghRoles: replace role with "member"
+    const user = await User.findById(removedMember.userId);
+    if (user) {
+     user.sanghRoles = user.sanghRoles.map((r) => {
+      if (r.sanghId && r.sanghId.toString() === sanghId && r.role === removedMember.role) {
+        return { ...r, role: "member" }; // replace role with "member"
+      }
+      return r; // keep other roles unchanged
+    })
+      await user.save();
+    }
+
+    await sangh.save();
+
+    return res.json({
+      success: true,
+      message: 'Member removed from Sangh Team and role updated to member in user',
+      data: sangh.sanghTeams
+    });
+
+  } catch (error) {
+    console.error("❌ Error deleting Sangh Team member:", error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -1970,5 +2146,6 @@ module.exports = {
     generateMembersCard,
     switchToSanghToken,
     switchToUserToken,
-    updateMemberStatus
+    updateMemberStatus,
+    deleteSanghTeamMember
 };
