@@ -640,14 +640,13 @@ const deleteSanghTeamMember = async (req, res) => {
 
     const removedMember = sangh.sanghTeams.splice(memberIndex, 1)[0];
 
-    // Update only this user's sanghRoles: replace role with "member"
     const user = await User.findById(removedMember.userId);
     if (user) {
      user.sanghRoles = user.sanghRoles.map((r) => {
       if (r.sanghId && r.sanghId.toString() === sanghId && r.role === removedMember.role) {
-        return { ...r, role: "member" }; // replace role with "member"
+        return { ...r, role: "member" };
       }
-      return r; // keep other roles unchanged
+      return r;
     })
       await user.save();
     }
@@ -698,7 +697,7 @@ const updatePanchMembers = async (req, res) => {
   try {
     const { sanghId } = req.params;
     const { panches } = req.body;
-    const requester = req.user; // assume req.user is set via middleware
+    const requester = req.user;
 
     //console.log("📥 Received Panches:", panches);
 
