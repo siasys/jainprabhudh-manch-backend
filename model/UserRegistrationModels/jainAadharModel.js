@@ -47,6 +47,15 @@ const jainAadharSchema = new mongoose.Schema(
     panth: {
       type:String
     },
+    gotra: {
+      type:String
+    },
+      subGotra: {
+      type:String
+    },
+     subCaste: {
+      type:String
+    },
     pitaKaNaam: { type: String },
     mataKaNaam: { type: String },
     brotherCount: { type: String },

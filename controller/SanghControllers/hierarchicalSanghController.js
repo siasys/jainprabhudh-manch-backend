@@ -1040,7 +1040,6 @@ const getUserByJainAadhar = asyncHandler(async (req, res) => {
   return res.status(200).json(user);
 });
 
-
 // Add member(s) to Sangh
 const addSanghMember = asyncHandler(async (req, res) => {
   try {
