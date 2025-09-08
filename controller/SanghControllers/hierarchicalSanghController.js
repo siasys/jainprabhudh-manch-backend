@@ -1082,13 +1082,13 @@ const addSanghMember = asyncHandler(async (req, res) => {
             continue;
           }
 
-          if (sangh.members.some(m => m.jainAadharNumber === member.jainAadharNumber)) {
-            results.failed.push({
-              jainAadharNumber: member.jainAadharNumber,
-              reason: 'Already a member'
-            });
-            continue;
-          }
+          // if (sangh.members.some(m => m.jainAadharNumber === member.jainAadharNumber)) {
+          //   results.failed.push({
+          //     jainAadharNumber: member.jainAadharNumber,
+          //     reason: 'Already a member'
+          //   });
+          //   continue;
+          // }
 
           const location = user?.jainAadharApplication?.location || {};
           const contact = user?.jainAadharApplication?.contactDetails || {};
@@ -1179,8 +1179,8 @@ const addSanghMember = asyncHandler(async (req, res) => {
 
     if (!user) return errorResponse(res, 'Invalid or unverified Jain Aadhar number', 400);
 
-    if (sangh.members.some(m => m.jainAadharNumber === jainAadharNumber))
-      return errorResponse(res, 'Already a member of this Sangh', 400);
+    // if (sangh.members.some(m => m.jainAadharNumber === jainAadharNumber))
+    //   return errorResponse(res, 'Already a member of this Sangh', 400);
 
     const location = user?.jainAadharApplication?.location || {};
     const contact = user?.jainAadharApplication?.contactDetails || {};

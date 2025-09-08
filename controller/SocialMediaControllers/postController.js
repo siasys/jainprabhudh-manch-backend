@@ -200,6 +200,7 @@ const getPostById = asyncHandler(async (req, res) => {
     postType: post.postType,
     image: post.media?.[0]?.url,
     likes: post.likes.map((like) => like.toString()),
+    likeCount: post.likes.length,
     comments: post.comments.map((comment) => ({
       id: comment._id,
       text: comment.text,
@@ -220,6 +221,7 @@ const getPostById = asyncHandler(async (req, res) => {
         createdAt: reply.createdAt,
       })),
     })),
+     commentCount: post.comments.length,
     userId: post.user?._id,
     userName: post.user?.fullName,
     profilePicture: post.user?.profilePicture,
@@ -723,7 +725,42 @@ const deletePost = asyncHandler(async (req, res) => {
 });
 
 
+const sharePost = asyncHandler(async (req, res) => {
+  const { postId } = req.params;
+  const userId = req.user._id;
 
+  const post = await Post.findById(postId);
+  if (!post) {
+    return res.status(404).json({ error: "Post not found" });
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    return res.status(404).json({ error: "User not found" });
+  }
+
+  // Check if already shared
+  const alreadyShared = user.activity.shares.some(
+    (s) => s.postId.toString() === postId
+  );
+
+  if (alreadyShared) {
+    return res.status(400).json({ error: "Post already shared by this user" });
+  }
+
+  // ✅ Add to user activity
+  user.activity.shares.push({ postId, createdAt: new Date() });
+  await user.save();
+
+  // ✅ Increment share count on post
+  post.shareCount = (post.shareCount || 0) + 1;
+  await post.save();
+
+  res.json({
+    message: "Post shared successfully",
+    shareCount: post.shareCount,
+  });
+});
 const editPost = asyncHandler(async (req, res) => {
   const { userId, caption, image } = req.body;
   const { postId } = req.params;
@@ -1268,5 +1305,6 @@ module.exports = {
   getCombinedFeedOptimized,
   getLikedUsers,
   likeReply,
-  likeComment
+  likeComment,
+  sharePost
 };

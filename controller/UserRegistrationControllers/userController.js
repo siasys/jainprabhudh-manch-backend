@@ -1298,23 +1298,26 @@ const getUserActivityByType = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Invalid activity type" });
   }
 
-  const user = await User.findById(id).populate(
-    `activity.${type}.postId`,
-    "caption media createdAt postedBy"
-  );
+  const user = await User.findById(id).populate({
+    path: `activity.${type}.postId`,
+    select: "caption media createdAt user likes comments",
+    populate: {
+      path: "user",
+      select: "fullName profilePicture",
+    },
+  });
 
   if (!user) {
     return res.status(404).json({ error: "User not found" });
   }
 
-  // extract posts
   const activities = user.activity[type] || [];
-  const posts = activities
+  let posts = activities
     .map((a) => {
       if (a.postId) {
         const post = a.postId.toObject ? a.postId.toObject() : a.postId;
 
-        // ✅ convert S3 urls to CDN (media array handle)
+        // ✅ CDN URL conversion
         if (post.media && Array.isArray(post.media)) {
           post.media = post.media.map((m) => ({
             ...m,
@@ -1327,15 +1330,25 @@ const getUserActivityByType = asyncHandler(async (req, res) => {
           caption: post.caption || "",
           media: post.media || [],
           createdAt: post.createdAt,
-          postedBy: post.postedBy,
+          user: post.user,
+          likes: post.likes || [],
+          likeCount: post.likes ? post.likes.length : 0,
+          comments: post.comments || [],
+          commentCount: post.comments ? post.comments.length : 0,
+          activityCreatedAt: a.createdAt, // 👈 ye important hai
         };
       }
       return null;
     })
     .filter((p) => p !== null);
 
+  // 👇 Sort recent activity first (newest first)
+  posts = posts.sort((a, b) => new Date(b.activityCreatedAt) - new Date(a.activityCreatedAt));
+
   res.json({ posts });
 });
+
+
 
 // Get user by Jain Aadhar Number
 const getUserByJainAadharNumber = asyncHandler(async (req, res) => {

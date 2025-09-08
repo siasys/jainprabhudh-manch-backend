@@ -1,5 +1,5 @@
 const express = require('express');
-const { createPost, getAllPosts, likePost, unlikePost, deletePost, getPostsByUser, getPostById, addComment, addReply, toggleLike, getReplies, editPost, hidePost, unhidePost, getCombinedFeed, getCombinedFeedOptimized, getLikedUsers, searchHashtags, likeComment, likeReply } = require('../../controller/SocialMediaControllers/postController');
+const { createPost, getAllPosts, likePost, unlikePost, deletePost, getPostsByUser, getPostById, addComment, addReply, toggleLike, getReplies, editPost, hidePost, unhidePost, getCombinedFeed, getCombinedFeedOptimized, getLikedUsers, searchHashtags, likeComment, likeReply, sharePost } = require('../../controller/SocialMediaControllers/postController');
 const { authMiddleware } = require('../../middlewares/authMiddlewares');
 const rateLimit = require('express-rate-limit');
 
@@ -15,10 +15,11 @@ const postCreationLimiter = rateLimit({
       message: 'Too many posts created. Please try again later.'
     },
     standardHeaders: true,
-    keyGenerator: (req) => req.user ? req.user.id : req.ip // Use user ID if available
+    keyGenerator: (req) => req.user ? req.user.id : req.ip
   });
 
-router.post('/create', createPost, postCreationLimiter); // Create a post without authentication
+router.post('/create', createPost, postCreationLimiter);
+router.post("/:postId/share", sharePost);
 router.get('/', getAllPosts);
 router.get('/combined-feed', getCombinedFeed);
 router.get('/hashtags/search', searchHashtags);
