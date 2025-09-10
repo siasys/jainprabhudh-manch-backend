@@ -50,7 +50,7 @@ const jainAadharSchema = new mongoose.Schema(
     gotra: {
       type:String
     },
-      subGotra: {
+    subGotra: {
       type:String
     },
      subCaste: {

@@ -64,7 +64,7 @@ const { location } = req.body;
 let applicationLevel = 'city';
 let reviewingSanghId = req.body.reviewingSanghId || null;
 
-if (!location || !location.state) {
+if (!location || !location.state) {verifySharavakOtp
   return errorResponse(res, 'State is required in location data', 400);
 }
 
@@ -275,15 +275,19 @@ const resendSharavakOtp = asyncHandler(async (req, res) => {
 });
 
 const verifySharavakOtp = asyncHandler(async (req, res) => {
-  const { phoneNumber, code } = req.body;
+  let { phoneNumber, code } = req.body;
 
   if (!phoneNumber || !code) {
     return errorResponse(res, 'Phone number and OTP code are required', 400);
   }
 
   try {
-    // SharavakOtpVerification se record fetch
-    const record = await SharavakOtpVerification.findOne({ phoneNumber });
+    // ✅ Phone ko normalize karo (sirf digits rakho, last 10 digits lo)
+    phoneNumber = phoneNumber.replace(/\D/g, '');
+    const dbNumber = phoneNumber.slice(-10);
+
+    // ✅ SharavakOtpVerification se record fetch (10 digit ke basis pe)
+    const record = await SharavakOtpVerification.findOne({ phoneNumber: dbNumber });
 
     if (!record) {
       return errorResponse(res, 'No OTP sent to this mobile number', 404);
@@ -297,7 +301,7 @@ const verifySharavakOtp = asyncHandler(async (req, res) => {
       return errorResponse(res, 'OTP expired', 400);
     }
 
-    // Mark OTP as verified
+    // ✅ Mark OTP as verified
     record.isVerified = true;
     await record.save();
 
@@ -307,6 +311,7 @@ const verifySharavakOtp = asyncHandler(async (req, res) => {
     return errorResponse(res, 'OTP verification failed', 500);
   }
 });
+
 const sendEmailVerificationOtp = async (req, res) => {
   const { email, name } = req.body;
 

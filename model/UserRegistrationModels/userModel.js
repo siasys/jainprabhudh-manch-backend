@@ -144,15 +144,15 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'JainAadhar'
     },
-    trialPeriodStart: {
-      type: Date,
-      default: Date.now
+  trialPeriodStart: {
+  type: Date,
+  default: Date.now
     },
     trialPeriodEnd: {
       type: Date,
-      default: function() {
+      default: function () {
         const date = new Date();
-        date.setMonth(date.getMonth() + 3);
+        date.setDate(date.getDate() + 7); // 7 din ka trial
         return date;
       }
     },
@@ -192,8 +192,8 @@ const userSchema = new mongoose.Schema(
         ref: 'Post',
       },
     ],
-    friends: [{ 
-      type: mongoose.Schema.Types.ObjectId, 
+    friends: [{
+      type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     }],
     followedSanghs: [{
