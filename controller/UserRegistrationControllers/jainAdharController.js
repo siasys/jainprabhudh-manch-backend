@@ -280,31 +280,21 @@ const verifySharavakOtp = asyncHandler(async (req, res) => {
   if (!phoneNumber || !code) {
     return errorResponse(res, 'Phone number and OTP code are required', 400);
   }
-
   try {
-    // ✅ Phone ko normalize karo (sirf digits rakho, last 10 digits lo)
     phoneNumber = phoneNumber.replace(/\D/g, '');
     const dbNumber = phoneNumber.slice(-10);
-
-    // ✅ SharavakOtpVerification se record fetch (10 digit ke basis pe)
     const record = await SharavakOtpVerification.findOne({ phoneNumber: dbNumber });
-
     if (!record) {
       return errorResponse(res, 'No OTP sent to this mobile number', 404);
     }
-
     if (record.code !== code) {
       return errorResponse(res, 'Incorrect OTP', 400);
     }
-
     if (new Date() > record.expiresAt) {
       return errorResponse(res, 'OTP expired', 400);
     }
-
-    // ✅ Mark OTP as verified
     record.isVerified = true;
     await record.save();
-
     return successResponse(res, null, 'Mobile number verified successfully');
   } catch (err) {
     console.error('Sharavak OTP verification error:', err);
@@ -314,12 +304,9 @@ const verifySharavakOtp = asyncHandler(async (req, res) => {
 
 const sendEmailVerificationOtp = async (req, res) => {
   const { email, name } = req.body;
-
   if (!email) return errorResponse(res, 'Email is required', 400);
-
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
-
   try {
     await sendVerificationEmail(email, name || 'User', code);
 
@@ -328,57 +315,48 @@ const sendEmailVerificationOtp = async (req, res) => {
       { code, expiresAt, isVerified: false },
       { upsert: true }
     );
-
     return successResponse(res, null, 'OTP sent to your email');
   } catch (err) {
     console.error(err);
     return errorResponse(res, 'Failed to send OTP', 500);
   }
 };
+
 const verifyEmailOtp = async (req, res) => {
   const { email, code } = req.body;
-
   if (!email || !code) {
     return errorResponse(res, 'Email and OTP code are required', 400);
   }
-
   try {
     const record = await EmailVerification.findOne({ email });
-
     if (!record) {
       return errorResponse(res, 'No OTP sent to this email', 404);
     }
-
     if (record.code !== code) {
       return errorResponse(res, 'Incorrect OTP', 400);
     }
-
     if (new Date() > record.expiresAt) {
       return errorResponse(res, 'OTP expired', 400);
     }
-
     // Mark as verified
     record.isVerified = true;
     await record.save();
-
     return successResponse(res, null, 'Email verified successfully');
   } catch (err) {
     console.error(err);
     return errorResponse(res, 'OTP verification failed', 500);
   }
 };
+
 const resendEmailVerificationOtp = async (req, res) => {
   const { email, name } = req.body;
-
   if (!email) return errorResponse(res, 'Email is required', 400);
-
   try {
     // Check if email exists in verification DB (optional)
     const existingRecord = await EmailVerification.findOne({ email });
     if (!existingRecord) {
       return errorResponse(res, 'No OTP request found for this email', 404);
     }
-
     // Generate new OTP code
     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
     const newExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
@@ -392,7 +370,6 @@ const resendEmailVerificationOtp = async (req, res) => {
 
     // Send new OTP email
     await sendVerificationEmail(email, name || 'User', newCode);
-
     return successResponse(res, null, 'OTP resent to your email');
   } catch (err) {
     console.error('Resend OTP Error:', err);
@@ -404,7 +381,6 @@ const verifyJainAadhar = async (req, res) => {
   try {
     const jainAadhar = req.params.jainAadharNumber.trim();
     const record = await JainAadhar.findOne({ jainAadharNumber: jainAadhar });
-    
     if (!record) {
       return res.status(404).json({ success: false, message: 'Jain Aadhar not found' });
     }
@@ -440,6 +416,7 @@ const getApplicationStatus = asyncHandler(async (req, res) => {
     return errorResponse(res, 'Error fetching application status', 500, error.message);
   }
 });
+
 const getApplicationsReview = asyncHandler(async (req, res) => {
   try {
     const { level, sanghId } = req.query;
@@ -469,6 +446,7 @@ const getApplicationsReview = asyncHandler(async (req, res) => {
     return errorResponse(res, 'Error fetching applications', 500, error.message);
   }
 });
+
 const getCheckShravk = asyncHandler(async (req, res) => {
   try {
     const { shravakId } = req.query;
