@@ -124,8 +124,9 @@ const searchHashtags = async (req, res) => {
   }
 };
 
+// controller
 const getPostsByUser = asyncHandler(async (req, res) => {
-  const { userId, page = 1, limit = 10 } = req.body; // frontend se page & limit bhejna hai
+  const { userId, page = 1, limit = 10 } = req.query; // query params lo
 
   if (!userId) {
     return res.status(400).json({ error: "User ID is required" });
@@ -133,16 +134,12 @@ const getPostsByUser = asyncHandler(async (req, res) => {
 
   const skip = (page - 1) * limit;
 
-  const cacheKey = `userPosts:${userId}:page:${page}:limit:${limit}`;
-
-  const posts = await getOrSetCache(cacheKey, async () => {
-    return await Post.find({ user: userId })
-      .populate("user", "firstName lastName fullName profilePicture accountType")
-      .populate("sanghId", "name sanghImage")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-  }, 1800);
+  const posts = await Post.find({ user: userId })
+    .populate("user", "firstName lastName fullName profilePicture accountType")
+    .populate("sanghId", "name sanghImage")
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(Number(limit));
 
   if (!posts || posts.length === 0) {
     return errorResponse(res, "No posts found for this user", 404);
@@ -166,7 +163,6 @@ const getPostsByUser = asyncHandler(async (req, res) => {
     posts: postData,
   });
 });
-
 
 const getPostById = asyncHandler(async (req, res) => {
   const { postId } = req.params;
