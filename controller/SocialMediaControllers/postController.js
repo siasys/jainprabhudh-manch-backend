@@ -125,9 +125,8 @@ const searchHashtags = async (req, res) => {
 };
 
 // controller
-// controller
-const getPostsByIds = asyncHandler(async (req, res) => {
-  const { postIds, page = 1, limit = 10 } = req.body; // postIds in body
+const getPostsByUser = asyncHandler(async (req, res) => {
+    const { postIds, page = 1, limit = 10 } = req.body; // postIds in body
 
   if (!postIds || postIds.length === 0) {
     return res.status(400).json({ error: "Post IDs are required" });
@@ -165,8 +164,6 @@ const getPostsByIds = asyncHandler(async (req, res) => {
     posts: postData,
   });
 });
-
-
 const getPostById = asyncHandler(async (req, res) => {
   const { postId } = req.params;
   const userId = req.user.id;
