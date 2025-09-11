@@ -126,39 +126,47 @@ const searchHashtags = async (req, res) => {
 
 // controller
 const getPostsByUser = asyncHandler(async (req, res) => {
-  const { userId, page = 1, limit = 10 } = req.query; // query params lo
+  const { userId, postId, page = 1, limit = 10 } = req.query; // query params
 
-  if (!userId) {
-    return res.status(400).json({ error: "User ID is required" });
+  if (!userId && !postId) {
+    return res.status(400).json({ error: "User ID or Post ID is required" });
+  }
+
+  let query = {};
+  if (postId) {
+    query = { _id: postId }; // postId se filter
+  } else if (userId) {
+    query = { user: userId }; // userId se filter
   }
 
   const skip = (page - 1) * limit;
 
-  const posts = await Post.find({ user: userId })
+  const posts = await Post.find(query)
     .populate("user", "firstName lastName fullName profilePicture accountType")
     .populate("sanghId", "name sanghImage")
     .sort({ createdAt: -1 })
-    .skip(skip)
+    .skip(postId ? 0 : skip) // agar postId se fetch, skip na kare
     .limit(Number(limit));
 
   if (!posts || posts.length === 0) {
-    return errorResponse(res, "No posts found for this user", 404);
+    return res.status(404).json({ error: "No posts found" });
   }
 
   const postData = posts.map((post) => ({
+    _id: post._id,
     postType: post.postType,
     caption: post.caption,
-    image: post.image,
-    likes: post.likes.length,
-    comments: post.comments.length,
-    userName: post.user.userName,
+    media: post.media, // image/video array
+    likes: post.likes || [],
+    comments: post.comments || [],
+    userName: post.user.fullName,
     profilePicture: post.user.profilePicture,
     createdAt: post.createdAt,
   }));
 
   res.json({
     success: true,
-    currentPage: page,
+    currentPage: Number(page),
     totalPosts: postData.length,
     posts: postData,
   });
