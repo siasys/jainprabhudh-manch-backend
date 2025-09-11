@@ -125,27 +125,21 @@ const searchHashtags = async (req, res) => {
 };
 
 // controller
-const getPostsByUser = asyncHandler(async (req, res) => {
-  const { userId, postId, page = 1, limit = 10 } = req.query; // query params
+// controller
+const getPostsByIds = asyncHandler(async (req, res) => {
+  const { postIds, page = 1, limit = 10 } = req.body; // postIds in body
 
-  if (!userId && !postId) {
-    return res.status(400).json({ error: "User ID or Post ID is required" });
-  }
-
-  let query = {};
-  if (postId) {
-    query = { _id: postId }; // postId se filter
-  } else if (userId) {
-    query = { user: userId }; // userId se filter
+  if (!postIds || postIds.length === 0) {
+    return res.status(400).json({ error: "Post IDs are required" });
   }
 
   const skip = (page - 1) * limit;
 
-  const posts = await Post.find(query)
+  const posts = await Post.find({ _id: { $in: postIds } })
     .populate("user", "firstName lastName fullName profilePicture accountType")
     .populate("sanghId", "name sanghImage")
     .sort({ createdAt: -1 })
-    .skip(postId ? 0 : skip) // agar postId se fetch, skip na kare
+    .skip(skip)
     .limit(Number(limit));
 
   if (!posts || posts.length === 0) {
@@ -153,24 +147,25 @@ const getPostsByUser = asyncHandler(async (req, res) => {
   }
 
   const postData = posts.map((post) => ({
-    _id: post._id,
     postType: post.postType,
     caption: post.caption,
-    media: post.media, // image/video array
-    likes: post.likes || [],
-    comments: post.comments || [],
-    userName: post.user.fullName,
+    image: post.image,
+    likes: post.likes.length,
+    comments: post.comments.length,
+    userName: post.user.userName,
     profilePicture: post.user.profilePicture,
     createdAt: post.createdAt,
+    _id: post._id,
   }));
 
   res.json({
     success: true,
-    currentPage: Number(page),
+    currentPage: page,
     totalPosts: postData.length,
     posts: postData,
   });
 });
+
 
 const getPostById = asyncHandler(async (req, res) => {
   const { postId } = req.params;
