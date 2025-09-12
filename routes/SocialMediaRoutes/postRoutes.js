@@ -28,7 +28,7 @@ router.get('/combined-feed-optimized', getCombinedFeedOptimized);
 
 router.put('/:postId/unlike', unlikePost); // Unlike a post
 router.delete('/:postId', deletePost); // Delete a post
-router.get('/', getPostsByUser);
+router.get('/user', getPostsByUser);
 router.get('/:postId', getPostById);
 router.get('/:postId/likes', getLikedUsers);
 router.post('/comment', addComment);

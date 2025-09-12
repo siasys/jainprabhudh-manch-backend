@@ -124,10 +124,9 @@ const searchHashtags = async (req, res) => {
   }
 };
 
-
 // controller
 const getPostsByUser = asyncHandler(async (req, res) => {
-  const { userId, page = 1, limit = 10 } = req.query; // query params lo
+  const { userId, page = 1, limit = 10 } = req.query;
 
   if (!userId) {
     return res.status(400).json({ error: "User ID is required" });
@@ -135,33 +134,48 @@ const getPostsByUser = asyncHandler(async (req, res) => {
 
   const skip = (page - 1) * limit;
 
+  // Total count for pagination
+  const totalPosts = await Post.countDocuments({ user: userId });
+
+  // Get complete posts with all populated data
   const posts = await Post.find({ user: userId })
-    .populate("user", "firstName lastName fullName profilePicture accountType")
+    .populate("user", "firstName lastName fullName profilePicture accountType accountStatus")
     .populate("sanghId", "name sanghImage")
+    .populate({
+      path: "comments.user",
+      select: "firstName lastName fullName profilePicture"
+    })
+    .populate({
+      path: "comments.replies.user", 
+      select: "firstName lastName fullName profilePicture"
+    })
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(Number(limit));
 
   if (!posts || posts.length === 0) {
-    return errorResponse(res, "No posts found for this user", 404);
+    return res.status(404).json({ 
+      success: false,
+      message: "No posts found for this user",
+      currentPage: Number(page),
+      totalPosts: 0,
+      totalPages: 0,
+      data: {
+        posts: []
+      }
+    });
   }
 
-  const postData = posts.map((post) => ({
-    postType: post.postType,
-    caption: post.caption,
-    image: post.image,
-    likes: post.likes.length,
-    comments: post.comments.length,
-    userName: post.user.userName,
-    profilePicture: post.user.profilePicture,
-    createdAt: post.createdAt,
-  }));
-
+  // Direct posts return kar rahe hain, no mapping
   res.json({
     success: true,
-    currentPage: page,
-    totalPosts: postData.length,
-    posts: postData,
+    currentPage: Number(page),
+    totalPosts: totalPosts,
+    postsOnCurrentPage: posts.length,
+    totalPages: Math.ceil(totalPosts / limit),
+    data: {
+      posts: posts // Complete post objects
+    }
   });
 });
 
