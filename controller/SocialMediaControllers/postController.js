@@ -124,17 +124,18 @@ const searchHashtags = async (req, res) => {
   }
 };
 
+
 // controller
 const getPostsByUser = asyncHandler(async (req, res) => {
-    const { postIds, page = 1, limit = 10 } = req.body; // postIds in body
+  const { userId, page = 1, limit = 10 } = req.query; // query params lo
 
-  if (!postIds || postIds.length === 0) {
-    return res.status(400).json({ error: "Post IDs are required" });
+  if (!userId) {
+    return res.status(400).json({ error: "User ID is required" });
   }
 
   const skip = (page - 1) * limit;
 
-  const posts = await Post.find({ _id: { $in: postIds } })
+  const posts = await Post.find({ user: userId })
     .populate("user", "firstName lastName fullName profilePicture accountType")
     .populate("sanghId", "name sanghImage")
     .sort({ createdAt: -1 })
@@ -142,7 +143,7 @@ const getPostsByUser = asyncHandler(async (req, res) => {
     .limit(Number(limit));
 
   if (!posts || posts.length === 0) {
-    return res.status(404).json({ error: "No posts found" });
+    return errorResponse(res, "No posts found for this user", 404);
   }
 
   const postData = posts.map((post) => ({
@@ -154,7 +155,6 @@ const getPostsByUser = asyncHandler(async (req, res) => {
     userName: post.user.userName,
     profilePicture: post.user.profilePicture,
     createdAt: post.createdAt,
-    _id: post._id,
   }));
 
   res.json({
@@ -164,6 +164,7 @@ const getPostsByUser = asyncHandler(async (req, res) => {
     posts: postData,
   });
 });
+
 const getPostById = asyncHandler(async (req, res) => {
   const { postId } = req.params;
   const userId = req.user.id;
