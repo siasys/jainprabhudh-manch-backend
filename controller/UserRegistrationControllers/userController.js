@@ -53,6 +53,7 @@ const registerUser = asyncHandler(async (req, res) => {
     password,
     birthDate,
     accountType,
+    location
   } = req.body;
 
   if (!phoneNumber && !email) {
@@ -89,6 +90,7 @@ const registerUser = asyncHandler(async (req, res) => {
     password,
     birthDate,
     accountType,
+    location: location || {},
   };
 
   if (phoneNumber) {
