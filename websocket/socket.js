@@ -33,13 +33,8 @@ io.use(async (socket, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     //console.log("🔓 Token decoded:", decoded);
 
-const userId = decoded.originalUserId || decoded._id;
+socket.userId = decoded._id;
 
-if (!userId) {
-  return next(new Error("Authentication error: Invalid token payload"));
-}
-
-socket.userId = userId;
     //console.log("🆔 Assigned socket.userId:", socket.userId);
 
     // DB me bhi update karne ki koshish karo abhi
