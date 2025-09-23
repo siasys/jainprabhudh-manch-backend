@@ -1112,6 +1112,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
               state: location.state || '',
               pincode: location.pinCode || ''
             },
+            paymentStatus: paidRecord ? 'paid' : 'pending',
             addedBy: req.user._id,
             addedAt: new Date(),
             status: 'inactive',

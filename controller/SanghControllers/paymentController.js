@@ -36,7 +36,6 @@ const getAmountByLevel = (level, sanghType, age) => {
   }
 };
 
-
 const createOrder = asyncHandler(async (req, res) => {
   try {
     const { sanghId, memberId, age } = req.body;
@@ -84,64 +83,52 @@ const createOrder = asyncHandler(async (req, res) => {
   }
 });
 
+// verifyPayment backend (only update payment, not member)
 const verifyPayment = asyncHandler(async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, sanghId, memberId } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, age, sanghId } = req.body;
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSignature = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
       .update(body.toString())
       .digest('hex');
 
-  if (expectedSignature !== razorpay_signature) {
-        await Payment.findOneAndUpdate(
-          { transactionId: razorpay_order_id },
-          { status: 'overdue' },
-          { new: true }
-        );
-        return res.status(400).json({ success: false, message: "Invalid payment signature" });
-      }
-      const sangh = await HierarchicalSangh.findById(sanghId);
-      if (!sangh) {
-        return res.status(404).json({ success: false, message: "Sangh not found" });
-      }
+    if (expectedSignature !== razorpay_signature) {
+      await Payment.findOneAndUpdate(
+        { transactionId: razorpay_order_id },
+        { status: 'overdue' },
+        { new: true }
+      );
+      return res.status(400).json({ success: false, message: "Invalid payment signature" });
+    }
 
-    const amount = getAmountByLevel(sangh.level, sangh.sanghType);
-      // Assign all amount to Foundation
-      const distribution = {
-        foundation: { amount }
-      };
+    // 🔹 get sangh to calculate amount
+    const sangh = await HierarchicalSangh.findById(sanghId);
+    if (!sangh) {
+      return res.status(404).json({ success: false, message: "Sangh not found" });
+    }
+    const amount = getAmountByLevel(sangh.level, sangh.sanghType, age);
 
-      const payment = await Payment.findOneAndUpdate(
-    { transactionId: razorpay_order_id },
-    {
-      status: 'paid',
-      foundationAccount: {
-        amount: amount,
-        accountId: 'foundation'
-      }
-    },
-    { new: true }
-  );
-
+    //update payment with status + foundationAccount
+    const payment = await Payment.findOneAndUpdate(
+      { transactionId: razorpay_order_id },
+      {
+        status: 'paid',
+        foundationAccount: {
+          amount,
+          accountId: 'foundation'
+        }
+      },
+      { new: true }
+    );
 
     if (!payment) {
       return res.status(404).json({ success: false, message: "Payment record not found" });
     }
 
-    const updatedSangh = await HierarchicalSangh.findOneAndUpdate(
-      { "members.userId": new mongoose.Types.ObjectId(memberId) },
-      { $set: { "members.$.paymentStatus": "paid" } },
-      { new: true }
-    );
-
-    if (!updatedSangh) {
-      return res.status(404).json({ success: false, message: "Member not found in Sangh" });
-    }
-
     res.status(201).json({
       success: true,
-      message: "Payment verified and member status updated",
+      message: "Payment verified successfully",
       data: payment
     });
 
@@ -150,6 +137,8 @@ const verifyPayment = asyncHandler(async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error during payment verification", error: error.message });
   }
 });
+
+
 // VERIFY PAYMENT ONLY USING ORDER ID
 const verifyPaymentByOrderId = asyncHandler(async (req, res) => {
   try {

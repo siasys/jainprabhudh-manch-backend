@@ -22,7 +22,6 @@ const initializeWebSocket = (server) => {
   });
 
 io.use(async (socket, next) => {
-
   const token = socket.handshake.auth?.token;
   if (!token) {
     console.warn("❌ No token found in handshake.auth");
@@ -33,14 +32,18 @@ io.use(async (socket, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     //console.log("🔓 Token decoded:", decoded);
 
-socket.userId = decoded._id;
+    // ✅ userId resolve karne ka safe way
+    socket.userId = decoded.originalUserId || decoded._id || socket.handshake.auth?.userId;
 
-    //console.log("🆔 Assigned socket.userId:", socket.userId);
+    if (!socket.userId) {
+      console.error("❌ Authentication failed: userId missing after decode");
+      return next(new Error("Authentication error: userId missing"));
+    }
 
-    // DB me bhi update karne ki koshish karo abhi
+    // DB update
     const result = await User.findByIdAndUpdate(
       socket.userId,
-      { status: 'online', lastSeen: null },
+      { status: "online", lastSeen: null },
       { new: true }
     );
 

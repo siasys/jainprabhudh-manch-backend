@@ -163,6 +163,7 @@ if (req.body.applicationLevel && req.body.reviewingSanghId) {
                 country: location.country || 'India',
                 state: location.state || '',
                 district: location.district || '',
+                city: location.city || '',
                 address: location.address || '',
                 pinCode: location.pinCode || '',
             },

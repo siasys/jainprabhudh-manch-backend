@@ -58,7 +58,7 @@ const officeBearerSchema = new mongoose.Schema({
     },
     termEndDate: {
         type: Date,
-        default: () => new Date(Date.now() + (2 * 365 * 24 * 60 * 60 * 1000)), // 2 years from appointment
+        default: () => new Date(Date.now() + (2 * 365 * 24 * 60 * 60 * 1000)),
         required: true
     },
     status: {

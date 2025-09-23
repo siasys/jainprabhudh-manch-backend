@@ -27,6 +27,7 @@ const jainAadharSchema = new mongoose.Schema(
       country: { type: String, required: true, default: 'India' },
       state: String,
       district: String,
+      city:String,
       address: String,
       pinCode: String
     },
@@ -76,8 +77,8 @@ const jainAadharSchema = new mongoose.Schema(
     schoolName : {type:String},
     houseWife : {type:String},
     retired : {type:String},
-   religionConvert: { type: String, enum: ['Yes', 'No'], default: 'No' },
-   convertReason: { type: String },
+    religionConvert: { type: String, enum: ['Yes', 'No'], default: 'No' },
+    convertReason: { type: String },
     qrCode: { type: String },
     AadharCard: { type: String },
     userProfile: { type: String },

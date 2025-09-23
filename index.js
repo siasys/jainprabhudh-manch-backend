@@ -137,7 +137,7 @@ app.use('/api/sadhu', sadhuRoutes);
 app.use('/api/sadhu/posts', sadhuPostRoutes);
 
 // Sangh Routes
-app.use('/api/sangh-payment',paymentRoute)
+app.use('/api/sangh-payment', paymentRoute);
 app.use('/api/hierarchical-sangh', authMiddleware, hierarchicalSanghRoutes);
 app.use('/api/sangh-access', authMiddleware, sanghAccessRoutes);
 app.use('/api/sangh-posts', authMiddleware, sanghPostRoutes);
