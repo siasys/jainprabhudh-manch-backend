@@ -144,6 +144,9 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'JainAadhar'
     },
+    accountTitle:{
+      type: String,
+    },
   trialPeriodStart: {
   type: Date,
   default: Date.now
@@ -152,7 +155,7 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: function () {
         const date = new Date();
-        date.setDate(date.getDate() + 7); // 7 din ka trial
+        date.setDate(date.getDate() + 7);
         return date;
       }
     },

@@ -1271,7 +1271,7 @@ const getUserById = asyncHandler(async (req, res) => {
 
     const user = await User.findById(id)
         .select('-password -__v')
-        .populate('friends', 'firstName lastName profilePicture accountType businessName')
+        .populate('friends', 'firstName lastName profilePicture accountType businessName accountTitle')
         .populate({
             path: 'posts',
             select: '-__v',
@@ -1446,7 +1446,7 @@ const updateUserById = asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'User not found' });
   }
 
-  // ✅ Delete Old Profile Picture from S3 If New One is Uploaded
+  // Delete Old Profile Picture from S3 If New One is Uploaded
   if (newProfilePicture && user.profilePicture?.startsWith("https")) {
     const oldImageKey = user.profilePicture.split('/').pop(); 
     const params = { Bucket: process.env.AWS_S3_BUCKET_NAME, Key: oldImageKey };
@@ -1458,7 +1458,7 @@ const updateUserById = asyncHandler(async (req, res) => {
     }
   }
 
-  // ✅ Update User Document with New Data
+  // Update User Document with New Data
   const updatedUser = await User.findByIdAndUpdate(
     id,
     {

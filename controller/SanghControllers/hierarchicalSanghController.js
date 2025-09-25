@@ -1093,7 +1093,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
           const contact = user?.jainAadharApplication?.contactDetails || {};
          const rawImage =
             (req.file?.location || req.file?.path) ||
-            user?.jainAadharApplication?.photo ||
+            user?.jainAadharApplication?.userProfile  ||
             user?.profileImage || '';
 
             const userImage = rawImage ? convertS3UrlToCDN(rawImage) : '';
@@ -1186,7 +1186,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
     const contact = user?.jainAadharApplication?.contactDetails || {};
     const rawImage =
     (req.file?.location || req.file?.path) ||
-    user?.jainAadharApplication?.photo ||
+    user?.jainAadharApplication?.userProfile  ||
     user?.profileImage || '';
     const paidRecord = await SanghPayment.findOne({
       memberId: user._id,

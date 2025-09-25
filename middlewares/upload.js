@@ -12,7 +12,12 @@ const allowedTypes = new Set([
   'application/pdf',
   'video/mp4',
   'video/quicktime',
-  'video/x-msvideo'
+  'video/x-msvideo',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/ogg',
+  'audio/x-m4a',
+  'audio/flac'
 ]);
 
 
@@ -146,6 +151,8 @@ const getS3Folder = (fieldname, req) => {
         }
       }
       return 'others/';
+    case 'audio':   // music files
+      return 'music/';
     default:
       return 'others/';
   }
