@@ -400,6 +400,7 @@ const getPostById = asyncHandler(async (req, res) => {
 //     return errorResponse(res, 'Failed to fetch posts', 500, error.message);
 //   }
 // };
+
 // Get all post new loading logic
 const getAllPosts = async (req, res) => {
   try {
@@ -427,7 +428,7 @@ const getAllPosts = async (req, res) => {
     let postsRaw = await Post.find(query)
       .populate('user', 'firstName lastName fullName profilePicture accountStatus accountType businessName')
       .populate('sanghId', 'name sanghImage')
-      .sort({ createdAt: -1 })   // MongoDB pe sort karo
+      .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
 
@@ -898,6 +899,53 @@ const addComment = async (req, res) => {
     res.status(500).json({ message: 'Error adding comment', error: error.message });
   }
 };
+// Delete Comment from Post
+// Delete Comment from Post
+const deleteComment = async (req, res) => {
+  try {
+    const { postId, commentId, userId } = req.body;
+
+    if (!postId || !commentId || !userId) {
+      return res.status(400).json({ message: 'postId, commentId and userId are required' });
+    }
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    const comment = post.comments.find(c => c._id.toString() === commentId);
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    // User fetch karo role check karne ke liye
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Condition: either user himself or superadmin
+    if (comment.user.toString() !== userId && user.role !== "superadmin") {
+      return res.status(403).json({ message: 'You can only delete your own comment or must be a superadmin' });
+    }
+
+    // Remove comment
+    post.comments = post.comments.filter(c => c._id.toString() !== commentId);
+
+    await post.save();
+
+    // Cache clear
+    await invalidateCache(`post:${postId}`);
+    await invalidateCache(`postComments:${postId}`);
+
+    res.status(200).json({ message: 'Comment deleted successfully', post });
+  } catch (error) {
+    console.error('Error deleting comment:', error);
+    res.status(500).json({ message: 'Error deleting comment', error: error.message });
+  }
+};
+
 
 const addReply = async (req, res) => {
   const { commentId, userId, replyText } = req.body;
@@ -944,6 +992,47 @@ const addReply = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+// Delete Reply from a Comment
+const deleteReply = async (req, res) => {
+  try {
+    const { postId, commentId, replyId, userId } = req.body;
+
+    if (!postId || !commentId || !replyId || !userId) {
+      return res.status(400).json({ message: 'postId, commentId, replyId and userId are required' });
+    }
+
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ message: 'Post not found' });
+
+    const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+
+    const reply = comment.replies.find(r => r._id.toString() === replyId);
+    if (!reply) return res.status(404).json({ message: 'Reply not found' });
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Only author or superadmin can delete
+    if (reply.user.toString() !== userId && user.role !== 'superadmin') {
+      return res.status(403).json({ message: 'You can only delete your own reply or must be a superadmin' });
+    }
+
+    // Remove reply
+    comment.replies = comment.replies.filter(r => r._id.toString() !== replyId);
+    await post.save();
+
+    await invalidateCache(`post:${postId}`);
+    await invalidateCache(`postComments:${postId}`);
+
+    res.status(200).json({ message: 'Reply deleted successfully', post });
+  } catch (error) {
+    console.error('Error deleting reply:', error);
+    res.status(500).json({ message: 'Error deleting reply', error: error.message });
+  }
+};
+
+
 const likeComment = async (req, res) => {
   try {
     const { postId, commentId, userId } = req.body;
@@ -1332,5 +1421,7 @@ module.exports = {
   getLikedUsers,
   likeReply,
   likeComment,
-  sharePost
+  sharePost,
+  deleteComment,
+  deleteReply
 };

@@ -84,15 +84,14 @@ exports.getGroupDetails = async (req, res) => {
     }
 
     const group = await GroupChat.findById(groupId)
-      .populate("groupMembers.user", "firstName lastName fullName profilePicture accountType businessName")
-      .populate('creator', 'firstName lastName fullName profilePicture accountType businessName')
-      .populate('admins', 'firstName lastName fullName profilePicture accountType businessName');
+      .populate('creator', 'fullName profilePicture accountType businessName')
+      .populate('admins', 'fullName profilePicture accountType businessName')
+      .populate('groupMembers.user', 'fullName profilePicture accountType businessName');
 
     if (!group) {
       return res.status(404).json({ message: "Group not found." });
     }
 
-    // ✅ Convert groupImage URL to CDN if it exists
     if (group.groupImage) {
       group.groupImage = convertS3UrlToCDN(group.groupImage);
     }
@@ -103,7 +102,6 @@ exports.getGroupDetails = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-
 
 //  Create or Find Gotra Group Automatically
 exports.createOrFindGotraGroup = async (req, res) => {
@@ -1166,4 +1164,44 @@ exports.makeAdmin = async (req, res) => {
 
   await group.save();
   return res.status(200).send("User promoted to admin");
+};
+// Remove admin role from a group member
+exports.removeAdmin = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { targetUserId } = req.body;
+    const currentUserId = req.user._id;
+
+    const group = await GroupChat.findById(groupId);
+    if (!group) return res.status(404).send("Group not found");
+
+    // Check if current user is admin
+    const isCurrentUserAdmin = group.admins.includes(currentUserId.toString());
+    if (!isCurrentUserAdmin) {
+      return res.status(403).send("Not authorized");
+    }
+
+    // Check if target user is actually admin
+    if (!group.admins.includes(targetUserId.toString())) {
+      return res.status(400).send("User is not an admin");
+    }
+
+    // Update role in groupMembers
+    const member = group.groupMembers.find(
+      m => m.user.toString() === targetUserId
+    );
+    if (member) {
+      member.role = "member"; // 👈 downgrade
+    }
+
+    // Remove from admins array
+    group.admins = group.admins.filter(id => id.toString() !== targetUserId);
+
+    await group.save();
+
+    return res.status(200).send("Admin rights removed successfully");
+  } catch (error) {
+    console.error("Error removing admin:", error);
+    return res.status(500).send("Server error");
+  }
 };

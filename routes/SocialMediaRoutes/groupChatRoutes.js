@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const upload = require('../../middlewares/upload');
-const {createGroupChat, getGroupDetails, getAllGroups, getAllGroupChats, sendGroupMessage, getGroupMessages, deleteGroupMessage, updateGroupDetails, updateGroupMessage, leaveGroup, updateGroupIcon, checkMembership, addMembers, updateGroupName, createOrFindGotraGroup, getAllGotraGroups, getUserGotraGroups, deleteGroupChat, makeAdmin, createOrFindHierarchicalSanghGroup, removeUserFromGroup, deleteGroupMessageOnlyForMe, clearAllGroupMessagesForMe } = require('../../controller/SocialMediaControllers/groupChatController');
+const {createGroupChat, getGroupDetails, getAllGroups, getAllGroupChats, sendGroupMessage, getGroupMessages, deleteGroupMessage, updateGroupDetails, updateGroupMessage, leaveGroup, updateGroupIcon, checkMembership, addMembers, updateGroupName, createOrFindGotraGroup, getAllGotraGroups, getUserGotraGroups, deleteGroupChat, makeAdmin, createOrFindHierarchicalSanghGroup, removeUserFromGroup, deleteGroupMessageOnlyForMe, clearAllGroupMessagesForMe, removeAdmin } = require('../../controller/SocialMediaControllers/groupChatController');
 const {authenticate} = require('../../middlewares/authMiddlewares')
 // Apply authentication to all routes
 router.use(authenticate);
@@ -33,6 +33,7 @@ router.delete('/messages/onlyme/:groupId/:messageId', deleteGroupMessageOnlyForM
 // Update Group Details (Name, Image, Members)
 router.put('/update/:groupId', upload.single('groupImage'), updateGroupDetails);
 router.put('/make-admin/:groupId', makeAdmin);
+router.put('/remove-admin/:groupId', removeAdmin);
 
 // Leave group
 router.post('/leave/:groupId', leaveGroup);
