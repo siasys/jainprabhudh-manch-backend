@@ -355,7 +355,8 @@ userSchema.pre('save', hashPassword);
 userSchema.methods.isPasswordMatched = isPasswordMatched;
 
 // Update indexes to match schema changes
-userSchema.index({ phoneNumber: 1 });
+userSchema.index({ phoneNumber: 1 }, { unique: true, sparse: true });
+userSchema.index({ email: 1 }, { unique: true, sparse: true });
 userSchema.index({ jainAadharNumber: 1 }, { sparse: true });
 userSchema.index({ jainAadharStatus: 1 });
 userSchema.index({ role: 1 });
