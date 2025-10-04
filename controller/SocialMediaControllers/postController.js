@@ -853,53 +853,73 @@ const editPost = asyncHandler(async (req, res) => {
 });
 
 // Add Comment to Post
+// Add Comment to Post
 const addComment = async (req, res) => {
   try {
     const { postId, commentText, userId } = req.body;
     if (!postId || !commentText || !userId) {
       return res.status(400).json({ message: 'postId, commentText, and userId are required' });
     }
+
     const user = await User.findById(userId);
-    if(!user){
-      return res.status(404).json({ message: 'User not found'})
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
+
     const post = await Post.findById(postId);
     if (!post) {
       return res.status(404).json({ message: 'Post not found' });
     }
+
     const comment = {
       user: userId,
       text: commentText,
     };
+
     post.comments.push(comment);
     await post.save();
+
+    // 🔥 Yeh line naya comment nikal legi
+    const newComment = post.comments[post.comments.length - 1];
+
     // User activity update
     if (!user.activity.comments.some(c => c.postId.toString() === postId)) {
       user.activity.comments.push({ postId });
       await user.save();
     }
+
     await invalidateCache(`post:${postId}`);
     await invalidateCache(`postComments:${postId}`);
+
     await post.populate('comments.user', 'firstName lastName fullName profilePicture');
-    // Send a comment notification
+
+    // Send notification
     const notification = new Notification({
       senderId: userId,
       receiverId: post.user,
       type: 'comment',
-     message: "commented on your post.",
-       postId: postId,
+      message: "commented on your post.",
+      postId: postId,
     });
     await notification.save();
-    // Emit the notification event to the receiver
+
     const io = getIo();
     io.to(post.user.toString()).emit('newNotification', notification);
-    res.status(200).json({ message: 'Comment added successfully', post });
+
+    // ✅ Ab response me newComment bhi bhejo
+    res.status(200).json({
+      message: 'Comment added successfully',
+      commentId: newComment._id,  // yeh frontend ke liye
+      comment: newComment,        // optional: agar full comment chahiye
+      post
+    });
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error adding comment', error: error.message });
   }
 };
-// Delete Comment from Post
+
 // Delete Comment from Post
 const deleteComment = async (req, res) => {
   try {
@@ -946,52 +966,47 @@ const deleteComment = async (req, res) => {
   }
 };
 
-
 const addReply = async (req, res) => {
   const { commentId, userId, replyText } = req.body;
   try {
     const post = await Post.findOne({ 'comments._id': commentId });
-    if (!post) {
-      return res.status(404).json({ message: 'Post or comment not found' });
-    }
+    if (!post) return res.status(404).json({ message: 'Post or comment not found' });
+
     const user = await User.findById(userId);
-    if(!user){
-      return res.status(404).json({ message: 'User not found'})
-    }
+    if(!user) return res.status(404).json({ message: 'User not found'} )
+
     const comment = post.comments.id(commentId);
-    if (!comment) {
-      return res.status(404).json({ message: 'Comment not found' });
-    }
+    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+
     const newReply = {
       user: userId,
       text: replyText,
       createdAt: new Date(),
     };
+
     comment.replies.push(newReply);
     await post.save();
+
+    // Get the last added reply with _id populated by MongoDB
+    const addedReply = comment.replies[comment.replies.length - 1];
+
     await post.populate('comments.replies.user', 'firstName lastName fullName profilePicture');
-     // Send a reply notification
-     const notification = new Notification({
-      senderId: userId,
-      receiverId: comment.user,
-      type: 'reply',
-      message: "replied to your comment."
-      
-    });
-    await notification.save();
-    // Emit the notification event to the receiver
-    const io = getIo();
-    io.to(comment.user.toString()).emit('newNotification', notification);
- 
+
     res.status(201).json({
       message: 'Reply added successfully',
-      reply: newReply,
+      reply: {
+        id: addedReply._id,
+        text: addedReply.text,
+        user: addedReply.user,
+        createdAt: addedReply.createdAt,
+      },
     });
   } catch (error) {
     console.error('Error adding reply:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
+
 // Delete Reply from a Comment
 const deleteReply = async (req, res) => {
   try {
