@@ -239,7 +239,7 @@ const registerFinalUser = asyncHandler(async (req, res) => {
     }
   }
 
-  // ✅ Create user object based on accountType
+  //Create user object based on accountType
   let newUserData = {
     email: email?.trim() || undefined,
     phoneNumber: phoneNumber?.trim() || undefined,
