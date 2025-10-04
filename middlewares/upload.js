@@ -280,7 +280,7 @@ module.exports.biodataImageUpload = upload.fields([
 module.exports.sadhuDocs = upload.fields([
   { name: 'entityPhoto', maxCount: 5 },
   { name: 'entityDocuments', maxCount: 5 },
-  { name: 'uploadImage', maxCount: 1 } 
+  { name: 'uploadImage', maxCount: 1 }
 ]);
 
 // Add Tirth document upload configuration

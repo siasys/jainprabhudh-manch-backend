@@ -30,7 +30,9 @@ const userSchema = new mongoose.Schema(
     type: String,
     unique: true,
     trim: true,
+    sparse: true,
     lowercase: true,
+
     validate: {
       validator: function(v) {
         if (!v) return true;
@@ -75,7 +77,8 @@ const userSchema = new mongoose.Schema(
     },
     phoneNumber: {
       type: String,
-       unique: true
+       unique: true,
+         sparse: true,
       // validate: {
       //   validator: function (v) {
       //     return /\d{10}/.test(v);
