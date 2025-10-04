@@ -241,8 +241,8 @@ const registerFinalUser = asyncHandler(async (req, res) => {
 
   // ✅ Create user object based on accountType
   let newUserData = {
-    email: email || null,
-    phoneNumber: phoneNumber || null,
+    email: email?.trim() || undefined,
+    phoneNumber: phoneNumber?.trim() || undefined,
     accountType,
     isEmailVerified,
     isPhoneVerified,
