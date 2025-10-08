@@ -45,7 +45,22 @@ const postSchema = new mongoose.Schema(
         type: String
       }
     }],
-    postType: { type: String, enum: ['text', 'media'], default: 'text' },
+    postType: { type: String, enum: ['text', 'media', 'poll'], default: 'text' },
+    // Poll fields
+    pollQuestion: { type: String },
+    pollOptions: [{ type: String }],
+    pollDuration: { type: String, enum: ['1 Day', '1 Week', '1 Month','Always'] },
+    pollVotes: {
+      type: Map,
+      of: [mongoose.Schema.Types.ObjectId],
+      default: {},
+    },
+    votedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
     text:{
       type:String
     },

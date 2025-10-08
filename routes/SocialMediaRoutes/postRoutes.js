@@ -1,5 +1,5 @@
 const express = require('express');
-const { createPost, getAllPosts, likePost, unlikePost, deletePost, getPostsByUser, getPostById, addComment, addReply, toggleLike, getReplies, editPost, hidePost, unhidePost, getCombinedFeed, getCombinedFeedOptimized, getLikedUsers, searchHashtags, likeComment, likeReply, sharePost, deleteComment, deleteReply } = require('../../controller/SocialMediaControllers/postController');
+const { createPost, getAllPosts, likePost, unlikePost, deletePost, getPostsByUser, getPostById, addComment, addReply, toggleLike, getReplies, editPost, hidePost, unhidePost, getCombinedFeed, getCombinedFeedOptimized, getLikedUsers, searchHashtags, likeComment, likeReply, sharePost, deleteComment, deleteReply, voteOnPoll } = require('../../controller/SocialMediaControllers/postController');
 const { authMiddleware } = require('../../middlewares/authMiddlewares');
 const rateLimit = require('express-rate-limit');
 
@@ -31,6 +31,8 @@ router.delete('/:postId', deletePost); // Delete a post
 router.get('/user', getPostsByUser);
 router.get('/:postId', getPostById);
 router.get('/:postId/likes', getLikedUsers);
+// routes/postRoutes.js
+router.post('/:postId/vote', voteOnPoll);
 router.post('/comment', addComment);
 router.post('/comment/reply', addReply);
 router.post('/like-comment', likeComment);

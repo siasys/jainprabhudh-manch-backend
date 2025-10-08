@@ -19,7 +19,7 @@ const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
 const redisClient = require('../../config/redisClient')
 const Report = require('../../model/SocialMediaModels/Report');
 const Hashtag = require('../../model/SocialMediaModels/Hashtag');
-const Sangh = require('../../model/SanghModels/hierarchicalSanghModel'); // ✅ correct relative path use karein
+const Sangh = require('../../model/SanghModels/hierarchicalSanghModel');
 
 const createPost = [
   upload.postMediaUpload,
@@ -41,7 +41,7 @@ const createPost = [
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-    const { caption, userId, hashtags,type, refId } = req.body;
+    const { caption, userId, hashtags,type, refId , postType: reqPostType, pollQuestion, pollOptions, pollDuration} = req.body;
     const parsedHashtags = hashtags
     ? JSON.parse(hashtags).map(tag => tag.toLowerCase())
     : [];
@@ -69,7 +69,18 @@ const createPost = [
         { upsert: true, new: true }
       );
     }
-    const postType = media.length > 0 ? 'media' : 'text';
+    let postType = reqPostType;
+    if (!postType) {
+      postType = media.length > 0 ? 'media' : 'text';
+    }
+      // Poll validation
+    if (postType === 'poll') {
+      if (!pollQuestion || !pollOptions || pollOptions.length < 2 || !pollDuration) {
+        return res.status(400).json({
+          error: 'Poll requires question, minimum 2 options, and duration'
+        });
+      }
+    }
      const postData = {
       user: userId,
       caption,
@@ -78,6 +89,36 @@ const createPost = [
       hashtags: parsedHashtags,
       type
     };
+ if (postType === 'poll') {
+  let parsedPollOptions;
+  try {
+    parsedPollOptions = Array.isArray(pollOptions)
+      ? pollOptions
+      : JSON.parse(pollOptions); // parse JSON string
+  } catch (err) {
+    return res.status(400).json({ error: 'pollOptions must be a valid JSON array' });
+  }
+
+  if (!pollQuestion || !parsedPollOptions || parsedPollOptions.length < 2 || !pollDuration) {
+    return res.status(400).json({
+      error: 'Poll requires question, minimum 2 options, and duration'
+    });
+  }
+
+  postData.pollQuestion = pollQuestion;
+  postData.pollOptions = parsedPollOptions;
+  postData.pollDuration = pollDuration;
+
+  // Initialize pollVotes for each option
+  const votesInit = {};
+  parsedPollOptions.forEach((_, index) => {
+    votesInit[index] = []; // empty array for each option
+  });
+  postData.pollVotes = votesInit;
+
+  // Initialize votedUsers
+  postData.votedUsers = [];
+}
 
     // Add refId to corresponding field
     if (type === 'sangh') postData.sanghId = refId;
@@ -103,6 +144,68 @@ const createPost = [
     res.status(201).json(post);
   })
 ];
+
+const voteOnPoll = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { optionIndex, userId } = req.body;
+
+    if (optionIndex === undefined || !userId) {
+      return res.status(400).json({ message: "optionIndex and userId are required" });
+    }
+
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ message: "Post not found" });
+    if (post.postType !== "poll") {
+      return res.status(400).json({ message: "This post is not a poll" });
+    }
+
+    // 🔒 Check if user already voted
+    if (post.votedUsers.includes(userId)) {
+      return res.status(400).json({ message: "You have already voted on this poll" });
+    }
+
+    // 🗳 Add vote
+    const key = optionIndex.toString();
+    const currentVotes = post.pollVotes?.get(key) || [];
+    currentVotes.push(userId);
+    post.pollVotes.set(key, currentVotes);
+
+    // Add to votedUsers list
+    post.votedUsers.push(userId);
+
+    await post.save();
+
+    // 🧮 Calculate poll results
+const options = post.pollOptions; // <-- use directly, no JSON.parse
+const results = options.map((option, index) => {
+  const votes = post.pollVotes.get(index.toString()) || [];
+  return {
+    option,
+    votes: votes.length,
+  };
+});
+
+// 🔢 Calculate total and percentages
+const totalVotes = results.reduce((sum, r) => sum + r.votes, 0);
+const percentages = results.map(r => ({
+  option: r.option,
+  votes: r.votes,
+  percentage: totalVotes > 0 ? Math.round((r.votes / totalVotes) * 100) : 0,
+}));
+
+res.status(200).json({
+  success: true,
+  message: "Vote submitted successfully",
+  pollResults: percentages,
+  totalVotes,
+});
+
+  } catch (err) {
+    console.error("Vote Error:", err);
+    res.status(500).json({ message: "Error submitting vote", error: err.message });
+  }
+};
 
 const searchHashtags = async (req, res) => {
   try {
@@ -906,11 +1009,10 @@ const addComment = async (req, res) => {
     const io = getIo();
     io.to(post.user.toString()).emit('newNotification', notification);
 
-    // ✅ Ab response me newComment bhi bhejo
     res.status(200).json({
       message: 'Comment added successfully',
-      commentId: newComment._id,  // yeh frontend ke liye
-      comment: newComment,        // optional: agar full comment chahiye
+      commentId: newComment._id,
+      comment: newComment,
       post
     });
 
@@ -1438,5 +1540,6 @@ module.exports = {
   likeComment,
   sharePost,
   deleteComment,
-  deleteReply
+  deleteReply,
+  voteOnPoll
 };

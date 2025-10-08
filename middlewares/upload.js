@@ -176,7 +176,7 @@ const upload = multer({
     }
   }),
   limits: {
-    fileSize: 50 * 1024 * 1024, // 10MB file size limit
+    fileSize: 80 * 1024 * 1024, // 10MB file size limit
     files: 10 // Maximum 10 files per upload
   },
   fileFilter: fileFilter
