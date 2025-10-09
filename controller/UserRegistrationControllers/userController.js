@@ -1282,16 +1282,40 @@ const getUserById = asyncHandler(async (req, res) => {
     if (!user) {
         return res.status(404).json({ error: 'User not found' });
     }
+    
     if (user.profilePicture) {
         user.profilePicture = convertS3UrlToCDN(user.profilePicture);
     }
-    const userResponse = user.toObject();
+    
+    // ✅ Convert to object with flattenMaps option
+    const userResponse = user.toObject({ flattenMaps: true });
+    
+    // ✅ Process posts to handle pollVotes Map properly
+    if (userResponse.posts && userResponse.posts.length > 0) {
+        userResponse.posts = userResponse.posts.map(post => {
+            // If post is still a Mongoose document, convert it
+            const postObj = post.toObject ? post.toObject({ flattenMaps: true }) : post;
+            
+            // ✅ Ensure pollVotes is properly converted from Map to Object
+            if (postObj.pollVotes instanceof Map) {
+                postObj.pollVotes = Object.fromEntries(postObj.pollVotes);
+            }
+            
+            // Convert empty Map to proper object structure
+            if (postObj.pollVotes && Object.keys(postObj.pollVotes).length === 0) {
+                // Check if this is actually empty or improperly converted
+                console.log('Empty pollVotes detected for post:', postObj._id);
+            }
+            
+            return postObj;
+        });
+    }
+    
     userResponse.friendCount = user.friends.length;
     userResponse.postCount = user.posts.length;
 
     res.json(userResponse);
 });
-
 // New: Get User Activity by type
 const getUserActivityByType = asyncHandler(async (req, res) => {
   const { id, type } = req.params;

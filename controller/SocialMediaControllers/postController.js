@@ -154,58 +154,65 @@ const voteOnPoll = async (req, res) => {
       return res.status(400).json({ message: "optionIndex and userId are required" });
     }
 
-    const post = await Post.findById(postId);
+    const post = await Post.findById(postId)
+      .populate("sanghId", "_id name")
+      .lean();
+
     if (!post) return res.status(404).json({ message: "Post not found" });
     if (post.postType !== "poll") {
       return res.status(400).json({ message: "This post is not a poll" });
     }
 
-    // 🔒 Check if user already voted
-    if (post.votedUsers.includes(userId)) {
-      return res.status(400).json({ message: "You have already voted on this poll" });
+    // ✅ Voter logic (sangh or panch type me sanghId use hoga)
+    const voterId =
+      post.type === "sangh" || post.type === "panch"
+        ? post.sanghId?._id?.toString()
+        : userId;
+
+    // 🛑 Prevent double vote
+    if (post.votedUsers.includes(voterId)) {
+      return res.status(400).json({ message: "Already voted" });
     }
 
-    // 🗳 Add vote
+    // 🗳️ Add vote
     const key = optionIndex.toString();
-    const currentVotes = post.pollVotes?.get(key) || [];
-    currentVotes.push(userId);
-    post.pollVotes.set(key, currentVotes);
+    const currentVotes = post.pollVotes?.[key] || [];
+    currentVotes.push(voterId);
+    post.pollVotes[key] = currentVotes;
 
-    // Add to votedUsers list
-    post.votedUsers.push(userId);
+    post.votedUsers.push(voterId);
 
-    await post.save();
+    await Post.findByIdAndUpdate(postId, {
+      pollVotes: post.pollVotes,
+      votedUsers: post.votedUsers
+    });
 
-    // 🧮 Calculate poll results
-const options = post.pollOptions; // <-- use directly, no JSON.parse
-const results = options.map((option, index) => {
-  const votes = post.pollVotes.get(index.toString()) || [];
-  return {
-    option,
-    votes: votes.length,
-  };
-});
+    // 📊 Recalculate results
+    const results = post.pollOptions.map((option, index) => {
+      const votes = post.pollVotes?.[index]?.length || 0;
+      return { option, votes };
+    });
 
-// 🔢 Calculate total and percentages
-const totalVotes = results.reduce((sum, r) => sum + r.votes, 0);
-const percentages = results.map(r => ({
-  option: r.option,
-  votes: r.votes,
-  percentage: totalVotes > 0 ? Math.round((r.votes / totalVotes) * 100) : 0,
-}));
+    const totalVotes = results.reduce((sum, r) => sum + r.votes, 0);
+    const percentages = results.map(r => ({
+      option: r.option,
+      votes: r.votes,
+      percentage: totalVotes > 0 ? Math.round((r.votes / totalVotes) * 100) : 0,
+    }));
 
-res.status(200).json({
-  success: true,
-  message: "Vote submitted successfully",
-  pollResults: percentages,
-  totalVotes,
-});
-
+    res.status(200).json({
+      success: true,
+      message: "Vote submitted successfully",
+      pollResults: percentages,
+      totalVotes,
+    });
   } catch (err) {
     console.error("Vote Error:", err);
     res.status(500).json({ message: "Error submitting vote", error: err.message });
   }
 };
+
+
 
 const searchHashtags = async (req, res) => {
   try {
@@ -357,6 +364,11 @@ const getPostById = asyncHandler(async (req, res) => {
     type: post.type || null,
     sanghId: post.sanghId || null,
     panchId: post.panchId || null,
+    pollQuestion: post.pollQuestion || null,
+    pollOptions: post.pollOptions || [],
+    pollVotes: post.pollVotes || {},
+    votedUsers: post.votedUsers || [],
+     pollDuration: post.pollDuration,
     createdAt: post.createdAt,
   });
 });
