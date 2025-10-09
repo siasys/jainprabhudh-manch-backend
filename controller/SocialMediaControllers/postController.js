@@ -154,64 +154,78 @@ const voteOnPoll = async (req, res) => {
       return res.status(400).json({ message: "optionIndex and userId are required" });
     }
 
-    const post = await Post.findById(postId)
-      .populate("sanghId", "_id name")
-      .lean();
-
+    // Find post as a Mongoose document (no lean)
+    const post = await Post.findById(postId).populate("sanghId", "_id name");
     if (!post) return res.status(404).json({ message: "Post not found" });
     if (post.postType !== "poll") {
       return res.status(400).json({ message: "This post is not a poll" });
     }
 
-    // ✅ Voter logic (sangh or panch type me sanghId use hoga)
+    // Determine voterId (string)
     const voterId =
       post.type === "sangh" || post.type === "panch"
         ? post.sanghId?._id?.toString()
-        : userId;
+        : userId.toString();
+    if (!voterId) return res.status(400).json({ message: "Voter ID not found" });
 
-    // 🛑 Prevent double vote
-    if (post.votedUsers.includes(voterId)) {
-      return res.status(400).json({ message: "Already voted" });
-    }
-
-    // 🗳️ Add vote
-    const key = optionIndex.toString();
-    const currentVotes = post.pollVotes?.[key] || [];
-    currentVotes.push(voterId);
-    post.pollVotes[key] = currentVotes;
-
-    post.votedUsers.push(voterId);
-
-    await Post.findByIdAndUpdate(postId, {
-      pollVotes: post.pollVotes,
-      votedUsers: post.votedUsers
+    // Ensure pollVotes map is initialized
+    if (!post.pollVotes) post.pollVotes = new Map();
+    post.pollOptions.forEach((_, idx) => {
+      const key = idx.toString();
+      if (!post.pollVotes.has(key)) post.pollVotes.set(key, []);
     });
 
-    // 📊 Recalculate results
-    const results = post.pollOptions.map((option, index) => {
-      const votes = post.pollVotes?.[index]?.length || 0;
-      return { option, votes };
-    });
+    // Ensure votedUsers array exists and compare as strings
+   if (!post.votedUsers) post.votedUsers = [];
 
-    const totalVotes = results.reduce((sum, r) => sum + r.votes, 0);
-    const percentages = results.map(r => ({
-      option: r.option,
-      votes: r.votes,
-      percentage: totalVotes > 0 ? Math.round((r.votes / totalVotes) * 100) : 0,
-    }));
+// Convert to string for safe comparison
+const voterIdStr = voterId.toString();
+const votedUsersStr = post.votedUsers.map(id => id.toString());
+
+// Only prevent double voting for the **same voter type**
+const alreadyVoted =
+  (post.type === "sangh" || post.type === "panch")
+    ? votedUsersStr.includes(voterIdStr) // sangh already voted
+    : votedUsersStr.includes(voterIdStr); // normal user already voted
+
+if (alreadyVoted) {
+  return res.status(400).json({ message: "You have already voted" });
+}
+
+// Add vote
+post.pollVotes.get(optionIndex.toString()).push(voterIdStr);
+post.votedUsers.push(voterIdStr);
+
+    // Save updated post
+    await post.save();
+
+    // Recalculate poll results
+    const totalVotes = Object.values(post.pollVotes).reduce(
+      (sum, arr) => sum + arr.length,
+      0
+    );
+
+    const pollResults = post.pollOptions.map((option, idx) => {
+      const votes = post.pollVotes[idx.toString()]?.length || 0;
+      return {
+        option,
+        votes,
+        percentage: totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0,
+      };
+    });
 
     res.status(200).json({
       success: true,
       message: "Vote submitted successfully",
-      pollResults: percentages,
+      pollResults,
       totalVotes,
     });
+
   } catch (err) {
     console.error("Vote Error:", err);
     res.status(500).json({ message: "Error submitting vote", error: err.message });
   }
 };
-
 
 
 const searchHashtags = async (req, res) => {
