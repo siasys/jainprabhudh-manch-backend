@@ -553,7 +553,7 @@ const getAllPosts = async (req, res) => {
       ? { createdAt: { $lt: new Date(cursor) } }
       : {};
 
-    // Use MongoDB sort + limit instead of JS slice
+    // Fetch posts
     let postsRaw = await Post.find(query)
       .populate('user', 'firstName lastName fullName profilePicture accountStatus accountType businessName')
       .populate('sanghId', 'name sanghImage')
@@ -564,7 +564,33 @@ const getAllPosts = async (req, res) => {
     // Filter out deactivated accounts
     let posts = postsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
 
-    // Calculate score if needed (can be optimized further)
+    // Filter out expired polls based on pollDuration
+    const now = new Date();
+    posts = posts.filter(post => {
+      if (post.postType !== 'poll') return true; // non-poll posts always show
+      if (post.pollDuration === 'Always') return true; // always active
+
+      const createdAt = new Date(post.createdAt);
+      let expiryDate;
+
+      switch (post.pollDuration) {
+        case '1day':
+          expiryDate = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
+          break;
+        case '1week':
+          expiryDate = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '1month':
+          expiryDate = new Date(createdAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          return true;
+      }
+
+      return now <= expiryDate;
+    });
+
+    // Calculate score if needed
     posts = posts.map(post => {
       let score = 0;
       if (post.hashtags?.length) {
@@ -588,6 +614,71 @@ const getAllPosts = async (req, res) => {
   } catch (error) {
     console.error("Error in getAllPosts:", error);
     return errorResponse(res, 'Failed to fetch posts', 500, error.message);
+  }
+};
+
+const getAllVideoPosts = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const cursor = req.query.cursor;
+    const userId = req.query.userId;
+
+    // User check
+    const user = await User.findById(userId).lean();
+    if (!user) {
+      return successResponse(res, {
+        posts: [],
+        pagination: { nextCursor: null, hasMore: false }
+      }, 'User not found');
+    }
+
+    const interestDoc = await UserInterest.findOne({ user: userId }).lean();
+    const userHashtags = interestDoc ? interestDoc.hashtags : [];
+
+    // Pagination query
+    const query = cursor
+      ? { createdAt: { $lt: new Date(cursor) } }
+      : {};
+
+    // Fetch posts
+    let postsRaw = await Post.find({
+        ...query,
+        "media.type": "video" // only posts containing at least one video
+      })
+      .populate('user', 'firstName lastName fullName profilePicture accountStatus accountType businessName')
+      .populate('sanghId', 'name sanghImage')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    // Filter out deactivated accounts
+    let posts = postsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
+
+    // Optional: calculate score based on hashtags
+    posts = posts.map(post => {
+      let score = 0;
+      if (post.hashtags?.length) {
+        post.hashtags.forEach(tag => {
+          const match = userHashtags.find(h => h.name === tag);
+          if (match) score += match.score;
+        });
+      }
+      return { ...post, _score: score };
+    });
+
+    // Pagination cursor
+    const nextCursor = posts.length > 0
+      ? posts[posts.length - 1].createdAt.toISOString()
+      : null;
+
+    return successResponse(res, {
+      posts,
+      pagination: { nextCursor, hasMore: posts.length === limit }
+    }, 'Video posts fetched successfully');
+
+  } catch (error) {
+    console.error("Error in getAllVideoPosts:", error);
+    return errorResponse(res, 'Failed to fetch video posts', 500, error.message);
   }
 };
 
@@ -1567,5 +1658,6 @@ module.exports = {
   sharePost,
   deleteComment,
   deleteReply,
-  voteOnPoll
+  voteOnPoll,
+  getAllVideoPosts
 };
