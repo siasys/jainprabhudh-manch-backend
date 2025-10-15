@@ -643,7 +643,7 @@ const getAllVideoPosts = async (req, res) => {
     // Fetch posts
     let postsRaw = await Post.find({
         ...query,
-        "media.type": "video" // only posts containing at least one video
+        "media.type": "video"
       })
       .populate('user', 'firstName lastName fullName profilePicture accountStatus accountType businessName')
       .populate('sanghId', 'name sanghImage')
