@@ -1957,16 +1957,29 @@ const generateMembersCard = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const sangh = await HierarchicalSangh.findOne({
-      'members.userId': userId
-    });
+    let user;
+    let sangh;
 
-    if (!sangh) return res.status(404).json({ message: 'User not found in any sangh members.' });
+    // ===== Check in regular members =====
+    sangh = await HierarchicalSangh.findOne({ 'members.userId': userId });
+    if (sangh) {
+      user = sangh.members.find(m => m.userId.toString() === userId);
+    }
 
-    const user = sangh.members.find(m => m.userId.toString() === userId);
-    if (!user) return res.status(404).json({ message: 'Member data not found.' });
+    // ===== If not found, check in foundation officeBearers =====
+    if (!user) {
+      sangh = await HierarchicalSangh.findOne({ 'officeBearers.userId': userId });
+      if (sangh) {
+        user = sangh.officeBearers.find(m => m.userId.toString() === userId);
+      }
+    }
 
-    // Generate 3-digit membership number
+    // ===== If still not found, return 404 =====
+    if (!user) {
+      return res.status(404).json({ message: 'User not found in members or officeBearers.' });
+    }
+
+    // Generate membership number
     function getRandomThreeDigitNumber() {
       return Math.floor(100 + Math.random() * 900);
     }
@@ -1974,7 +1987,7 @@ const generateMembersCard = async (req, res) => {
     const randomNum = getRandomThreeDigitNumber();
     const membershipNumber = `${level}/00${randomNum.toString().padStart(3, '0')}`;
 
-    // Canvas setup
+    // ===== Canvas setup =====
     const width = 1011;
     const height = 639;
     const combinedCanvas = createCanvas(width, height * 2);
@@ -1983,10 +1996,10 @@ const generateMembersCard = async (req, res) => {
     const frontTemplate = await loadImage(path.join(__dirname, '../../Public/member_front.jpg'));
     const backTemplate = await loadImage(path.join(__dirname, '../../Public/member_back.jpg'));
 
-    // === FRONT ===
+    // ===== FRONT =====
     ctx.drawImage(frontTemplate, 0, 0, width, height);
 
-    // Load photo
+    // Load photo if exists
     if (user.photo) {
       try {
         const response = await axios.get(user.photo, { responseType: 'arraybuffer' });
@@ -2001,80 +2014,57 @@ const generateMembersCard = async (req, res) => {
     ctx.fillStyle = 'black';
     ctx.font = '26px Georgia';
     ctx.textAlign = 'left';
-    ctx.fillText(`${user.firstName || ''} ${user.lastName || ''}`, 570, 196);
-    ctx.fillText(`${membershipNumber}`, 570, 260);
-    ctx.fillText(`${user.postMember}`, 570, 317); // Designation
-    if (user.jainAadharNumber) ctx.fillText(`${user.jainAadharNumber}`, 570, 380);
+    const fullName = `${user.firstName || user.name || ''} ${user.lastName || ''}`;
+    ctx.fillText(fullName, 570, 196);
+    ctx.fillText(membershipNumber, 570, 260);
+    ctx.fillText(user.postMember || '', 570, 317);
+    if (user.jainAadharNumber) ctx.fillText(user.jainAadharNumber, 570, 380);
 
     // Created By - bottom center
     function getRandomFourDigitNumber() {
       return Math.floor(1000 + Math.random() * 9000);
     }
     const createdByText = `Created By: ${level}/JA${getRandomFourDigitNumber()}`;
-
     ctx.font = 'bold 28px Georgia';
     ctx.textAlign = 'center';
     ctx.fillStyle = 'black';
     ctx.fillText(createdByText, width / 2, height - 90);
 
-    // === BACK ===
+    // ===== BACK =====
     ctx.drawImage(backTemplate, 0, height, width, height);
     ctx.font = '26px Georgia';
     ctx.textAlign = 'left';
     ctx.fillStyle = 'black';
 
-    // Address handling - CORRECTED VERSION
-    console.log('User address:', user.address); // Debug log
-    console.log('Address type:', typeof user.address); // Debug log
-    
-    if (user.address && typeof user.address === 'object') {
-      // Make sure it's not an array and has the expected properties
-      if (!Array.isArray(user.address) && user.address.street !== undefined) {
-        const { street = '', city = '', district = '', state = '', pincode = '' } = user.address;
-        
-        const addressY = height + 182;
-        let currentY = addressY;
-        
-        // Only show non-empty fields
-        if (street && street.toString().trim()) {
-          ctx.fillText(`${street}`, 100, currentY);
-          currentY += 35;
-        }
-        
-        if (city && city.toString().trim()) {
-          ctx.fillText(`${city}`, 100, currentY);
-          currentY += 35;
-        }
-        
-        if (pincode && pincode.toString().trim()) {
-          ctx.fillText(`${pincode}`, 100, currentY);
-        }
-      } else {
-        console.log('Address object structure is invalid');
-        ctx.fillText('Address: Invalid Format', 100, height + 182);
-      }
+    // Address
+    if (user.address && typeof user.address === 'object' && !Array.isArray(user.address)) {
+      const { street = '', city = '', district = '', state = '', pincode = '' } = user.address;
+      let currentY = height + 182;
+
+      if (street) { ctx.fillText(street, 100, currentY); currentY += 35; }
+      if (city) { ctx.fillText(city, 100, currentY); currentY += 35; }
+      if (district) { ctx.fillText(district, 100, currentY); currentY += 35; }
+      if (state) { ctx.fillText(state, 100, currentY); currentY += 35; }
+      if (pincode) { ctx.fillText(pincode, 100, currentY); }
     } else {
-      console.log('Address is not an object or is null/undefined');
       ctx.fillText('Address: Not Available', 100, height + 182);
     }
 
-    // Add phone and email if available
+    // Contact info
     let contactY = height + 350;
-    if (user.phoneNumber) {
-      ctx.fillText(`Phone: ${user.phoneNumber}`, 100, contactY);
-      contactY += 35;
-    }
-    if (user.email) {
-      ctx.fillText(`Email: ${user.email}`, 100, contactY);
-    }
+    if (user.phoneNumber) { ctx.fillText(`Phone: ${user.phoneNumber}`, 100, contactY); contactY += 35; }
+    if (user.email) { ctx.fillText(`Email: ${user.email}`, 100, contactY); }
 
+    // ===== Send image response =====
     res.setHeader('Content-Type', 'image/jpeg');
     combinedCanvas.createJPEGStream().pipe(res);
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Failed to generate member card', error: err.message });
   }
 };
+
 
 // POST /api/hierarchical-sangh/:sanghId/follow
 const followSangh = asyncHandler(async (req, res) => {
