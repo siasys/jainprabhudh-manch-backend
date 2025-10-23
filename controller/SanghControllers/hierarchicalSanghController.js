@@ -1952,7 +1952,7 @@ const generateMemberCard = async (req, res) => {
     const line1 = `${addr.street || ''}, ${addr.state || ''}`;
     const line2 = `${addr.district || ''}, ${addr.pincode || ''}`;
 
-    ctx.fillText(line1, 580, height + 182);
+    ctx.fillText(line1, 600, height + 182);
     ctx.fillText(line2, 320, height + 220);
 
     // === RESPONSE ===
