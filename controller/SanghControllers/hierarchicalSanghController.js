@@ -1869,40 +1869,46 @@ const generateMemberCard = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // 1. Find sangh with user
-    const sangh = await HierarchicalSangh.findOne({
-      $or: [
-        { 'members.userId': userId }
-      ]
-    });
+    let user;
+    let sangh;
 
-    if (!sangh) return res.status(404).json({ message: 'User not found in any sangh.' });
-
-    // 2. Extract user from sangh
-    const user = sangh.members.find(m => m.userId.toString() === userId);
-
-    if (!user) return res.status(404).json({ message: 'User data not found.' });
-     function getRandomThreeDigitNumber() {
-      return Math.floor(100 + Math.random() * 900);
+    // ===== Check in regular members =====
+    sangh = await HierarchicalSangh.findOne({ 'members.userId': userId });
+    if (sangh) {
+      user = sangh.members.find(m => m.userId.toString() === userId);
     }
 
-    const level = sangh.level || 'unknown'; // level from sangh document
-    const randomNum = getRandomThreeDigitNumber();
+    // ===== If not found, check in foundation officeBearers =====
+    if (!user) {
+      sangh = await HierarchicalSangh.findOne({ 'officeBearers.userId': userId });
+      if (sangh) {
+        user = sangh.officeBearers.find(m => m.userId.toString() === userId);
+      }
+    }
 
+    // ===== If still not found, return 404 =====
+    if (!user) return res.status(404).json({ message: 'User not found in members or officeBearers.' });
+
+    // ===== Membership Number =====
+    function getRandomThreeDigitNumber() {
+      return Math.floor(100 + Math.random() * 900);
+    }
+    const level = sangh.level || 'unknown'; 
+    const randomNum = getRandomThreeDigitNumber();
     const membershipNumber = `${level}/00${randomNum.toString().padStart(3, '0')}`;
 
-    // 3. Set canvas dimensions (same for both sides)
+    // ===== Canvas setup =====
     const width = 1011;
     const height = 639;
     const combinedCanvas = createCanvas(width, height * 2);
     const ctx = combinedCanvas.getContext('2d');
 
-    // 4. Load templates
     const frontTemplate = await loadImage(path.join(__dirname, '../../Public/member_front.jpg'));
     const backTemplate = await loadImage(path.join(__dirname, '../../Public/member_back.jpg'));
 
     // === FRONT ===
     ctx.drawImage(frontTemplate, 0, 0, width, height);
+
     if (user.userImage) {
       try {
         const response = await axios.get(user.userImage, { responseType: 'arraybuffer' });
@@ -1916,43 +1922,49 @@ const generateMemberCard = async (req, res) => {
 
     ctx.fillStyle = 'black';
     ctx.font = '26px Georgia';
+
     ctx.fillText(`${user.name || ''}`, 570, 196);
     ctx.fillText(`${membershipNumber}`, 570, 260);
-    ctx.fillText(`${user.postMember || ''}`, 570, 320);  
+
+    // ===== Correct postMember logic =====
+    // For officeBearers, field is "postMember"; for regular members it could also be "postMember" or "description"
+    const postText = user.postMember || user.description || '';
+    ctx.fillText(`${postText}`, 570, 320);
+
     if (user.jainAadharNumber) ctx.fillText(`${user.jainAadharNumber}`, 570, 379);
-// Bottom center text: Created By
-function getRandomFourDigitNumber() {
-  return Math.floor(1000 + Math.random() * 9000);
-}
-const createdByText = `Created By: ${sangh.level || 'unknown'}/JA${getRandomFourDigitNumber()}`;
 
-// Bold font and center alignment
-ctx.font = 'bold 28px Georgia';
-ctx.textAlign = 'center';
-ctx.fillStyle = 'black';
+    // Bottom center text: Created By
+    function getRandomFourDigitNumber() {
+      return Math.floor(1000 + Math.random() * 9000);
+    }
+    const createdByText = `Created By: ${sangh.level || 'unknown'}/JA${getRandomFourDigitNumber()}`;
+    ctx.font = 'bold 28px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'black';
+    ctx.fillText(createdByText, width / 2, height - 90);
 
-// Adjust vertical position slightly higher (e.g., 70px from bottom)
-ctx.fillText(createdByText, width / 2, height - 90);
-// === BACK ===
-ctx.drawImage(backTemplate, 0, height, width, height);
+    // === BACK ===
+    ctx.drawImage(backTemplate, 0, height, width, height);
+    ctx.font = '26px Georgia';
+    ctx.fillStyle = 'black';
 
-ctx.font = '26px Georgia';
-ctx.fillStyle = 'black';
+    const addr = user.address || {};
+    const line1 = `${addr.street || ''}, ${addr.state || ''}`;
+    const line2 = `${addr.district || ''}, ${addr.pincode || ''}`;
 
-const addr = user.address || {};
-const line1 = `${addr.street || ''}, ${addr.state || ''}`;
-const line2 = `${addr.district || ''}, ${addr.pincode || ''}`;
+    ctx.fillText(line1, 580, height + 182);
+    ctx.fillText(line2, 320, height + 220);
 
-ctx.fillText(line1, 320, height + 182);
-ctx.fillText(line2, 320, height + 220);
     // === RESPONSE ===
     res.setHeader('Content-Type', 'image/jpeg');
     combinedCanvas.createJPEGStream().pipe(res);
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Failed to generate member card', error: err.message });
   }
 };
+
 const generateMembersCard = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -2051,9 +2063,9 @@ const generateMembersCard = async (req, res) => {
     }
 
     // Contact info
-    let contactY = height + 350;
-    if (user.phoneNumber) { ctx.fillText(`Phone: ${user.phoneNumber}`, 100, contactY); contactY += 35; }
-    if (user.email) { ctx.fillText(`Email: ${user.email}`, 100, contactY); }
+    // let contactY = height + 350;
+    // if (user.phoneNumber) { ctx.fillText(`Phone: ${user.phoneNumber}`, 100, contactY); contactY += 35; }
+    // if (user.email) { ctx.fillText(`Email: ${user.email}`, 100, contactY); }
 
     // ===== Send image response =====
     res.setHeader('Content-Type', 'image/jpeg');
