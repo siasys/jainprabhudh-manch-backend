@@ -36,7 +36,7 @@ const {
 const upload = require('../../middlewares/upload');
 
 router.get('/generate-member-card/:userId', generateMemberCard);
-router.get('/generate-member-card/:userId', generateMembersCard);
+router.get('/generate-card/:userId', generateMembersCard);
 // Protect all routes
 router.use(authMiddleware);
 router.post('/switch-sangh-token', authMiddleware, switchToSanghToken);
