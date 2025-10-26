@@ -246,8 +246,8 @@ const sendSharavakOtp = asyncHandler(async (req, res) => {
   // DB me sirf last 10 digits store karo
   const dbNumber = phoneNumber.slice(-10);
 
-  // SMS bhejne ke liye 91 prefix lagao
-  const smsNumber = '91' + dbNumber;
+  // SMS bhejne ke liye ab 91 prefix **na lagao**
+  const smsNumber = dbNumber;
 
   // Generate 6-digit OTP
   const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -270,6 +270,7 @@ const sendSharavakOtp = asyncHandler(async (req, res) => {
     return errorResponse(res, 'Failed to send OTP', 500);
   }
 });
+
 
 const resendSharavakOtp = asyncHandler(async (req, res) => {
   const { phoneNumber, name } = req.body;
