@@ -243,21 +243,20 @@ const sendSharavakOtp = asyncHandler(async (req, res) => {
   // Remove non-digits
   phoneNumber = phoneNumber.replace(/\D/g, '');
 
-  // DB me sirf last 10 digits store karo
-  const dbNumber = phoneNumber.slice(-10);
+  // DB me store last 10 digits
+  const dbNumber = phoneNumber.length > 10 ? phoneNumber.slice(-10) : phoneNumber;
 
-  // SMS bhejne ke liye ab 91 prefix **na lagao**
-  const smsNumber = dbNumber;
+  // SMS bhejne ke liye ab same number bhejo (91 prefix mat lagao)
+  const smsNumber = phoneNumber; // full number from frontend
 
   // Generate 6-digit OTP
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
   try {
-    // ✅ SMS bhejna
     await sendVerificationSms(smsNumber, code, name || 'User');
 
-    // ✅ DB me store (sirf 10 digits)
+    // DB me last 10 digits store karo
     await SharavakOtpVerification.findOneAndUpdate(
       { phoneNumber: dbNumber },
       { code, expiresAt, isVerified: false },
