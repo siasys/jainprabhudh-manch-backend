@@ -247,7 +247,7 @@ const sendSharavakOtp = asyncHandler(async (req, res) => {
   const dbNumber = phoneNumber.length > 10 ? phoneNumber.slice(-10) : phoneNumber;
 
   // SMS bhejne ke liye ab same number bhejo (91 prefix mat lagao)
-  const smsNumber = '91' + dbNumber;
+  const smsNumber = dbNumber;
 
   // Generate 6-digit OTP
   const code = Math.floor(100000 + Math.random() * 900000).toString();
