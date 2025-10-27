@@ -100,7 +100,6 @@ const userSchema = new mongoose.Schema(
       location: {
       country: {
         type: String,
-        default: 'India',
       },
       state: {
         type: String,

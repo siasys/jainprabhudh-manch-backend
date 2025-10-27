@@ -14,6 +14,8 @@ const jainAadharSchema = new mongoose.Schema(
     },
     name: { type: String },
     pitaOrpatiName: { type: String },
+    fatherName: { type: String },
+    husbandName : {type:String},
     gender:{type:String},
     dob: {type: String },
     age: { type: String },
@@ -24,7 +26,7 @@ const jainAadharSchema = new mongoose.Schema(
       email: { type: String },
     },
     location: {
-      country: { type: String, required: true, default: 'India' },
+      country: { type: String, required: true },
       state: String,
       district: String,
       city:String,
