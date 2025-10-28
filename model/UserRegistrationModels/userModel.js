@@ -86,7 +86,6 @@ const userSchema = new mongoose.Schema(
       //   message: props => `${props.value} is not a valid phone number!`
       // },
      // required: [true, 'Phone number is required'],
-      
     },
     password: {
       type: String,

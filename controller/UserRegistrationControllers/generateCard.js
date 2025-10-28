@@ -1,9 +1,21 @@
-const { createCanvas, loadImage } = require('canvas');
+const { createCanvas, loadImage, registerFont } = require('canvas');
 const QRCode = require('qrcode');
 const JainAadhar = require('../../model/UserRegistrationModels/jainAadharModel');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
+
+// Force Pango backend (fixes Devanagari rendering issue)
+process.env.PANGOCAIRO_BACKEND = 'fontconfig';
+
+// ✅ Use absolute path for font and confirm existence
+const fontPath = path.resolve(__dirname, '../../Public/fonts/NotoSansDevanagari-Regular.ttf');
+if (!fs.existsSync(fontPath)) {
+  console.error('❌ Font file not found at:', fontPath);
+} else {
+  console.log('✅ Font file found:', fontPath);
+  registerFont(fontPath, { family: 'NotoDevanagari' });
+}
 
 const generateJainAadharCard = async (req, res) => {
   try {
@@ -14,6 +26,25 @@ const generateJainAadharCard = async (req, res) => {
       return res.status(404).json({ message: 'Application not found' });
     }
 
+    // === Template Selection Logic ===
+    let templateName = '';
+    let pitaOrPatiLabel = '';
+
+    if (application.gender === 'Female' && application.marriedStatus === 'Yes') {
+      templateName = 'New_shravk1.jpeg'; // Married Female template
+      pitaOrPatiLabel = application.husbandName || application.pitaOrpatiName || 'N/A';
+    } else if (
+      (application.gender === 'Male' && (application.marriedStatus === 'Yes' || application.marriedStatus === 'No')) ||
+      (application.gender === 'Female' && application.marriedStatus === 'No')
+    ) {
+      templateName = 'new_shravk2.jpeg'; // Unmarried female or any male template
+      pitaOrPatiLabel = application.fatherName || application.pitaOrpatiName || 'N/A';
+    } else {
+      templateName = 'new_shravk2.jpeg';
+      pitaOrPatiLabel = application.pitaOrpatiName || 'N/A';
+    }
+
+    // === Create Canvas ===
     const GAP_BETWEEN_CARDS = 40;
     const width = 1011, height = 639;
     const combinedCanvas = createCanvas(width, height * 2 + GAP_BETWEEN_CARDS);
@@ -23,7 +54,7 @@ const generateJainAadharCard = async (req, res) => {
     ctx.fillRect(0, 0, width, height * 2 + GAP_BETWEEN_CARDS);
 
     // === FRONT SIDE ===
-    const frontTemplate = await loadImage(path.join(__dirname, '../../Public/shravak_front.jpg'));
+    const frontTemplate = await loadImage(path.join(__dirname, `../../Public/${templateName}`));
     ctx.drawImage(frontTemplate, 0, 0, width, height);
 
     if (application.userProfile) {
@@ -34,12 +65,14 @@ const generateJainAadharCard = async (req, res) => {
 
     ctx.fillStyle = 'black';
     ctx.font = '26px Georgia';
-    ctx.fillText(application.name || 'N/A', 490, 190);
-    ctx.fillText(application.pitaOrpatiName || 'N/A', 490, 245);
-    ctx.fillText(application.dob || 'N/A', 490, 300);
-    ctx.fillText(application.mulJain || 'N/A', 490, 365);
-    ctx.fillText(application.panth || 'N/A', 490, 425);
+    ctx.fillText(application.name || 'N/A', 500, 170);
+    ctx.fillText(pitaOrPatiLabel, 500, 225);
+    ctx.fillText(application.dob || 'N/A', 500, 268);
+    ctx.fillText(application.mulJain || 'N/A', 500, 318);
 
+    // Hindi font for Panth
+    ctx.font = '26px NotoDevanagari';
+    ctx.fillText(application.panth || 'N/A', 500, 365);
 
     ctx.font = 'bold 30px Georgia';
     ctx.fillText(application.jainAadharNumber || 'N/A', 350, 560);
@@ -73,8 +106,9 @@ const generateJainAadharCard = async (req, res) => {
 
     res.setHeader('Content-Type', 'image/jpeg');
     combinedCanvas.createJPEGStream().pipe(res);
+
   } catch (error) {
-    console.error(error);
+    console.error('❌ Error generating card:', error);
     res.status(500).json({ message: 'Failed to generate card', error: error.message });
   }
 };
