@@ -7,77 +7,121 @@ const StoryReport = require('../../model/SocialMediaModels/StoryReport')
 const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
 const Friendship = require('../../model/SocialMediaModels/friendshipModel')
 
-// Create Story
 const createStory = asyncHandler(async (req, res) => {
-    try {
-        const { type,sanghId, isSanghStory } = req.body;
-        const userId = req.user._id;
-        const userType = req.user.type;
-        //console.log("📛 Sangh ID:", sanghId);
-        // Get S3 URLs from uploaded files
-        const mediaFiles = req.files
-        ? req.files.map(file => convertS3UrlToCDN(file.location))
-        : [];
-        if (!type) {
-            return res.status(400).json({
-                success: false,
-                message: "Story type is required"
-            });
+  try {
+    let { type, sanghId, isSanghStory, mentionUsers, text, textStyle } = req.body;
+    const userId = req.user._id;
+    const userType = req.user.type;
+
+    // 🧩 Parse JSON strings
+    const safeParse = (data) => {
+      if (typeof data === 'string') {
+        try {
+          return JSON.parse(data);
+        } catch {
+          return [];
         }
+      }
+      return data || [];
+    };
 
-        if (mediaFiles.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: "At least one media file is required"
-            });
-        }
-        //  Check if the user already has an active story
-        let query = userType === "sangh" ? { userId: sanghId } : { userId };
-        let existingStory = await Story.findOne(query);
+    mentionUsers = safeParse(mentionUsers);
+    text = safeParse(text);
+    textStyle = safeParse(textStyle);
 
-        if (existingStory) {
-            // Update existing story (Add new media)
-            existingStory.media.push(...mediaFiles);
-            await existingStory.save();
-        } else {
-            //  Create a new story
-            existingStory = await Story.create({
-                 userId: req.user._id,
-                sanghId: isSanghStory ? sanghId : null,
-                isSanghStory: isSanghStory === 'true',
-                media: mediaFiles,
-                type
-                            });
+    // 🖼️ Convert S3 to CDN URLs
+    const mediaFiles = req.files
+      ? req.files.map((file) => convertS3UrlToCDN(file.location))
+      : [];
 
-                    if (userType === "user") {
-                // update user doc
-                await User.findByIdAndUpdate(userId, {
-                story: existingStory._id
-                });
-            } else if (userType === "sangh" && sanghId) {
-                // update sangh doc
-                await HierarchicalSangh.findByIdAndUpdate(sanghId, {
-                $push: { stories: existingStory._id }
-                });
-            }
-            }
-        res.status(201).json({
-            success: true,
-            message: "Story updated successfully",
-            data: existingStory
-        });
-
-    } catch (error) {
-        console.error("Error creating/updating story:", error);
-        res.status(500).json({
-            success: false,
-            message: "Error creating/updating story",
-            error: error.message
-        });
+    if (mediaFiles.length === 0 && !text?.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Either media or text is required for story',
+      });
     }
+
+    // 🎞️ Build media array
+    const mediaArray = mediaFiles.map((fileUrl, index) => ({
+      url: fileUrl,
+      type: type || 'image',
+      text: Array.isArray(text) ? text[index] || '' : text || '',
+      textStyle: Array.isArray(textStyle) ? textStyle[index] || {} : textStyle || {},
+      mentionUsers: Array.isArray(mentionUsers)
+        ? mentionUsers
+            .filter((id) => mongoose.Types.ObjectId.isValid(id))
+            .map((id) => new mongoose.Types.ObjectId(id))
+        : [],
+    }));
+
+    // ✏️ Handle text-only story (no media)
+    if (mediaArray.length === 0 && text?.length > 0) {
+      mediaArray.push({
+        url: '',
+        type: 'text',
+        text: text || '',
+        textStyle: textStyle || {},
+        mentionUsers: Array.isArray(mentionUsers)
+          ? mentionUsers
+              .filter((id) => mongoose.Types.ObjectId.isValid(id))
+              .map((id) => new mongoose.Types.ObjectId(id))
+          : [],
+      });
+    }
+
+    // 🕒 Find if story already exists (within 24 hours)
+    const existingStory = await Story.findOne({
+      userId,
+      isSanghStory: isSanghStory === 'true',
+      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+    });
+
+    let savedStory;
+    if (existingStory) {
+      // 🟢 Append new media to existing story
+      existingStory.media.push(...mediaArray);
+      savedStory = await existingStory.save();
+    } else {
+      // 🆕 Create new story
+      const newStory = new Story({
+        userId,
+        sanghId: isSanghStory ? sanghId : null,
+        isSanghStory: isSanghStory === 'true',
+        media: mediaArray,
+      });
+      savedStory = await newStory.save();
+    }
+
+    // 👥 Update references
+    if (userType === 'user') {
+      await User.findByIdAndUpdate(userId, { story: savedStory._id });
+    } else if (userType === 'sangh' && sanghId) {
+      await HierarchicalSangh.findByIdAndUpdate(sanghId, {
+        $addToSet: { stories: savedStory._id },
+      });
+    }
+
+    // ✅ Populate mentionUsers for response
+    const populatedStory = await Story.findById(savedStory._id)
+      .populate('userId', 'fullName profilePicture')
+      .populate('media.mentionUsers', 'fullName profilePicture');
+
+    res.status(201).json({
+      success: true,
+      message: existingStory
+        ? 'New media added to existing story'
+        : 'New story created successfully',
+      data: populatedStory,
+    });
+  } catch (error) {
+    console.error('❌ Error creating/updating story:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating or updating story',
+      error: error.message,
+    });
+  }
 });
-
-
 // Get All Stories
 const getAllStories = asyncHandler(async (req, res) => {
   try {
