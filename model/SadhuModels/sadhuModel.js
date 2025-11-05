@@ -8,41 +8,26 @@ const sadhuSchema = new mongoose.Schema({
     //     required: [true, 'Name is required'],
     //     trim: true
     // },
-    jainShravakNumber:{
+    sadhuID:{
         type:String
+    },
+    shravakId:{
+        type:String
+    },
+    sadhuName:{
+        type: String,
+        trim: true
     },
     guruName: {
         type: String,
-        required: [true, 'Guru name is required'],
-        trim: true
+    },
+    gender:{
+        type: String,
     },
     dikshaTithi: {
         type: Date,
-        required: [true, 'Diksha tithi is required']
     },
-    
-    // Family Background
-    purvMataPita: {
-        fathersName: {
-            type: String,
-        },
-        mothersName: {
-            type: String
-        },
-        sanyaspurvjanmplace: String,
-        sanyaspurvjanmaddress: String
-    },
-
-    // Religious Info
-    mulJain: {
-        type: String,
-    },
-    panth: {
-        type: String,
-    },
-    upjati: String,
-
-    // Upadhi Details
+        // Upadhi Details
     upadhiList: [{
         upadhiName: {
             type: String,
@@ -57,93 +42,81 @@ const sadhuSchema = new mongoose.Schema({
         //required: true
         }
     }],
-    
-    sadhuName: {
+// Religious Info
+    mulJain: {
         type: String,
-        required: [true, 'Sadhu name is required']
     },
-    selectedMulJain: {
-        type: String
-    },
-    selectedPanth: {
+    panth: {
         type: String,
-        default: null
     },
-    selectedUpjati: {
+    upjati: {
         type: String,
-        default: null
     },
     gotra: {
         type: String
     },
-    fatherName: {
+    subGotra: {
         type: String
     },
-    fatherPlace: {
+    personalInfo:{
+    nameBeforeDiksha:{
         type: String
     },
-    motherName: {
-        type: String
-    },
-    motherPlace: {
-        type: String
-    },
-    grandfatherName: {
-        type: String
-    },
-    grandfatherPlace: {
-        type: String
-    },
-    greatGrandfatherName: {
-        type: String
-    },
-    greatGrandfatherPlace: {
-        type: String
-    },
-   brotherName: {
-    type: [String], // Array of strings
-    default: [],
-    },
-    sisterName: {
-    type: [String],
-    default: [],
-    },
-    qualification: {
+    fathersName: {
         type: String,
-        default: ''
     },
-    mamaPaksh: {
-        nanajiName: {
-            type: String
+    mothersName: {
+        type: String
+    },
+    brotherCount:{
+        type: String
+    },
+    sisterCount:{
+        type: String
+    },
+    married:{
+     type:String
+    },
+    husbandName:{
+        type: String,
+    },
+    wifeName:{
+     type:String
+    },
+    marriageDate:{
+        type: String,
+    },
+    sonCount:{
+         type: String,
+    },
+    daughterCount:{
+        type: String,
+    },
+    },
+    occupation:{
+        student:{
+             type: String, 
         },
-        mulNiwasi: {
-            type: String
+        job:{
+            type: String, 
         },
-        mamaGotra: {
-            type: String
+        retired:{
+            type: String,
+        },
+        business:{
+           type: String, 
         }
     },
-    dharmParivartan: {
-        jati: {
-            type: String,
-            default: ''
+    religiousConversion:{
+   caste:{
+        type: String,
         },
-        upjati: {
-            type: String,
-            default: ''
-        },
-        prerda: {
-            type: String,
-            default: ''
-        },
-        sanidhya: {
-            type: String,
-            default: ''
-        },
-        samay: {
-            type: String,
-            default: ''
-        }
+    subCaste:{
+        type: String,
+    },
+    Inspiration:{
+        type: String,
+    },
     },
     contactDetails: {
           country: {
@@ -158,20 +131,12 @@ const sadhuSchema = new mongoose.Schema({
             type: String,
             default: ''
         },
-        tehsil: {
-            type: String,
-            default: ''
-        },
-        permanentAddress: {
+        address: {
             type: String,
             default: ''
         },
         mobileNumber: {
             type: String
-        },
-        whatsappNumber: {
-            type: String,
-            default: ''
         },
         email: {
             type: String,
@@ -218,11 +183,9 @@ const sadhuSchema = new mongoose.Schema({
 
     // Media
     photo: String,
-    documents: [String],
-declarationText: {
-  type: String,
-  required: true
-},
+    declarationText: {
+    type: String,
+    },
     // Active Status
     status: {
         type: String,

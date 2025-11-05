@@ -46,7 +46,6 @@ router.put('/review/:sadhuId',
 
 // Sadhu dashboard routes - require sadhu role
 router.put('/update/:sadhuId',
-    verifySadhuRole,
     upload.sadhuDocs,
     updateSadhuProfile
 );

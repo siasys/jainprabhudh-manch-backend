@@ -10,35 +10,13 @@ const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 const submitSadhuInfo = async (req, res) => {
   try {
     const sadhuData = { ...req.body };
-
-    // Parse nested JSON strings to objects
-    if (typeof sadhuData.mamaPaksh === 'string') {
-      try {
-        sadhuData.mamaPaksh = JSON.parse(sadhuData.mamaPaksh);
-      } catch (err) {
-        return errorResponse(res, 'Invalid mamaPaksh format');
-      }
-    }
-
-    if (typeof sadhuData.dharmParivartan === 'string') {
-      try {
-        sadhuData.dharmParivartan = JSON.parse(sadhuData.dharmParivartan);
-      } catch (err) {
-        return errorResponse(res, 'Invalid dharmParivartan format');
-      }
-    }
-
-    if (typeof sadhuData.contactDetails === 'string') {
-      try {
-        sadhuData.contactDetails = JSON.parse(sadhuData.contactDetails);
-      } catch (err) {
-        return errorResponse(res, 'Invalid contactDetails format');
-      }
-    }
-
     sadhuData.submittedBy = req.user._id;
 
-    // Parse upadhiList if present (you already have this)
+    // ✅ Generate unique Sadhu ID (e.g., SADHU123456)
+    const randomNum = Math.floor(100000 + Math.random() * 900000);
+    sadhuData.sadhuID = `SADHU${randomNum}`;
+
+    // ✅ Parse upadhiList if present
     if (req.body.upadhiList) {
       try {
         sadhuData.upadhiList = JSON.parse(req.body.upadhiList);
@@ -47,7 +25,7 @@ const submitSadhuInfo = async (req, res) => {
       }
     }
 
-    // Handle file uploads (as you already do)
+    // ✅ Handle file uploads
     if (req.files) {
       if (req.files.entityPhoto) {
         const s3Url = req.files.entityPhoto[0].location;
@@ -60,9 +38,11 @@ const submitSadhuInfo = async (req, res) => {
       }
     }
 
+    // ✅ Save Sadhu
     const sadhu = new Sadhu(sadhuData);
     await sadhu.save();
 
+    // ✅ Add Sadhu reference to User
     const user = await User.findById(req.user._id);
     if (!user.sadhuRoles) user.sadhuRoles = [];
     user.sadhuRoles.push({
@@ -71,11 +51,20 @@ const submitSadhuInfo = async (req, res) => {
     });
     await user.save();
 
-    return successResponse(res, 'Sadhu information submitted successfully for review', sadhu);
+    // ✅ Send response with Sadhu ID
+    return successResponse(
+      res,
+      'Sadhu information submitted successfully for review',
+      {
+        sadhuID: sadhu.sadhuID,
+        sadhuData: sadhu,
+      }
+    );
   } catch (error) {
     return errorResponse(res, error.message);
   }
 };
+
 
 
 
@@ -127,47 +116,49 @@ const reviewSadhuSubmission = async (req, res) => {
 };
 
 // Update sadhu profile
+
 const updateSadhuProfile = async (req, res) => {
-    try {
-        const sadhu = req.sadhu;
-        const updates = req.body;
-        // Handle file uploads
-        if (req.files) {
-            // Handle profile image update
-            if (req.files.entityPhoto) {
-                // Delete old image if exists
-                if (sadhu.uploadImage) {
-                    const key = extractS3KeyFromUrl(sadhu.uploadImage);
-                    await s3Client.send(new DeleteObjectCommand({ Key: key }));
-                }
-                updates.uploadImage = req.files.entityPhoto[0].location;
-            }
+  try {
+    const { sadhuId } = req.params;
+    const updates = req.body;
+    const files = req.files;
 
-            // Handle documents update if any
-            if (req.files.entityDocuments) {
-                // Delete old documents if they exist
-                if (sadhu.documents && sadhu.documents.length > 0) {
-                    await Promise.all(sadhu.documents.map(async (url) => {
-                        const key = extractS3KeyFromUrl(url);
-                        await s3Client.send(new DeleteObjectCommand({ Key: key }));
-                    }));
-                }
-                updates.documents = req.files.entityDocuments.map(doc => doc.location);
-            }
-        }
-
-        // Update allowed fields only
-        Object.keys(updates).forEach(key => {
-            if (key !== 'status' && key !== 'accessCredentials' && key !== 'reviewedBy') {
-                sadhu[key] = updates[key];
-            }
-        });
-
-        await sadhu.save();
-        return successResponse(res, 'Profile updated successfully', sadhu);
-    } catch (error) {
-        return errorResponse(res, error.message);
+    // 🧩 Find the Sadhu record
+    const sadhu = await Sadhu.findById(sadhuId);
+    if (!sadhu) {
+      return errorResponse(res, 'Sadhu not found');
     }
+
+    // 🖼️ Handle profile image update
+    if (files?.entityPhoto) {
+      if (sadhu.uploadImage) {
+        const key = extractS3KeyFromUrl(sadhu.uploadImage);
+        await s3Client.send(new DeleteObjectCommand({ Key: key }));
+      }
+      sadhu.uploadImage = files.entityPhoto[0].location;
+    }
+
+    // 🧾 Merge updates safely
+    for (const key in updates) {
+      // Nested objects ko handle karo
+      if (typeof updates[key] === 'object' && !Array.isArray(updates[key])) {
+        sadhu[key] = {
+          ...(sadhu[key] || {}),
+          ...updates[key],
+        };
+      } else {
+        sadhu[key] = updates[key];
+      }
+    }
+
+    // ✅ Save updated record
+    await sadhu.save();
+
+    return successResponse(res, 'Profile updated successfully', sadhu);
+  } catch (error) {
+    console.error('Sadhu Update Error:', error);
+    return errorResponse(res, error.message);
+  }
 };
 
 // Get available cities with active Sanghs
@@ -234,8 +225,8 @@ const getSadhuById = async (req, res) => {
         const { sadhuId } = req.params;
         const sadhu = await Sadhu.findOne({
             _id: sadhuId,
-            status: 'approved',
-            isActive: true
+            // status: 'approved',
+            // isActive: true
         })
         .select('-accessCredentials');
         if (!sadhu) {

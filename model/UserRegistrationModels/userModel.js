@@ -15,7 +15,7 @@ const userSchema = new mongoose.Schema(
     },
     fullName: {
       type: String,
-      required: false,
+      //required: false,
     },
     businessName:{
     type: String,
@@ -26,13 +26,15 @@ const userSchema = new mongoose.Schema(
     shravakId:{
       type: String,
     },
+     sadhuName: {
+      type: String,
+     },
     email: {
     type: String,
     unique: true,
     trim: true,
     sparse: true,
     lowercase: true,
-
     validate: {
       validator: function(v) {
         if (!v) return true;
@@ -93,7 +95,7 @@ const userSchema = new mongoose.Schema(
     },
      accountType: {
       type: String,
-      enum: ["user", "business"],
+      enum: ["user", "business", "sadhu"],
       default: "user",
     },
       location: {

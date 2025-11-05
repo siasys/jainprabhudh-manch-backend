@@ -3,9 +3,9 @@ const User = require('../../model/UserRegistrationModels/userModel');
 const asyncHandler = require("express-async-handler");
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
-const StoryReport = require('../../model/SocialMediaModels/StoryReport')
+const StoryReport = require('../../model/SocialMediaModels/StoryReport');
 const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
-const Friendship = require('../../model/SocialMediaModels/friendshipModel')
+const Friendship = require('../../model/SocialMediaModels/friendshipModel');
 
 const createStory = asyncHandler(async (req, res) => {
   try {
@@ -29,7 +29,7 @@ const createStory = asyncHandler(async (req, res) => {
     text = safeParse(text);
     textStyle = safeParse(textStyle);
 
-    // 🖼️ Convert S3 to CDN URLs
+    //Convert S3 to CDN URLs
     const mediaFiles = req.files
       ? req.files.map((file) => convertS3UrlToCDN(file.location))
       : [];
@@ -41,7 +41,7 @@ const createStory = asyncHandler(async (req, res) => {
       });
     }
 
-    // 🎞️ Build media array
+    // Build media array
     const mediaArray = mediaFiles.map((fileUrl, index) => ({
       url: fileUrl,
       type: type || 'image',
@@ -69,7 +69,7 @@ const createStory = asyncHandler(async (req, res) => {
       });
     }
 
-    // 🕒 Find if story already exists (within 24 hours)
+    //  Find if story already exists (within 24 hours)
     const existingStory = await Story.findOne({
       userId,
       isSanghStory: isSanghStory === 'true',
@@ -78,11 +78,11 @@ const createStory = asyncHandler(async (req, res) => {
 
     let savedStory;
     if (existingStory) {
-      // 🟢 Append new media to existing story
+      // Append new media to existing story
       existingStory.media.push(...mediaArray);
       savedStory = await existingStory.save();
     } else {
-      // 🆕 Create new story
+      //  Create new story
       const newStory = new Story({
         userId,
         sanghId: isSanghStory ? sanghId : null,
@@ -92,7 +92,7 @@ const createStory = asyncHandler(async (req, res) => {
       savedStory = await newStory.save();
     }
 
-    // 👥 Update references
+    //  Update references
     if (userType === 'user') {
       await User.findByIdAndUpdate(userId, { story: savedStory._id });
     } else if (userType === 'sangh' && sanghId) {
@@ -101,7 +101,7 @@ const createStory = asyncHandler(async (req, res) => {
       });
     }
 
-    // ✅ Populate mentionUsers for response
+    // Populate mentionUsers for response
     const populatedStory = await Story.findById(savedStory._id)
       .populate('userId', 'fullName profilePicture')
       .populate('media.mentionUsers', 'fullName profilePicture');

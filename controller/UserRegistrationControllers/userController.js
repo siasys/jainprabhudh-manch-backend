@@ -216,6 +216,7 @@ const registerFinalUser = asyncHandler(async (req, res) => {
     email,
     phoneNumber,
     accountType,
+    sadhuName,
     businessName,
     businessDate,
     shravakId,
@@ -250,14 +251,20 @@ const registerFinalUser = asyncHandler(async (req, res) => {
   };
 
   if (accountType === "business") {
-    newUserData.businessName = businessName;
-    newUserData.businessDate = businessDate;
-    newUserData.shravakId = shravakId;
-  } else {
-    newUserData.firstName = firstName;
-    newUserData.lastName = lastName;
-    newUserData.fullName = fullName;
-    newUserData.birthDate = birthDate;
+    newUserData.businessName = businessName?.trim() || "";
+    newUserData.businessDate = businessDate || "";
+    newUserData.shravakId = shravakId || "";
+  }
+  else if (accountType === "sadhu") {
+    newUserData.sadhuName = sadhuName?.trim() || "";
+    newUserData.shravakId = shravakId || "";
+  }
+  else {
+    // 👤 Regular User Registration
+    newUserData.firstName = firstName?.trim() || "";714916
+    newUserData.lastName = lastName?.trim() || "";
+    newUserData.fullName = fullName?.trim() || "";
+    newUserData.birthDate = birthDate || "";
   }
 
   // ✅ Create user in DB
@@ -1271,7 +1278,7 @@ const getUserById = asyncHandler(async (req, res) => {
 
     const user = await User.findById(id)
         .select('-password -__v')
-        .populate('friends', 'firstName lastName profilePicture accountType businessName accountTitle')
+        .populate('friends', 'firstName lastName profilePicture accountType businessName accountTitle sadhuName')
         .populate({
             path: 'posts',
             select: '-__v',

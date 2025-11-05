@@ -32,7 +32,7 @@ const followUser = asyncHandler(async (req, res) => {
 const getFollowRequests = asyncHandler(async (req, res) => {
     const { userId } = req.params;
     const requests = await Friendship.find({ following: userId, followStatus: 'following' })
-        .populate('follower', 'firstName lastName fullName profilePicture accountType businessName');
+        .populate('follower', 'firstName lastName fullName profilePicture accountType businessName sadhuName');
     res.json({ success: true, requests });
 });
 
@@ -92,7 +92,7 @@ const getFollowers = asyncHandler(async (req, res) => {
   const { userId } = req.params;
   try {
     const followers = await Friendship.find({ following: userId })
-      .populate('follower', 'firstName lastName fullName profilePicture accountType businessName');
+      .populate('follower', 'firstName lastName fullName profilePicture accountType businessName sadhuName');
 
     res.status(200).json({
       success: true,
@@ -108,9 +108,12 @@ const getFollowers = asyncHandler(async (req, res) => {
           followStatus: f.followStatus,
           accountType: follower.accountType,
           businessName: follower.businessName,
-          displayName: follower.accountType === "business"
-            ? follower.businessName
-            : follower.fullName,
+          displayName:
+            follower.accountType === "business"
+              ? follower.businessName
+              : follower.accountType === "sadhu"
+              ? follower.sadhuName
+              : follower.fullName,
         };
       })
     });
@@ -124,7 +127,7 @@ const getFollowing = asyncHandler(async (req, res) => {
   const { userId } = req.params;
   try {
     const following = await Friendship.find({ follower: userId })
-      .populate('following', 'firstName lastName fullName profilePicture accountType businessName');
+      .populate('following', 'firstName lastName fullName profilePicture accountType businessName sadhuName');
 
     // 🔐 Filter out any broken references (null following)
     const validFollowing = following.filter(f => f.following);
@@ -143,9 +146,12 @@ const getFollowing = asyncHandler(async (req, res) => {
           followStatus: f.followStatus,
           accountType: user.accountType,
           businessName: user.businessName,
-          displayName: user.accountType === "business"
-            ? user.businessName
-            : user.fullName,
+          displayName:
+            user.accountType === "business"
+              ? user.businessName
+              : user.accountType === "sadhu"
+              ? user.sadhuName
+              : user.fullName,
         };
       })
     });
