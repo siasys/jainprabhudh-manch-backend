@@ -72,3 +72,28 @@ exports.markAllNotificationsRead = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to mark notifications as read' });
   }
 };
+// 🔹 Notification Delete Karna (By Notification ID)
+exports.deleteNotification = async (req, res) => {
+  try {
+    const { notificationId } = req.params;
+
+    if (!notificationId) {
+      return res.status(400).json({ success: false, message: "Notification ID is required" });
+    }
+
+    const deletedNotification = await Notification.findByIdAndDelete(notificationId);
+
+    if (!deletedNotification) {
+      return res.status(404).json({ success: false, message: "Notification not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Notification deleted successfully",
+      deletedNotification,
+    });
+  } catch (error) {
+    console.error("Error deleting notification:", error);
+    res.status(500).json({ success: false, message: "Failed to delete notification" });
+  }
+};
