@@ -17,6 +17,7 @@ const {
 } = require('../../middlewares/authMiddlewares');
 const { verifySadhuCredentials, isCityPresident } = require('../../middlewares/sadhuAuthMiddleware');
 const upload = require('../../middlewares/upload');
+const { generateSadhuCard } = require('../../controller/SadhuControllers/generateSadhuCard');
 
 // Public routes
 router.get('/available-cities', getAvailableCities);
@@ -38,7 +39,7 @@ router.get('/pending/:citySanghId',
     isCityPresident,
     getPendingSadhuApplications
 );
-
+router.get("/generate-card/sadhu/:id", generateSadhuCard);
 router.put('/review/:sadhuId',
     isCityPresident,
     reviewSadhuSubmission

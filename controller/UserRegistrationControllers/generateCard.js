@@ -60,7 +60,7 @@ const generateJainAadharCard = async (req, res) => {
     if (application.userProfile) {
       const profileRes = await axios.get(application.userProfile, { responseType: 'arraybuffer' });
       const profileImg = await loadImage(profileRes.data);
-      ctx.drawImage(profileImg, 30, 180, 250, 260);
+      ctx.drawImage(profileImg, 30, 170, 240, 260);
     }
 
     ctx.fillStyle = 'black';
