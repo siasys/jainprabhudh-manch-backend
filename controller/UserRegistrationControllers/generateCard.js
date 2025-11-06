@@ -81,13 +81,39 @@ const generateJainAadharCard = async (req, res) => {
     const backTemplate = await loadImage(path.join(__dirname, '../../Public/Shravak_back.jpg'));
     ctx.drawImage(backTemplate, 0, height + GAP_BETWEEN_CARDS, width, height);
 
-    ctx.fillStyle = 'black';
-    ctx.font = '26px Georgia';
-    const xPos = 290;
-    const addressLine1 = application.location?.address || 'N/A';
-    const addressLine2 = `${application.location?.city || 'N/A'}, ${application.location?.pinCode || ''}`.trim();
-    ctx.fillText(addressLine1, xPos, height + 230);
-    ctx.fillText(addressLine2, xPos, height + 270);
+ctx.fillStyle = 'black';
+ctx.font = '26px Georgia';
+const xPos = 290;
+let yPos = height + 230;
+const maxWidth = 500; // card ke andar fit hone ke liye max width
+
+// Full address + city/pin
+const fullAddress = `${application.location?.address || 'N/A'} ${application.location?.city || ''} - ${application.location?.pinCode || ''}`.trim();
+
+// Function to split text into multiple lines based on maxWidth
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(' ');
+  let line = '';
+  
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + ' ';
+    const metrics = ctx.measureText(testLine);
+    const testWidth = metrics.width;
+
+    if (testWidth > maxWidth && n > 0) {
+      ctx.fillText(line.trim(), x, y);
+      line = words[n] + ' ';
+      y += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line.trim(), x, y);
+  return y + lineHeight; // return next y position
+}
+
+// Call wrapText
+yPos = wrapText(ctx, fullAddress, xPos, yPos, maxWidth, 40);
 
     if (application.mobileNumber) {
       const mobileText = `Mobile: ${application.mobileNumber}`;
@@ -102,7 +128,7 @@ const generateJainAadharCard = async (req, res) => {
     const qrUrl = `https://jainprabhudh-manch-backend.onrender.com/api/generate-card/verify/jain-shravak/${application.jainAadharNumber}`;
     const qrCodeDataURL = await QRCode.toDataURL(qrUrl);
     const qrImage = await loadImage(qrCodeDataURL);
-    ctx.drawImage(qrImage, 600, height + 260, 180, 180);
+    ctx.drawImage(qrImage, 750, height + 260, 180, 180);
 
     res.setHeader('Content-Type', 'image/jpeg');
     combinedCanvas.createJPEGStream().pipe(res);
