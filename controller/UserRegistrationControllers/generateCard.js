@@ -81,39 +81,37 @@ const generateJainAadharCard = async (req, res) => {
     const backTemplate = await loadImage(path.join(__dirname, '../../Public/Shravak_back.jpg'));
     ctx.drawImage(backTemplate, 0, height + GAP_BETWEEN_CARDS, width, height);
 
-ctx.fillStyle = 'black';
-ctx.font = '26px Georgia';
-const xPos = 290;
-let yPos = height + 230;
-const maxWidth = 500; // card ke andar fit hone ke liye max width
+    ctx.fillStyle = 'black';
+    ctx.font = '26px Georgia';
+    const xPos = 290;
+    let yPos = height + 230;
+    const maxWidth = 500;
+    // Full address + city/pin
+    const fullAddress = `${application.location?.address || 'N/A'} ${application.location?.city || ''} - ${application.location?.pinCode || ''}`.trim();
 
-// Full address + city/pin
-const fullAddress = `${application.location?.address || 'N/A'} ${application.location?.city || ''} - ${application.location?.pinCode || ''}`.trim();
+    // Function to split text into multiple lines based on maxWidth
+    function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+      const words = text.split(' ');
+      let line = '';
+      for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        const testWidth = metrics.width;
 
-// Function to split text into multiple lines based on maxWidth
-function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-  const words = text.split(' ');
-  let line = '';
-  
-  for (let n = 0; n < words.length; n++) {
-    const testLine = line + words[n] + ' ';
-    const metrics = ctx.measureText(testLine);
-    const testWidth = metrics.width;
-
-    if (testWidth > maxWidth && n > 0) {
+        if (testWidth > maxWidth && n > 0) {
+          ctx.fillText(line.trim(), x, y);
+          line = words[n] + ' ';
+          y += lineHeight;
+        } else {
+          line = testLine;
+        }
+      }
       ctx.fillText(line.trim(), x, y);
-      line = words[n] + ' ';
-      y += lineHeight;
-    } else {
-      line = testLine;
+      return y + lineHeight; // return next y position
     }
-  }
-  ctx.fillText(line.trim(), x, y);
-  return y + lineHeight; // return next y position
-}
 
-// Call wrapText
-yPos = wrapText(ctx, fullAddress, xPos, yPos, maxWidth, 40);
+    // Call wrapText
+    yPos = wrapText(ctx, fullAddress, xPos, yPos, maxWidth, 40);
 
     if (application.mobileNumber) {
       const mobileText = `Mobile: ${application.mobileNumber}`;

@@ -26,7 +26,7 @@ exports.sharePost = async (req, res) => {
       return res.status(400).json({ message: "sender and receiver are required" });
     }
 
-    // ✅ Sender authorization check
+    // ✅ Authorization check
     if (sender !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -38,6 +38,8 @@ exports.sharePost = async (req, res) => {
     if (!receiverUser) {
       return res.status(404).json({ message: "Receiver User not found" });
     }
+
+    // ✅ Block check
     if (receiverUser?.blockedUsers?.includes(sender)) {
       return res.status(403).json({
         success: false,
@@ -51,22 +53,38 @@ exports.sharePost = async (req, res) => {
       return res.status(404).json({ message: "Post not found" });
     }
 
-    // ✅ Prepare attachments from post.media
+    // ✅ Prepare attachments (based on postType)
     const attachments = [];
-    if (Array.isArray(post.media) && post.media.length > 0) {
+
+    if (post.postType === "media" && Array.isArray(post.media) && post.media.length > 0) {
+      // Image / Video posts
       post.media.forEach((m) => {
-        if (m.type === "image" && m.url) {
+        if (m.url) {
           attachments.push({
-            type: "image",
+            type: m.type === "video" ? "video" : "image",
             url: m.url,
-            name: "shared_post.jpg",
+            thumbnail: m.thumbnail || "",
+            name: `shared_${m.type}.${m.type === "video" ? "mp4" : "jpg"}`,
             size: 0,
           });
         }
       });
+    } else if (post.postType === "text") {
+      // Text post as attachment
+      attachments.push({
+        type: "text",
+        content: post.caption || post.text || "",
+      });
+    } else if (post.postType === "poll") {
+      // Poll type post
+      attachments.push({
+        type: "poll",
+        question: post.poll?.question || "",
+        options: post.poll?.options || [],
+      });
     }
 
-    // ✅ New message (direct in Message collection)
+    // ✅ Create new message
     const messageData = {
       sender,
       receiver,
@@ -80,7 +98,7 @@ exports.sharePost = async (req, res) => {
     const newMessage = new Message(messageData);
     await newMessage.save();
 
-    // ✅ Emit socket (direct to receiver)
+    // ✅ Emit socket to receiver
     const io = getIo();
     io.to(receiver.toString()).emit("newMessage", {
       message: newMessage.toObject(),
@@ -95,6 +113,7 @@ exports.sharePost = async (req, res) => {
     return res.status(500).json({ success: false, message: "Error sharing post" });
   }
 };
+
 
 // Create a new message
 exports.createMessage = async (req, res) => {
