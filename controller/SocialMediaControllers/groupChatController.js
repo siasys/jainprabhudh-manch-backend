@@ -107,73 +107,91 @@ exports.getGroupDetails = async (req, res) => {
 exports.createOrFindGotraGroup = async (req, res) => {
   try {
     const { creator } = req.body;
+
     // Creator ka Gotra Jain Aadhar se fetch karein
     const creatorData = await JainAadhar.findOne({ userId: creator });
     if (!creatorData || !creatorData.gotra) {
       return res.status(400).json({ message: "Gotra not found for the creator" });
     }
-    const gotra = creatorData.gotra.trim().toLowerCase();
 
-    //  Gotra ke basis par saare Jain Aadhar users fetch karein
-    const gotraUsers = await JainAadhar.find({ gotra: { $regex: new RegExp(`^${gotra}$`, 'i') } }).select("userId");
+    const gotra = creatorData.gotra.trim();
+
+    // Gotra ke basis par saare Jain Aadhar users fetch karein
+    const gotraUsers = await JainAadhar.find({
+      gotra: { $regex: new RegExp(`^${gotra}$`, "i") },
+    }).select("userId");
+
     if (gotraUsers.length === 0) {
       return res.status(400).json({ message: "No users found for this Gotra" });
     }
-    const groupMembers = gotraUsers.map(user => user.userId.toString());
 
-    // Check if group already exists
-    let existingGroup = await GroupChat.findOne({ groupName: new RegExp(`^${gotra} Group$`, 'i') });
+    const groupMembers = gotraUsers.map((user) => user.userId.toString());
+
+    // 🔹 Group Name Hindi me banao
+    const hindiGroupName = `${gotra} गोत्र ग्रुप`;
+
+    // Check if group already exists (case-insensitive)
+    let existingGroup = await GroupChat.findOne({
+      groupName: new RegExp(`^${gotra}\\s*गोत्र\\s*ग्रुप$`, "i"),
+    });
+
     let groupImage = req.file ? req.file.location : null;
 
     if (existingGroup) {
-      // check existing group
-      groupMembers.forEach(memberId => {
-        if (!existingGroup.groupMembers.some(m => m.user.toString() === memberId)) {
+      // Update existing group members if not already in
+      groupMembers.forEach((memberId) => {
+        if (!existingGroup.groupMembers.some((m) => m.user.toString() === memberId)) {
           existingGroup.groupMembers.push({ user: memberId, role: "member" });
         }
       });
+
       if (req.file) {
         existingGroup.groupImage = groupImage;
       }
+
       await existingGroup.save();
     } else {
-      // Gotra Group create
+      // 🔹 Gotra Group create with Hindi Name
       existingGroup = new GroupChat({
-        groupName: `${gotra.charAt(0).toUpperCase() + gotra.slice(1)} Group`, // Gotra Group name fix karein
-        groupMembers: groupMembers.map(memberId => ({
+        groupName: hindiGroupName,
+        groupMembers: groupMembers.map((memberId) => ({
           user: memberId,
-          role: memberId === creator ? "admin" : "member"
+          role: memberId === creator ? "admin" : "member",
         })),
         groupImage,
-        isGotraGroup:true,
+        isGotraGroup: true,
         creator,
-        admins: [creator]
+        admins: [creator],
       });
+
       await existingGroup.save();
     }
-    //  Notify all members via Socket.io
+
+    // 🔹 Notify all members via Socket.io
     const io = getIo();
     if (io) {
-      groupMembers.forEach(memberId => {
+      groupMembers.forEach((memberId) => {
         io.to(memberId.toString()).emit("newGroup", {
           _id: existingGroup._id,
           groupName: existingGroup.groupName,
           groupImage: existingGroup.groupImage,
           creator: existingGroup.creator,
-          createdAt: existingGroup.createdAt
+          createdAt: existingGroup.createdAt,
         });
+
         io.to(memberId.toString()).emit("addedToGroup", {
           groupId: existingGroup._id,
-          groupName: existingGroup.groupName
+          groupName: existingGroup.groupName,
         });
       });
     } else {
       console.error("Socket.io instance not available");
     }
+
     return res.status(201).json({
       success: true,
       message: "Gotra-based group created or updated successfully",
-      group: existingGroup
+      group: existingGroup,
     });
   } catch (error) {
     console.error(error);
