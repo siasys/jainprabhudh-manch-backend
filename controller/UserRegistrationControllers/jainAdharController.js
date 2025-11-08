@@ -45,140 +45,153 @@ const createJainAadhar = asyncHandler(async (req, res) => {
 
     // Fetch OTP record
     const otpEntry = await SharavakOtpVerification.findOne({ phoneNumber: number });
-
-    if (!otpEntry) {
-      return errorResponse(res, 'No OTP sent to this mobile number', 404);
-    }
-
-    if (otpEntry.code !== enteredOtp) {
-      return errorResponse(res, 'Incorrect OTP', 400);
-    }
-
-    if (new Date() > otpEntry.expiresAt) {
-      return errorResponse(res, 'OTP expired', 400);
-    }
+    if (!otpEntry) return errorResponse(res, 'No OTP sent to this mobile number', 404);
+    if (otpEntry.code !== enteredOtp) return errorResponse(res, 'Incorrect OTP', 400);
+    if (new Date() > otpEntry.expiresAt) return errorResponse(res, 'OTP expired', 400);
 
     // Mark OTP as verified
     otpEntry.isVerified = true;
     await otpEntry.save();
-
-    // Flag user submission as verified
     req.body.isPhoneVerified = true;
 
     const { location } = req.body;
-
     if (!location || !location.state) {
       return errorResponse(res, 'State is required in location data', 400);
     }
 
-    // Normalize input strings (trim)
+    // Normalize input strings
     const norm = {
-      country: (location.country || 'India').toString().trim(),
-      state: location.state ? location.state.toString().trim() : '',
-      district: location.district ? location.district.toString().trim() : '',
-      city: location.city ? location.city.toString().trim() : '',
+      country: (location.country || 'India').trim(),
+      state: (location.state || '').trim(),
+      district: (location.district || '').trim(),
+      city: (location.city || '').trim(),
     };
 
-    // If frontend explicitly provided BOTH applicationLevel and reviewingSanghId, respect it
     let applicationLevel = null;
     let reviewingSanghId = req.body.reviewingSanghId || null;
 
-    if (req.body.applicationLevel && req.body.reviewingSanghId) {
-      applicationLevel = req.body.applicationLevel;
-      // reviewingSanghId already set from req.body
-    } else {
-      // Helper: try to find a sangh with an exact (case-insensitive) match
-      const findSangh = async (level, locFilters = {}) => {
-        const query = {
-          level,
-          status: 'active',
-          sanghType: 'main',
-          ...locFilters,
-        };
-        return await HierarchicalSangh.findOne(query).exec();
+    // Helper to find sangh
+    const findSangh = async (level, locFilters = {}) => {
+      const query = {
+        level,
+        status: 'active',
+        sanghType: 'main',
+        ...locFilters,
       };
+      return await HierarchicalSangh.findOne(query).exec();
+    };
 
-      // Build regex filters for case-insensitive exact match
-      const cityRegex = norm.city ? new RegExp('^' + escapeRegex(norm.city) + '$', 'i') : null;
-      const districtRegex = norm.district ? new RegExp('^' + escapeRegex(norm.district) + '$', 'i') : null;
-      const stateRegex = norm.state ? new RegExp('^' + escapeRegex(norm.state) + '$', 'i') : null;
-      const countryRegex = norm.country ? new RegExp('^' + escapeRegex(norm.country) + '$', 'i') : null;
+    // Escape regex helper
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-      let reviewingSangh = null;
+    const cityRegex = norm.city ? new RegExp('^' + escapeRegex(norm.city) + '$', 'i') : null;
+    const districtRegex = norm.district ? new RegExp('^' + escapeRegex(norm.district) + '$', 'i') : null;
+    const stateRegex = norm.state ? new RegExp('^' + escapeRegex(norm.state) + '$', 'i') : null;
+    const countryRegex = norm.country ? new RegExp('^' + escapeRegex(norm.country) + '$', 'i') : null;
 
-      // 1) Try City (only if city + district + state provided)
-      if (norm.city && norm.district && norm.state) {
-        reviewingSangh = await findSangh('city', {
-          'location.city': cityRegex,
-          'location.district': districtRegex,
-          'location.state': stateRegex,
-        });
-        if (reviewingSangh) {
-          applicationLevel = 'city';
-          reviewingSanghId = reviewingSangh._id;
-        }
-      }
+    let reviewingSangh = null;
 
-      // 2) Try District (same district + state)
-      if (!reviewingSangh && norm.district && norm.state) {
-        reviewingSangh = await findSangh('district', {
-          'location.district': districtRegex,
-          'location.state': stateRegex,
-        });
-        if (reviewingSangh) {
-          applicationLevel = 'district';
-          reviewingSanghId = reviewingSangh._id;
-        }
-      }
+    // 🔹 Step 1: Try City (strict + fuzzy)
+    if (norm.city && norm.district && norm.state) {
+      // 1A) Exact match
+      reviewingSangh = await HierarchicalSangh.findOne({
+        level: 'city',
+        sanghType: 'main',
+        status: 'active',
+        'location.city': { $regex: new RegExp(`^${escapeRegex(norm.city)}$`, 'i') },
+        'location.district': districtRegex,
+        'location.state': stateRegex,
+      });
 
-      // 3) Try State
-      if (!reviewingSangh && norm.state) {
-        reviewingSangh = await findSangh('state', {
-          'location.state': stateRegex,
-        });
-        if (reviewingSangh) {
-          applicationLevel = 'state';
-          reviewingSanghId = reviewingSangh._id;
-        }
-      }
-
-      // 4) Fallback to country -> foundation -> superadmin
+      // 1B) Fuzzy match if exact not found
       if (!reviewingSangh) {
-        reviewingSangh = await findSangh('country', {
-          'location.country': countryRegex,
+        const allCitySanghs = await HierarchicalSangh.find({
+          level: 'city',
+          sanghType: 'main',
+          status: 'active',
+          'location.district': districtRegex,
+          'location.state': stateRegex,
         });
-        if (reviewingSangh) {
-          applicationLevel = 'country';
-          reviewingSanghId = reviewingSangh._id;
+
+        const stringSimilarity = (a, b) => {
+          a = a.toLowerCase().trim();
+          b = b.toLowerCase().trim();
+          const longer = a.length > b.length ? a : b;
+          const shorter = a.length > b.length ? b : a;
+          const common = [...shorter].filter((ch) => longer.includes(ch)).length;
+          return common / longer.length;
+        };
+
+        reviewingSangh = allCitySanghs.find(
+          (s) => stringSimilarity(norm.city, s.location.city) > 0.7 // 70% similar
+        );
+      }
+
+      if (reviewingSangh) {
+        applicationLevel = 'city';
+        reviewingSanghId = reviewingSangh._id;
+      }
+    }
+
+    // 🔹 Step 2: Try District
+    if (!reviewingSangh && norm.district && norm.state) {
+      reviewingSangh = await findSangh('district', {
+        'location.district': districtRegex,
+        'location.state': stateRegex,
+      });
+      if (reviewingSangh) {
+        applicationLevel = 'district';
+        reviewingSanghId = reviewingSangh._id;
+      }
+    }
+
+    // 🔹 Step 3: Try State
+    if (!reviewingSangh && norm.state) {
+      reviewingSangh = await findSangh('state', {
+        'location.state': stateRegex,
+      });
+      if (reviewingSangh) {
+        applicationLevel = 'state';
+        reviewingSanghId = reviewingSangh._id;
+      }
+    }
+
+    // 🔹 Step 4: Try Country / Foundation / Superadmin
+    if (!reviewingSangh) {
+      reviewingSangh = await findSangh('country', {
+        'location.country': countryRegex,
+      });
+      if (reviewingSangh) {
+        applicationLevel = 'country';
+        reviewingSanghId = reviewingSangh._id;
+      } else {
+        const foundationSangh = await HierarchicalSangh.findOne({
+          level: 'foundation',
+          status: 'active',
+        }).exec();
+        if (foundationSangh) {
+          applicationLevel = 'foundation';
+          reviewingSanghId = foundationSangh._id;
         } else {
-          const foundationSangh = await HierarchicalSangh.findOne({
-            level: 'foundation',
-            status: 'active',
-          }).exec();
-          if (foundationSangh) {
-            applicationLevel = 'foundation';
-            reviewingSanghId = foundationSangh._id;
-          } else {
-            applicationLevel = 'superadmin';
-            reviewingSanghId = null;
-          }
+          applicationLevel = 'superadmin';
+          reviewingSanghId = null;
         }
       }
-    } // end else (auto-detect)
+    }
 
-    // Special case: For country level office bearers, route to superadmin
+    // 🔹 Special case: Country office bearer
     if (req.body.isOfficeBearer && applicationLevel === 'country') {
       applicationLevel = 'superadmin';
       reviewingSanghId = null;
     }
 
-    // Final safety: if applicationLevel still null for some reason, set to superadmin
+    // Safety fallback
     if (!applicationLevel) {
       applicationLevel = 'superadmin';
       reviewingSanghId = null;
     }
 
-    // Prepare jainAadharData
+    // Prepare data
     const applicantUserId = req.body.applicantUserId || req.user._id;
     const jainAadharData = {
       ...req.body,
@@ -188,10 +201,10 @@ const createJainAadhar = asyncHandler(async (req, res) => {
       reviewingSanghId,
       status: 'pending',
       location: {
-        country: norm.country || 'India',
-        state: norm.state || '',
-        district: norm.district || '',
-        city: norm.city || '',
+        country: norm.country,
+        state: norm.state,
+        district: norm.district,
+        city: norm.city,
         address: location.address || '',
         pinCode: location.pinCode || '',
       },
@@ -206,20 +219,17 @@ const createJainAadhar = asyncHandler(async (req, res) => {
       ],
     };
 
-    // Files handling (if present)
-    if (req.files) {
-      // Example: userProfile
-      if (req.files.userProfile && req.files.userProfile[0]) {
-        const profileUrl = req.files.userProfile[0].location || req.files.userProfile[0].path;
-        jainAadharData.userProfile = convertS3UrlToCDN(profileUrl);
-      }
-      // Add other file mappings similarly if required
+    // Files handling
+    if (req.files?.userProfile?.[0]) {
+      const profileUrl =
+        req.files.userProfile[0].location || req.files.userProfile[0].path;
+      jainAadharData.userProfile = convertS3UrlToCDN(profileUrl);
     }
 
     // Create application
     const newJainAadhar = await JainAadhar.create(jainAadharData);
 
-    // Update user's jainAadhar status if not already verified
+    // Update user's jainAadhar status
     const user = await User.findById(req.user._id);
     if (user && user.jainAadharStatus !== 'verified') {
       await User.findByIdAndUpdate(req.user._id, {
@@ -233,6 +243,7 @@ const createJainAadhar = asyncHandler(async (req, res) => {
     return errorResponse(res, error.message, 500);
   }
 });
+
 const sendSharavakOtp = asyncHandler(async (req, res) => {
   let { phoneNumber, name } = req.body;
 
