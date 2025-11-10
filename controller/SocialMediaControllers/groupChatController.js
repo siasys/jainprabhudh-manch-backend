@@ -7,7 +7,8 @@ const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const JainAadhar = require('../../model/UserRegistrationModels/jainAadharModel')
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel')
-
+const User = require('../../model/UserRegistrationModels/userModel');
+const fuzzysort = require('fuzzysort');
 // 1. Create Group Chat
 exports.createGroupChat = async (req, res) => {
   try {
@@ -75,6 +76,89 @@ exports.createGroupChat = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+exports.createOrFindCityGroup = async (req, res) => {
+  try {
+    const { creator } = req.body;
+
+    const creatorData = await User.findById(creator);
+    if (!creatorData || !creatorData.location || !creatorData.location.city) {
+      return res.status(400).json({ message: "User city not found" });
+    }
+
+    const cityName = creatorData.location.city.trim();
+    const normalizedCity = cityName.toLowerCase().replace(/\s+/g, " ");
+    const hindiGroupName = `सकल जैन समाज ${cityName}`;
+
+    // Find all city users
+    const cityUsers = await User.find({
+      "location.city": { $regex: new RegExp(`^${cityName}$`, "i") },
+    }).select("_id");
+
+    if (cityUsers.length === 0) {
+      return res.status(400).json({ message: "No users found for this city" });
+    }
+
+    const groupMembers = cityUsers.map((u) => ({
+      user: u._id,
+      role: u._id.toString() === creator.toString() ? "admin" : "member",
+    }));
+
+    const groupImage = req.file ? req.file.location : null;
+
+    // ATOMIC UPSERT — prevents duplicates
+    const group = await GroupChat.findOneAndUpdate(
+      {
+        normalizedCity, // custom field for safety
+        isCityGroup: true,
+      },
+      {
+        $setOnInsert: {
+          groupName: hindiGroupName,
+          normalizedCity,
+          isCityGroup: true,
+          creator,
+          admins: [creator],
+          groupImage,
+          createdAt: new Date(),
+        },
+        $set: {
+          updatedAt: new Date(),
+        },
+        $addToSet: {
+          groupMembers: { $each: groupMembers },
+        },
+      },
+      {
+        upsert: true, // create if not exists
+        new: true,
+      }
+    );
+
+    // 🔹 Socket emit
+    const io = getIo();
+    if (io) {
+      groupMembers.forEach((member) => {
+        io.to(member.user.toString()).emit("newGroup", {
+          _id: group._id,
+          groupName: group.groupName,
+          groupImage: group.groupImage,
+          creator: group.creator,
+          createdAt: group.createdAt,
+        });
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "City-based 'Sakal Jain Samaj' group created or updated successfully",
+      group,
+    });
+  } catch (error) {
+    console.error("Error creating city group:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 
 exports.getGroupDetails = async (req, res) => {
   try {

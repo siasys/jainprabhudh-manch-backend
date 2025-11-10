@@ -153,6 +153,19 @@ const groupChatSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+    isCityGroup: {
+      type: Boolean,
+      default: false,
+      index: true, // fast query performance
+    },
+    normalizedCity: {
+      type: String,
+      unique: true, // prevent duplicates for same city
+      lowercase: true,
+      trim: true,
+      sparse: true, // ignore null values for non-city groups
+    },
+
   isGotraGroup: { type: Boolean, default: false },
   isSanghGroup: { type: Boolean, default: false },
 }, {
