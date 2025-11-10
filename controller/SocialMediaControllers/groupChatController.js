@@ -99,40 +99,42 @@ exports.createOrFindCityGroup = async (req, res) => {
     }
 
     const groupMembers = cityUsers.map((u) => ({
-      user: u._id,
-      role: u._id.toString() === creator.toString() ? "admin" : "member",
-    }));
+  user: u._id,
+  role: u._id.toString() === creator.toString() ? "admin" : "member",
+}));
 
-    const groupImage = req.file ? req.file.location : null;
+// ✅ Remove duplicates (based on user ID)
+const uniqueMembersMap = new Map();
+groupMembers.forEach((m) => uniqueMembersMap.set(m.user.toString(), m));
+const uniqueGroupMembers = Array.from(uniqueMembersMap.values());
 
-    // ATOMIC UPSERT — prevents duplicates
-    const group = await GroupChat.findOneAndUpdate(
-      {
-        normalizedCity, // custom field for safety
-        isCityGroup: true,
-      },
-      {
-        $setOnInsert: {
-          groupName: hindiGroupName,
-          normalizedCity,
-          isCityGroup: true,
-          creator,
-          admins: [creator],
-          groupImage,
-          createdAt: new Date(),
-        },
-        $set: {
-          updatedAt: new Date(),
-        },
-        $addToSet: {
-          groupMembers: { $each: groupMembers },
-        },
-      },
-      {
-        upsert: true, // create if not exists
-        new: true,
-      }
-    );
+const group = await GroupChat.findOneAndUpdate(
+  {
+    normalizedCity,
+    isCityGroup: true,
+  },
+  {
+    $setOnInsert: {
+      groupName: hindiGroupName,
+      normalizedCity,
+      isCityGroup: true,
+      creator,
+      admins: [creator],
+      groupImage,
+      createdAt: new Date(),
+    },
+    $set: {
+      updatedAt: new Date(),
+    },
+    $addToSet: {
+      groupMembers: { $each: uniqueGroupMembers },
+    },
+  },
+  {
+    upsert: true,
+    new: true,
+  }
+);
 
     // 🔹 Socket emit
     const io = getIo();
@@ -359,35 +361,51 @@ exports.createOrFindHierarchicalSanghGroup = async (req, res) => {
 };
 
 
-
-// all groups
+// ✅ Get All Groups (User + Sangh Account Compatible)
 exports.getAllGroups = async (req, res) => {
   try {
-    const userId = req.user._id;
+    // 👇 Agar Sangh account se logged in hai to sanghId lo, warna userId
+    const userId =
+      req.accountType === "sangh"
+        ? req.sangh?._id
+        : req.user?._id;
 
-    // ✅ Fetch all non-gotra groups where user is a member
+    if (!userId) {
+      return res.status(400).json({ message: "User or Sangh ID not found" });
+    }
+
+    // ✅ Fetch all non-gotra groups where this account is a member
     const normalGroups = await GroupChat.find({
-      'groupMembers.user': userId,
-      isGotraGroup: false
+      "groupMembers.user": userId,
+      isGotraGroup: false,
     })
-      .populate('groupMembers.user', 'firstName fullName lastName profilePicture accountType businessName sadhuName')
-      .populate('creator', 'firstName lastName fullName profilePicture accountType businessName sadhuName')
-      .populate('groupMessages');
+      .populate(
+        "groupMembers.user",
+        "firstName fullName lastName profilePicture accountType businessName sadhuName"
+      )
+      .populate(
+        "creator",
+        "firstName lastName fullName profilePicture accountType businessName sadhuName"
+      )
+      .populate("groupMessages");
 
-    // ✅ Fetch gotra group (either user is member OR creator)
+    // ✅ Fetch gotra group (either user/sangh is member OR creator)
     const gotraGroup = await GroupChat.findOne({
       isGotraGroup: true,
-      $or: [
-        { 'groupMembers.user': userId },
-        { creator: userId }
-      ]
+      $or: [{ "groupMembers.user": userId }, { creator: userId }],
     })
-      .populate('groupMembers.user', 'firstName fullName lastName profilePicture')
-      .populate('creator', 'firstName lastName fullName profilePicture')
-      .populate('groupMessages');
+      .populate(
+        "groupMembers.user",
+        "firstName fullName lastName profilePicture accountType businessName sadhuName"
+      )
+      .populate(
+        "creator",
+        "firstName lastName fullName profilePicture accountType businessName sadhuName"
+      )
+      .populate("groupMessages");
 
-    // ✅ CDN convert
-    normalGroups.forEach(group => {
+    // ✅ CDN URL conversion
+    normalGroups.forEach((group) => {
       if (group.groupImage) {
         group.groupImage = convertS3UrlToCDN(group.groupImage);
       }
@@ -400,18 +418,19 @@ exports.getAllGroups = async (req, res) => {
     let allGroups = [...normalGroups];
     if (gotraGroup) allGroups.push(gotraGroup);
 
-    // ✅ Add groupMessage count
-    allGroups = allGroups.map(group => ({
+    // ✅ Add messageCount
+    allGroups = allGroups.map((group) => ({
       ...group.toObject(),
-      messageCount: group.groupMessages ? group.groupMessages.length : 0
+      messageCount: group.groupMessages ? group.groupMessages.length : 0,
     }));
 
     res.status(200).json({ groups: allGroups });
   } catch (error) {
-    console.error(error);
+    console.error("❌ getAllGroups Error:", error);
     res.status(500).json({ error: error.message });
   }
 };
+
 
 // Fetch All Gotra Groups
 exports.getUserGotraGroups = async (req, res) => {
