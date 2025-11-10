@@ -81,41 +81,57 @@ exports.createOrFindCityGroup = async (req, res) => {
     const { creator } = req.body;
 
     const creatorData = await User.findById(creator);
-    if (!creatorData || !creatorData.location || !creatorData.location.city) {
+    if (!creatorData || !creatorData.location?.city) {
       return res.status(400).json({ message: "User city not found" });
     }
 
-    const cityName = creatorData.location.city.trim();
-    const normalizedCity = cityName.toLowerCase().replace(/\s+/g, " ");
+    let cityName = creatorData.location.city.trim();
+
+    // ✅ Advanced normalization
+    const normalizeCity = (name) => {
+      return name
+        .toLowerCase()
+        .replace(/[^\u0900-\u097Fa-z]/g, "") // remove special chars, keep hindi+english
+        .replace(/\s+/g, "") // remove spaces
+        .replace(/[aeiou]/g, ""); // remove vowels
+    };
+
+    const normalizedCity = normalizeCity(cityName);
     const hindiGroupName = `सकल जैन समाज ${cityName}`;
 
-    // Find all city users
-    const cityUsers = await User.find({
-      "location.city": { $regex: new RegExp(`^${cityName}$`, "i") },
-    }).select("_id");
+    // ✅ Fuzzy match existing group — agar koi similar normalized city pe group bana ho
+    const allGroups = await GroupChat.find({ isCityGroup: true });
+    const existingGroup = allGroups.find(
+      (g) => normalizeCity(g.normalizedCity || "") === normalizedCity
+    );
+
+    if (existingGroup) {
+      return res.status(200).json({
+        success: false,
+        message: "City group already exists",
+        group: existingGroup,
+      });
+    }
+
+    // ✅ Find all city users matching fuzzy normalized city
+    const allUsers = await User.find().select("_id location.city");
+    const cityUsers = allUsers.filter((u) => {
+      if (!u.location?.city) return false;
+      return normalizeCity(u.location.city) === normalizedCity;
+    });
 
     if (cityUsers.length === 0) {
       return res.status(400).json({ message: "No users found for this city" });
     }
 
+    const groupImage = req?.file?.location || null;
+
     const groupMembers = cityUsers.map((u) => ({
-  user: u._id,
-  role: u._id.toString() === creator.toString() ? "admin" : "member",
-}));
+      user: u._id,
+      role: u._id.toString() === creator.toString() ? "admin" : "member",
+    }));
 
-// ✅ Remove duplicates (based on user ID)
-const uniqueMembersMap = new Map();
-groupMembers.forEach((m) => uniqueMembersMap.set(m.user.toString(), m));
-const uniqueGroupMembers = Array.from(uniqueMembersMap.values());
-    const groupImage = req.file ? req.file.location : null;
-
-const group = await GroupChat.findOneAndUpdate(
-  {
-    normalizedCity,
-    isCityGroup: true,
-  },
-  {
-    $setOnInsert: {
+    const newGroup = await GroupChat.create({
       groupName: hindiGroupName,
       normalizedCity,
       isCityGroup: true,
@@ -123,44 +139,35 @@ const group = await GroupChat.findOneAndUpdate(
       admins: [creator],
       groupImage,
       createdAt: new Date(),
-    },
-    $set: {
-      updatedAt: new Date(),
-    },
-    $addToSet: {
-      groupMembers: { $each: uniqueGroupMembers },
-    },
-  },
-  {
-    upsert: true,
-    new: true,
-  }
-);
+      groupMembers,
+    });
 
     // 🔹 Socket emit
     const io = getIo();
     if (io) {
       groupMembers.forEach((member) => {
         io.to(member.user.toString()).emit("newGroup", {
-          _id: group._id,
-          groupName: group.groupName,
-          groupImage: group.groupImage,
-          creator: group.creator,
-          createdAt: group.createdAt,
+          _id: newGroup._id,
+          groupName: newGroup.groupName,
+          groupImage: newGroup.groupImage,
+          creator: newGroup.creator,
+          createdAt: newGroup.createdAt,
         });
       });
     }
 
     res.status(201).json({
       success: true,
-      message: "City-based 'Sakal Jain Samaj' group created or updated successfully",
-      group,
+      message: "City-based 'Sakal Jain Samaj' group created successfully",
+      group: newGroup,
     });
   } catch (error) {
     console.error("Error creating city group:", error);
     res.status(500).json({ error: error.message });
   }
 };
+
+
 
 
 exports.getGroupDetails = async (req, res) => {
