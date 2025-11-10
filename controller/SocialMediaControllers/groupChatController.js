@@ -107,6 +107,7 @@ exports.createOrFindCityGroup = async (req, res) => {
 const uniqueMembersMap = new Map();
 groupMembers.forEach((m) => uniqueMembersMap.set(m.user.toString(), m));
 const uniqueGroupMembers = Array.from(uniqueMembersMap.values());
+    const groupImage = req.file ? req.file.location : null;
 
 const group = await GroupChat.findOneAndUpdate(
   {
