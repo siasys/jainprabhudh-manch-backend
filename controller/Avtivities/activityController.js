@@ -1,8 +1,8 @@
 const Activity = require("../../model/Activity/Activity");
 const HierarchicalSangh = require("../../model/SanghModels/sanghModel");
 const User = require("../../model/UserRegistrationModels/userModel");
+const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
-// 🟢 Create new activity
 // 🟢 Create new activity
 exports.createActivity = async (req, res) => {
   try {
@@ -107,7 +107,6 @@ exports.getAllActivities = async (req, res) => {
   }
 };
 
-// 🔵 Get activity by ID
 // 🔵 Get Activity by ID with winners populated
 exports.getActivityById = async (req, res) => {
   try {
@@ -192,7 +191,7 @@ exports.participateInActivity = async (req, res) => {
 
     // ✅ Handle uploaded files (image/pdf)
     const uploadedFiles = (req.files?.uploadActivity || []).map((file) => ({
-      fileUrl: file.location,
+      fileUrl: convertS3UrlToCDN(file.location), // ✅ Apply CDN conversion here
       fileType: file.mimetype,
       uploadedAt: new Date(),
     }));
