@@ -247,6 +247,20 @@ const userSchema = new mongoose.Schema(
     default: null,
   },
   blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+activityJudge: [
+  {
+    activityId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Activity",
+      required: true,
+    },
+    role: {
+      type: String,
+      enum: ["judge"],
+      default: "judge",
+    },
+  },
+],
 
     sanghRoles: [{
       sanghId: {

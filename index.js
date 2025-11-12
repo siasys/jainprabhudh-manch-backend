@@ -61,6 +61,7 @@ const reportRoutes = require('./routes/SocialMediaRoutes/reportRoutes');
 const blockRoutes = require('./routes/Block User/blockRoutes');
 const deleteAccountRoutes = require('./routes/Account delete/deleteAccountRoutes');
 const projectRoutes = require('./routes/SanghRoutes/projectRoutes');
+const activityRoute = require('./routes/Activities/activityRoutes');
 //const appVersionRoute = require('./routes/Update apk/appVersion');
 
 app.set('trust proxy',1);
@@ -149,6 +150,8 @@ app.use('/api', projectRoutes);
 // uplaod biolers
 app.use('/api/bailors', bailorRoutes);
 
+// Activity Api
+app.use('/api/activity', activityRoute);
 // Jain Prathibha
 app.use('/api/jainpratibha', jainPratibhaRoutes);
 // jain Hostel
@@ -157,7 +160,7 @@ app.use('/api/jainhostal', jainHostalRoutes);
 app.use('/api/jainFood', jainFoodRoutes);
 // Foundation Payment
 app.use('/api/payment', foundationPaymentRoutes);
-// report pot
+// report
 app.use('/api/report', reportRoutes);
 // block user
 app.use('/api/block', blockRoutes);

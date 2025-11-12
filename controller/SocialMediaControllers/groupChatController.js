@@ -168,8 +168,6 @@ exports.createOrFindCityGroup = async (req, res) => {
 };
 
 
-
-
 exports.getGroupDetails = async (req, res) => {
   try {
     const { groupId } = req.params;

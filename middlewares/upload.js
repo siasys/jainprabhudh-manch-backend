@@ -129,6 +129,8 @@ const getS3Folder = (fieldname, req) => {
       return 'sadhu/documents/';
     case 'media':
       return 'sadhu/post-media/';
+    case 'uploadActivity':
+      return 'activity/uploads/';
     case 'entityPhoto':
       if (req && req.baseUrl) {
         if (req.baseUrl.includes('sadhu')) {
@@ -294,6 +296,8 @@ module.exports.vyaparDocs = upload.fields([
   { name: 'entityPhoto', maxCount: 5 },
   { name: 'entityDocuments', maxCount: 5 }
 ]);
-
+module.exports.uploadActivityFiles = upload.fields([
+  { name: 'uploadActivity', maxCount: 5 }
+]);
 // Add entity post upload configuration (standardized for all entities)
 module.exports.entityPostUpload = upload.array('media', 10);
