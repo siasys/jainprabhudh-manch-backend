@@ -191,7 +191,7 @@ exports.participateInActivity = async (req, res) => {
 
     // ✅ Handle uploaded files (image/pdf)
     const uploadedFiles = (req.files?.uploadActivity || []).map((file) => ({
-      fileUrl: convertS3UrlToCDN(file.location), // ✅ Apply CDN conversion here
+      fileUrl: convertS3UrlToCDN(file.location),
       fileType: file.mimetype,
       uploadedAt: new Date(),
     }));
@@ -385,6 +385,7 @@ exports.updateActivityMarks = async (req, res) => {
 exports.calculateWinners = async (req, res) => {
   try {
     const { activityId } = req.params;
+    const { firstWinner, secondWinner, thirdWinner } = req.body; // frontend se aayega userId
 
     // ✅ Fetch activity
     const activity = await Activity.findById(activityId);
@@ -396,26 +397,28 @@ exports.calculateWinners = async (req, res) => {
       return res.status(400).json({ success: false, message: "No participants found" });
     }
 
-    // ✅ Sort participants by finalMarks (descending)
-    const sortedParticipants = [...activity.participants].sort(
-      (a, b) => (b.activityMarks.finalMarks || 0) - (a.activityMarks.finalMarks || 0)
-    );
-
-    // ✅ Select top 3
-    const first = sortedParticipants[0];
-    const second = sortedParticipants[1];
-    const third = sortedParticipants[2];
-
-    // ✅ Update winners field
+    // ✅ Update winners manually
     activity.winners = {
-      firstWinner: first
-        ? { userId: first.userId, marks: first.activityMarks.finalMarks }
+      firstWinner: firstWinner
+        ? {
+            userId: firstWinner,
+            marks:
+              activity.participants.find(p => p.userId.toString() === firstWinner)?.activityMarks?.finalMarks || 0,
+          }
         : null,
-      secondWinner: second
-        ? { userId: second.userId, marks: second.activityMarks.finalMarks }
+      secondWinner: secondWinner
+        ? {
+            userId: secondWinner,
+            marks:
+              activity.participants.find(p => p.userId.toString() === secondWinner)?.activityMarks?.finalMarks || 0,
+          }
         : null,
-      thirdWinner: third
-        ? { userId: third.userId, marks: third.activityMarks.finalMarks }
+      thirdWinner: thirdWinner
+        ? {
+            userId: thirdWinner,
+            marks:
+              activity.participants.find(p => p.userId.toString() === thirdWinner)?.activityMarks?.finalMarks || 0,
+          }
         : null,
     };
 
@@ -423,7 +426,7 @@ exports.calculateWinners = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Winners calculated and updated successfully",
+      message: "🏆 Winners updated manually!",
       winners: activity.winners,
     });
   } catch (error) {
@@ -435,3 +438,4 @@ exports.calculateWinners = async (req, res) => {
     });
   }
 };
+
