@@ -382,51 +382,29 @@ exports.updateActivityMarks = async (req, res) => {
 };
 
 // Auto-select top 3 winners based on finalMarks
+// ✅ Manual Winner Selection (if winners sent from frontend)
 exports.calculateWinners = async (req, res) => {
   try {
     const { activityId } = req.params;
-    const { firstWinner, secondWinner, thirdWinner } = req.body; // frontend se aayega userId
+    const { firstWinner, secondWinner, thirdWinner } = req.body;
 
-    // ✅ Fetch activity
     const activity = await Activity.findById(activityId);
     if (!activity) {
       return res.status(404).json({ success: false, message: "Activity not found" });
     }
 
-    if (!activity.participants || activity.participants.length === 0) {
-      return res.status(400).json({ success: false, message: "No participants found" });
-    }
-
-    // ✅ Update winners manually
+    // ✅ Manual winners assignment
     activity.winners = {
-      firstWinner: firstWinner
-        ? {
-            userId: firstWinner,
-            marks:
-              activity.participants.find(p => p.userId.toString() === firstWinner)?.activityMarks?.finalMarks || 0,
-          }
-        : null,
-      secondWinner: secondWinner
-        ? {
-            userId: secondWinner,
-            marks:
-              activity.participants.find(p => p.userId.toString() === secondWinner)?.activityMarks?.finalMarks || 0,
-          }
-        : null,
-      thirdWinner: thirdWinner
-        ? {
-            userId: thirdWinner,
-            marks:
-              activity.participants.find(p => p.userId.toString() === thirdWinner)?.activityMarks?.finalMarks || 0,
-          }
-        : null,
+      firstWinner: firstWinner || null,
+      secondWinner: secondWinner || null,
+      thirdWinner: thirdWinner || null,
     };
 
     await activity.save();
 
     res.status(200).json({
       success: true,
-      message: "🏆 Winners updated manually!",
+      message: "Winners updated successfully (manual selection)",
       winners: activity.winners,
     });
   } catch (error) {
@@ -438,4 +416,3 @@ exports.calculateWinners = async (req, res) => {
     });
   }
 };
-
