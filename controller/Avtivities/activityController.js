@@ -472,3 +472,73 @@ exports.calculateWinners = async (req, res) => {
     });
   }
 };
+
+// 🔴 Delete activity (Only creator can delete)
+exports.deleteActivity = async (req, res) => {
+  try {
+    const { activityId } = req.params;
+    const userId = req.user._id;
+
+    // ✅ Validate activityId
+    if (!activityId) {
+      return res.status(400).json({
+        success: false,
+        message: "Activity ID is required",
+      });
+    }
+
+    // ✅ Find activity
+    const activity = await Activity.findById(activityId);
+
+    if (!activity) {
+      return res.status(404).json({
+        success: false,
+        message: "Activity not found",
+      });
+    }
+
+    // ✅ Check if user is the creator
+    if (activity.createdBy.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized: Only the creator can delete this activity",
+      });
+    }
+
+    // ✅ Remove activity reference from judges' records
+    if (Array.isArray(activity.judges) && activity.judges.length > 0) {
+      await Promise.all(
+        activity.judges.map(async (judgeObj) => {
+          if (judgeObj?.userId) {
+            await User.findByIdAndUpdate(
+              judgeObj.userId,
+              {
+                $pull: {
+                  activityJudge: { activityId: activity._id },
+                },
+              },
+              { new: true }
+            );
+          }
+        })
+      );
+    }
+
+    // ✅ Delete the activity
+    await Activity.findByIdAndDelete(activityId);
+
+    // ✅ Success response
+    res.status(200).json({
+      success: true,
+      message: "Activity deleted successfully",
+      deletedActivityId: activityId,
+    });
+  } catch (error) {
+    console.error("❌ Delete Activity Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    });
+  }
+};
