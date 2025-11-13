@@ -80,12 +80,10 @@ const activitySchema = new mongoose.Schema(
         judgeLabel: {
           type: String,
           enum: ["judge1", "judge2", "judge3"], // only 3 judges
-          required: true,
         },
         userId: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "User",
-          required: true,
         },
       },
     ],
@@ -108,20 +106,20 @@ const activitySchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
-  winners: {
-        firstWinner: {
-          userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-          marks: { type: Number, default: 0 },
-        },
-        secondWinner: {
-          userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-          marks: { type: Number, default: 0 },
-        },
-        thirdWinner: {
-          userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-          marks: { type: Number, default: 0 },
-        },
-      },
+ winners: {
+  firstWinner: {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    marks: { type: Number, default: 0 },
+  },
+  secondWinner: {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    marks: { type: Number, default: 0 },
+  },
+  thirdWinner: {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    marks: { type: Number, default: 0 },
+  },
+},
 
     //Uploaded media (jpg/png/pdf)
     uploadActivity: [

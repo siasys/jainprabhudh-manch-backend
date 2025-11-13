@@ -252,11 +252,10 @@ activityJudge: [
     activityId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Activity",
-      required: true,
     },
     role: {
       type: String,
-      enum: ["judge"],
+      enum: ["judge", "judge1", "judge2", "judge3"],
       default: "judge",
     },
   },

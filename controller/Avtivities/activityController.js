@@ -118,7 +118,8 @@ exports.getActivityById = async (req, res) => {
       .populate("sanghId", "name level")
       .populate("organizedBy", "name level")
       .populate("participants.userId", "fullName profilePicture phoneNumber")
-      .populate("judges.userId", "fullName email phoneNumber profilePicture");
+      .populate("judges.userId", "fullName email phoneNumber profilePicture")
+      
 
     if (!activity) {
       return res
@@ -127,34 +128,44 @@ exports.getActivityById = async (req, res) => {
     }
 
     // Step 2️⃣: Manually populate winner user details
-    const populateUser = async (userId) => {
-      if (!userId) return null;
-      const user = await User.findById(userId).select(
-        "fullName profilePicture phoneNumber"
-      );
-      return user;
-    };
+  const populateWinnerFromParticipant = async (participantId) => {
+  if (!participantId) return null;
 
-    const winners = {
-      firstWinner: activity.winners?.firstWinner
-        ? {
-            ...activity.winners.firstWinner,
-            userId: await populateUser(activity.winners.firstWinner.userId),
-          }
-        : null,
-      secondWinner: activity.winners?.secondWinner
-        ? {
-            ...activity.winners.secondWinner,
-            userId: await populateUser(activity.winners.secondWinner.userId),
-          }
-        : null,
-      thirdWinner: activity.winners?.thirdWinner
-        ? {
-            ...activity.winners.thirdWinner,
-            userId: await populateUser(activity.winners.thirdWinner.userId),
-          }
-        : null,
-    };
+  // Pehle participant fetch karo
+  const participant = activity.participants.find(
+    (p) => p._id.toString() === participantId.toString()
+  );
+
+  if (!participant || !participant.userId) return null;
+
+  // Fir user details lao
+  const user = await User.findById(participant.userId._id).select(
+    "fullName profilePicture phoneNumber"
+  );
+
+  return user;
+};
+
+   const winners = {
+  firstWinner: activity.winners?.firstWinner
+    ? {
+        ...activity.winners.firstWinner,
+        userId: await populateWinnerFromParticipant(activity.winners.firstWinner.userId),
+      }
+    : null,
+  secondWinner: activity.winners?.secondWinner
+    ? {
+        ...activity.winners.secondWinner,
+        userId: await populateWinnerFromParticipant(activity.winners.secondWinner.userId),
+      }
+    : null,
+  thirdWinner: activity.winners?.thirdWinner
+    ? {
+        ...activity.winners.thirdWinner,
+        userId: await populateWinnerFromParticipant(activity.winners.thirdWinner.userId),
+      }
+    : null,
+};
 
     // Step 3️⃣: Merge updated winners in response
     const updatedActivity = {
@@ -229,8 +240,11 @@ exports.participateInActivity = async (req, res) => {
       };
       activity.participants.push(newParticipant);
     }
+      if (Array.isArray(activity.winners)) {
+        activity.winners = {};
+      }
+        await activity.save({ validateBeforeSave: false });
 
-    await activity.save();
 
     res.status(200).json({
       success: true,
@@ -381,34 +395,76 @@ exports.updateActivityMarks = async (req, res) => {
   }
 };
 
-// Auto-select top 3 winners based on finalMarks
-// ✅ Manual Winner Selection (if winners sent from frontend)
+// ✅ RECOMMENDED - Completely replace winners object
 exports.calculateWinners = async (req, res) => {
   try {
     const { activityId } = req.params;
     const { firstWinner, secondWinner, thirdWinner } = req.body;
 
+    console.log("🔍 Received activityId:", activityId);
+    console.log("🔍 Request body:", req.body);
+
     const activity = await Activity.findById(activityId);
     if (!activity) {
-      return res.status(404).json({ success: false, message: "Activity not found" });
+      return res.status(404).json({ 
+        success: false, 
+        message: "Activity not found"
+      });
     }
 
-    // ✅ Manual winners assignment
-    activity.winners = {
-      firstWinner: firstWinner || null,
-      secondWinner: secondWinner || null,
-      thirdWinner: thirdWinner || null,
+    // ✅ Helper function
+    const safeWinner = (winner) => {
+      if (winner && winner.userId) {
+        return {
+          userId: winner.userId,
+          marks: winner.marks || 0
+        };
+      }
+      return { userId: null, marks: 0 };
     };
 
-    await activity.save();
+    // ✅ Get existing winners
+    const existing = activity.winners || {};
+
+    // ✅ Build COMPLETE new winners object
+    const completeWinners = {
+      firstWinner: firstWinner 
+        ? safeWinner(firstWinner) 
+        : (existing.firstWinner && existing.firstWinner.userId 
+            ? existing.firstWinner 
+            : { userId: null, marks: 0 }),
+      
+      secondWinner: secondWinner 
+        ? safeWinner(secondWinner) 
+        : (existing.secondWinner && existing.secondWinner.userId 
+            ? existing.secondWinner 
+            : { userId: null, marks: 0 }),
+      
+      thirdWinner: thirdWinner 
+        ? safeWinner(thirdWinner) 
+        : (existing.thirdWinner && existing.thirdWinner.userId 
+            ? existing.thirdWinner 
+            : { userId: null, marks: 0 })
+    };
+
+    console.log("✅ Complete winners object:", JSON.stringify(completeWinners, null, 2));
+
+    // ✅ Use $set to replace entire winners object
+    await Activity.updateOne(
+      { _id: activityId },
+      { $set: { winners: completeWinners } }
+    );
+
+    // ✅ Fetch updated activity
+    const updatedActivity = await Activity.findById(activityId);
 
     res.status(200).json({
       success: true,
-      message: "Winners updated successfully (manual selection)",
-      winners: activity.winners,
+      message: "Winners updated successfully",
+      winners: updatedActivity.winners,
     });
   } catch (error) {
-    console.error("❌ calculateWinners Error:", error);
+    console.error("❌ Error:", error);
     res.status(500).json({
       success: false,
       message: "Server Error",
