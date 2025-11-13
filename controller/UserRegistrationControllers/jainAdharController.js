@@ -58,6 +58,27 @@ const createJainAadhar = asyncHandler(async (req, res) => {
     if (!location || !location.state) {
       return errorResponse(res, 'State is required in location data', 400);
     }
+    
+    // ✅ Name Formatting Logic
+    if (req.body.name) {
+      let fullName = req.body.name.trim();
+      const nameParts = fullName.split(' ');
+      if (nameParts.length >= 2) {
+        const firstName = nameParts[0];
+        const lastName = nameParts[nameParts.length - 1];
+        const lowerLast = lastName.toLowerCase();
+        const lowerFull = fullName.toLowerCase();
+
+        // agar naam me "jain" already present nahi hai
+        if (!lowerFull.includes('jain')) {
+          req.body.name = `${firstName} Jain (${lastName})`;
+        } else {
+          // agar pehle se Jain likha hai to jaisa hai waisa hi rehne do
+          req.body.name = fullName;
+        }
+      }
+    }
+    
 
     // Normalize input strings
     const norm = {

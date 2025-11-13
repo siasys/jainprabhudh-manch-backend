@@ -99,7 +99,7 @@ exports.createOrFindCityGroup = async (req, res) => {
     const normalizedCity = normalizeCity(cityName);
     const hindiGroupName = `सकल जैन समाज ${cityName}`;
 
-    // ✅ Fuzzy match existing group — agar koi similar normalized city pe group bana ho
+    // ✅ Check existing group by normalized name
     const allGroups = await GroupChat.find({ isCityGroup: true });
     const existingGroup = allGroups.find(
       (g) => normalizeCity(g.normalizedCity || "") === normalizedCity
@@ -113,7 +113,7 @@ exports.createOrFindCityGroup = async (req, res) => {
       });
     }
 
-    // ✅ Find all city users matching fuzzy normalized city
+    // ✅ Find all users from same city
     const allUsers = await User.find().select("_id location.city");
     const cityUsers = allUsers.filter((u) => {
       if (!u.location?.city) return false;
@@ -126,23 +126,28 @@ exports.createOrFindCityGroup = async (req, res) => {
 
     const groupImage = req?.file?.location || null;
 
+    // ✅ Sabhi members ko admin role do
     const groupMembers = cityUsers.map((u) => ({
       user: u._id,
-      role: u._id.toString() === creator.toString() ? "admin" : "member",
+      role: "admin",
     }));
 
+    // ✅ Admins array me bhi sabhi users daalo
+    const adminIds = cityUsers.map((u) => u._id);
+
+    // ✅ Create group
     const newGroup = await GroupChat.create({
       groupName: hindiGroupName,
       normalizedCity,
       isCityGroup: true,
       creator,
-      admins: [creator],
+      admins: adminIds,
       groupImage,
       createdAt: new Date(),
       groupMembers,
     });
 
-    // 🔹 Socket emit
+    // 🔹 Socket emit (optional)
     const io = getIo();
     if (io) {
       groupMembers.forEach((member) => {
@@ -166,6 +171,7 @@ exports.createOrFindCityGroup = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 
 exports.getGroupDetails = async (req, res) => {
