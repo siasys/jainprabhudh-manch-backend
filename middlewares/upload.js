@@ -299,5 +299,8 @@ module.exports.vyaparDocs = upload.fields([
 module.exports.uploadActivityFiles = upload.fields([
   { name: 'uploadActivity', maxCount: 5 }
 ]);
+module.exports.scholarshipUpload = upload.fields([
+  { name: "lastYearMarksheet", maxCount: 5 }
+]);
 // Add entity post upload configuration (standardized for all entities)
 module.exports.entityPostUpload = upload.array('media', 10);

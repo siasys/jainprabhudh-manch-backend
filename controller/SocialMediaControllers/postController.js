@@ -20,6 +20,9 @@ const redisClient = require('../../config/redisClient')
 const Report = require('../../model/SocialMediaModels/Report');
 const Hashtag = require('../../model/SocialMediaModels/Hashtag');
 const Sangh = require('../../model/SanghModels/hierarchicalSanghModel');
+const { containsBadWords } = require("../../utils/filterBadWords");
+const CommentReport = require('../../model/SocialMediaModels/CommentReport');
+const Block = require('../../model/Block User/Block');
 
 const createPost = [
   upload.postMediaUpload,
@@ -37,15 +40,17 @@ const createPost = [
     }),
 
   asyncHandler(async (req, res) => {
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-    const { caption, userId, hashtags,type, refId , postType: reqPostType, pollQuestion, pollOptions, pollDuration} = req.body;
-    const parsedHashtags = hashtags
-    ? JSON.parse(hashtags).map(tag => tag.toLowerCase())
-    : [];
 
+    const { caption, userId, hashtags, type, refId, postType: reqPostType, pollQuestion, pollOptions, pollDuration } = req.body;
+
+    const parsedHashtags = hashtags
+      ? JSON.parse(hashtags).map(tag => tag.toLowerCase())
+      : [];
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -61,6 +66,7 @@ const createPost = [
         media.push({ url: convertS3UrlToCDN(file.location), type: 'video' });
       });
     }
+
     // Save or update hashtags
     for (const tag of parsedHashtags) {
       await Hashtag.findOneAndUpdate(
@@ -73,15 +79,44 @@ const createPost = [
     if (!postType) {
       postType = media.length > 0 ? 'media' : 'text';
     }
-      // Poll validation
+
+    // **BAD WORD CHECK — ADD HERE**
+    let parsedPollOptionsArray = [];
+
+    try {
+      if (postType === 'poll') {
+        parsedPollOptionsArray = Array.isArray(pollOptions)
+          ? pollOptions
+          : JSON.parse(pollOptions);
+      }
+    } catch (err) {
+      return res.status(400).json({ error: "pollOptions must be valid JSON array" });
+    }
+
+    const textInputs = [
+      caption || "",
+      pollQuestion || "",
+      ...(Array.isArray(parsedPollOptionsArray) ? parsedPollOptionsArray : [])
+    ];
+
+    for (const text of textInputs) {
+      if (text && containsBadWords(text)) {
+        return res.status(400).json({
+          error: "Your Post contains inappropriate or unsafe words. Please modify it."
+        });
+      }
+    }
+
+    // Poll validation
     if (postType === 'poll') {
-      if (!pollQuestion || !pollOptions || pollOptions.length < 2 || !pollDuration) {
+      if (!pollQuestion || !parsedPollOptionsArray || parsedPollOptionsArray.length < 2 || !pollDuration) {
         return res.status(400).json({
           error: 'Poll requires question, minimum 2 options, and duration'
         });
       }
     }
-     const postData = {
+
+    const postData = {
       user: userId,
       caption,
       media,
@@ -89,36 +124,20 @@ const createPost = [
       hashtags: parsedHashtags,
       type
     };
- if (postType === 'poll') {
-  let parsedPollOptions;
-  try {
-    parsedPollOptions = Array.isArray(pollOptions)
-      ? pollOptions
-      : JSON.parse(pollOptions); // parse JSON string
-  } catch (err) {
-    return res.status(400).json({ error: 'pollOptions must be a valid JSON array' });
-  }
 
-  if (!pollQuestion || !parsedPollOptions || parsedPollOptions.length < 2 || !pollDuration) {
-    return res.status(400).json({
-      error: 'Poll requires question, minimum 2 options, and duration'
-    });
-  }
+    if (postType === 'poll') {
+      postData.pollQuestion = pollQuestion;
+      postData.pollOptions = parsedPollOptionsArray;
+      postData.pollDuration = pollDuration;
 
-  postData.pollQuestion = pollQuestion;
-  postData.pollOptions = parsedPollOptions;
-  postData.pollDuration = pollDuration;
+      const votesInit = {};
+      parsedPollOptionsArray.forEach((_, index) => {
+        votesInit[index] = [];
+      });
 
-  // Initialize pollVotes for each option
-  const votesInit = {};
-  parsedPollOptions.forEach((_, index) => {
-    votesInit[index] = []; // empty array for each option
-  });
-  postData.pollVotes = votesInit;
-
-  // Initialize votedUsers
-  postData.votedUsers = [];
-}
+      postData.pollVotes = votesInit;
+      postData.votedUsers = [];
+    }
 
     // Add refId to corresponding field
     if (type === 'sangh') postData.sanghId = refId;
@@ -127,7 +146,8 @@ const createPost = [
     else if (type === 'vyapar') postData.vyaparId = refId;
 
     const post = await Post.create(postData);
-      if (!type) {
+
+    if (!type) {
       user.posts.push(post._id);
       await user.save();
     } else {
@@ -144,6 +164,7 @@ const createPost = [
     res.status(201).json(post);
   })
 ];
+
 
 const voteOnPoll = async (req, res) => {
   try {
@@ -535,6 +556,7 @@ const getPostById = asyncHandler(async (req, res) => {
 // };
 
 // Get all post new loading logic
+// Get all post new loading logic
 const getAllPosts = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 5;
@@ -543,61 +565,86 @@ const getAllPosts = async (req, res) => {
 
     const user = await User.findById(userId).lean();
     if (!user) {
-      return successResponse(res, {
-        posts: [],
-        pagination: { nextCursor: null, hasMore: false }
-      }, 'User not found');
+      return successResponse(
+        res,
+        { posts: [], pagination: { nextCursor: null, hasMore: false } },
+        "User not found"
+      );
     }
 
-    const interestDoc = await UserInterest.findOne({ user: userId }).lean();
-    const userHashtags = interestDoc ? interestDoc.hashtags : [];
+    // ⭐ GET BLOCK RELATIONS
+    const blockRelations = await Block.find({
+      $or: [{ blocker: userId }, { blocked: userId }]
+    }).lean();
 
-    // Pagination query with limit
-    const query = cursor
-      ? { createdAt: { $lt: new Date(cursor) } }
-      : {};
+    const blockedUsers = blockRelations.map(rel =>
+      rel.blocker.toString() === userId.toString()
+        ? rel.blocked.toString()
+        : rel.blocker.toString()
+    );
 
-    // Fetch posts
+    // ⭐ HIDE REPORTED POSTS
+    const reports = await Report.find({
+      reportedBy: userId,
+      postId: { $ne: null }
+    }).select("postId");
+
+    const reportedPostIds = reports
+      .map(r => r.postId?.toString())
+      .filter(Boolean);
+
+    // ⭐ SAME LOGIC AS VIDEO API (FINAL FIX)
+    const query = {
+      _id: { $nin: reportedPostIds },
+      user: { $nin: blockedUsers }, // 🔥 SAME LOGIC AS VIDEO POSTS
+      ...(cursor ? { createdAt: { $lt: new Date(cursor) } } : {})
+    };
+
     let postsRaw = await Post.find(query)
-      .populate('user', 'firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName')
-      .populate('sanghId', 'name sanghImage')
+      .populate(
+        "user",
+        "firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName"
+      )
+      .populate("sanghId", "name sanghImage")
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
 
-    // Filter out deactivated accounts
-    let posts = postsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
+    // Remove deactivated users 
+    postsRaw = postsRaw.filter(
+      post => post.user?.accountStatus !== "deactivated"
+    );
 
-    // Filter out expired polls based on pollDuration
+    // ⭐ Poll expiry logic
     const now = new Date();
-    posts = posts.filter(post => {
-      if (post.postType !== 'poll') return true; // non-poll posts always show
-      if (post.pollDuration === 'Always') return true; // always active
+    postsRaw = postsRaw.filter(post => {
+      if (post.postType !== "poll") return true;
+      if (post.pollDuration === "Always") return true;
 
       const createdAt = new Date(post.createdAt);
-      let expiryDate;
+      let expiry;
 
       switch (post.pollDuration) {
-        case '1day':
-          expiryDate = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
+        case "1day":
+          expiry = new Date(createdAt.getTime() + 1 * 24 * 60 * 60 * 1000);
           break;
-        case '1week':
-          expiryDate = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+        case "1week":
+          expiry = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
           break;
-        case '1month':
-          expiryDate = new Date(createdAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+        case "1month":
+          expiry = new Date(createdAt.getTime() + 30 * 24 * 60 * 60 * 1000);
           break;
         default:
           return true;
       }
-
-      return now <= expiryDate;
+      return now <= expiry;
     });
 
-    // Calculate score if needed
-    posts = posts.map(post => {
+    // ⭐ Hashtag score logic
+    const userHashtags = user.hashtags || [];
+    postsRaw = postsRaw.map(post => {
       let score = 0;
-      if (post.hashtags?.length) {
+      if (post.hashtags?.length && userHashtags?.length) {
         post.hashtags.forEach(tag => {
           const match = userHashtags.find(h => h.name === tag);
           if (match) score += match.score;
@@ -606,20 +653,29 @@ const getAllPosts = async (req, res) => {
       return { ...post, _score: score };
     });
 
-    const nextCursor = posts.length > 0
-      ? posts[posts.length - 1].createdAt.toISOString()
-      : null;
+    const nextCursor =
+      postsRaw.length > 0
+        ? postsRaw[postsRaw.length - 1].createdAt.toISOString()
+        : null;
 
-    return successResponse(res, {
-      posts,
-      pagination: { nextCursor, hasMore: posts.length === limit }
-    }, 'All posts fetched successfully');
-
+    return successResponse(
+      res,
+      {
+        posts: postsRaw,
+        pagination: {
+          nextCursor,
+          hasMore: postsRaw.length === limit
+        }
+      },
+      "All posts fetched successfully"
+    );
   } catch (error) {
-    console.error("Error in getAllPosts:", error);
-    return errorResponse(res, 'Failed to fetch posts', 500, error.message);
+    console.error("❌ Error:", error);
+    return errorResponse(res, "Failed to fetch posts", 500, error.message);
   }
 };
+
+
 
 const getAllVideoPosts = async (req, res) => {
   try {
@@ -627,39 +683,70 @@ const getAllVideoPosts = async (req, res) => {
     const cursor = req.query.cursor;
     const userId = req.query.userId;
 
-    // User check
+    // ⭐ 1. Find User
     const user = await User.findById(userId).lean();
     if (!user) {
-      return successResponse(res, {
-        posts: [],
-        pagination: { nextCursor: null, hasMore: false }
-      }, 'User not found');
+      return successResponse(
+        res,
+        {
+          posts: [],
+          pagination: { nextCursor: null, hasMore: false }
+        },
+        "User not found"
+      );
     }
+   const blockRelations = await Block.find({
+      $or: [
+        { blocker: userId },
+        { blocked: userId }
+      ]
+    }).lean();
 
+    const blockedUsers = blockRelations.map(rel =>
+      rel.blocker.toString() === userId
+        ? rel.blocked.toString()
+        : rel.blocker.toString()
+    );    // ⭐ 2. Fetch user's hashtags
     const interestDoc = await UserInterest.findOne({ user: userId }).lean();
     const userHashtags = interestDoc ? interestDoc.hashtags : [];
 
-    // Pagination query
-    const query = cursor
-      ? { createdAt: { $lt: new Date(cursor) } }
-      : {};
+    // ⭐ 3. Fetch Posts Reported by THIS User -> hide these posts
+    const reports = await Report.find({
+      reportedBy: userId,
+      postId: { $ne: null }
+    }).select("postId");
 
-    // Fetch posts
-    let postsRaw = await Post.find({
-        ...query,
-        "media.type": "video"
-      })
-      .populate('user', 'firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName')
-      .populate('sanghId', 'name sanghImage')
+    const reportedPostIds = reports
+      .map(r => r.postId?.toString())
+      .filter(Boolean);
+
+    // console.log("🚫 Hide these reported posts:", reportedPostIds);
+
+    // ⭐ 4. Query Logic (Same as all posts)
+    const query = {
+      _id: { $nin: reportedPostIds },
+      "media.type": "video",
+      user: { $nin: blockedUsers }, // BLOCKED USERS' VIDEOS HIDE
+      ...(cursor ? { createdAt: { $lt: new Date(cursor) } } : {})
+    };
+    // ⭐ 5. Fetch Posts
+    let postsRaw = await Post.find(query)
+      .populate(
+        "user",
+        "firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName"
+      )
+      .populate("sanghId", "name sanghImage")
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
 
-    // Filter out deactivated accounts
-    let posts = postsRaw.filter(post => post.user?.accountStatus !== 'deactivated');
+    // 6. Filter Out Deactivated Users
+    postsRaw = postsRaw.filter(
+      post => post.user?.accountStatus !== "deactivated"
+    );
 
-    // Optional: calculate score based on hashtags
-    posts = posts.map(post => {
+    //  7. Hashtag Score (same as all posts)
+    let posts = postsRaw.map(post => {
       let score = 0;
       if (post.hashtags?.length) {
         post.hashtags.forEach(tag => {
@@ -670,21 +757,27 @@ const getAllVideoPosts = async (req, res) => {
       return { ...post, _score: score };
     });
 
-    // Pagination cursor
-    const nextCursor = posts.length > 0
-      ? posts[posts.length - 1].createdAt.toISOString()
-      : null;
+    // ⭐ 8. Pagination Cursor
+    const nextCursor =
+      posts.length > 0
+        ? posts[posts.length - 1].createdAt.toISOString()
+        : null;
 
-    return successResponse(res, {
-      posts,
-      pagination: { nextCursor, hasMore: posts.length === limit }
-    }, 'Video posts fetched successfully');
+    return successResponse(
+      res,
+      {
+        posts,
+        pagination: { nextCursor, hasMore: posts.length === limit }
+      },
+      "Video posts fetched successfully"
+    );
 
   } catch (error) {
-    console.error("Error in getAllVideoPosts:", error);
-    return errorResponse(res, 'Failed to fetch video posts', 500, error.message);
+    console.error("❌ Error in getAllVideoPosts:", error);
+    return errorResponse(res, "Failed to fetch video posts", 500, error.message);
   }
 };
+
 
 
 // Get all posts (Modified)
@@ -1077,14 +1170,19 @@ const editPost = asyncHandler(async (req, res) => {
 });
 
 // Add Comment to Post
-// Add Comment to Post
 const addComment = async (req, res) => {
   try {
     const { postId, commentText, userId } = req.body;
     if (!postId || !commentText || !userId) {
       return res.status(400).json({ message: 'postId, commentText, and userId are required' });
     }
-
+    // Bad Word Check
+    if (containsBadWords(commentText)) {
+      return res.status(400).json({
+        success: false,
+        message: "Your comment contains inappropriate or unsafe words. Please modify it..",
+      });
+    }
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -1177,7 +1275,7 @@ const deleteComment = async (req, res) => {
     post.comments = post.comments.filter(c => c._id.toString() !== commentId);
 
     await post.save();
-
+   await CommentReport.deleteMany({ commentId: commentId });
     // Cache clear
     await invalidateCache(`post:${postId}`);
     await invalidateCache(`postComments:${postId}`);
@@ -1192,6 +1290,13 @@ const deleteComment = async (req, res) => {
 const addReply = async (req, res) => {
   const { commentId, userId, replyText } = req.body;
   try {
+      // Bad Word Check
+    if (containsBadWords(replyText)) {
+      return res.status(400).json({
+        success: false,
+        message: "Your comment contains inappropriate or unsafe words. Please modify it.",
+      });
+    }
     const post = await Post.findOne({ 'comments._id': commentId });
     if (!post) return res.status(404).json({ message: 'Post or comment not found' });
 

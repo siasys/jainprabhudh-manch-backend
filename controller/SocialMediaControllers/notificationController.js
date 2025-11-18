@@ -1,6 +1,7 @@
 const expressAsyncHandler = require('express-async-handler');
 const Notification = require('../../model/SocialMediaModels/notificationModel');
 const {getIo}  = require('../../websocket/socket');
+const Block = require('../../model/Block User/Block');
 
 // Notification Send Karna
 exports.sendNotification = async (req, res) => {
@@ -30,26 +31,55 @@ exports.sendNotification = async (req, res) => {
   }
 };
 
-
 //  Notification Fetch Karna (User ke liye)
 exports.getNotifications = async (req, res) => {
   try {
     const { userId } = req.params;
-    const notifications = await Notification.find({ receiverId: userId })
+
+    // ⭐ Blocked Users List (Two-way block)
+    const blockRelations = await Block.find({
+      $or: [{ blocker: userId }, { blocked: userId }]
+    }).lean();
+
+    const blockedUsers = blockRelations.map(rel =>
+      rel.blocker.toString() === userId.toString()
+        ? rel.blocked.toString()
+        : rel.blocker.toString()
+    );
+
+    // ⭐ Fetch all notifications
+    let notifications = await Notification.find({ receiverId: userId })
       .sort({ createdAt: -1 })
       .populate({
         path: "senderId",
-        select: "firstName lastName fullName profilePicture privacy accountType businessName sadhuName",
+        select:
+          "firstName lastName fullName profilePicture privacy accountType businessName sadhuName",
       })
       .populate({
         path: "postId",
         select: "media",
-      });
+      })
+      .lean();
 
-    res.status(200).json({ success: true, notifications });
+    // ⭐ Filter notifications where sender is blocked or has blocked you
+    notifications = notifications.filter(n => {
+      if (!n.senderId) return false; // handle deleted user
+
+      const senderId = n.senderId._id.toString();
+      return !blockedUsers.includes(senderId);
+    });
+
+    res.status(200).json({
+      success: true,
+      count: notifications.length,
+      notifications,
+    });
   } catch (error) {
     console.error("Error fetching notifications:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch notifications" });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch notifications",
+    });
   }
 };
 

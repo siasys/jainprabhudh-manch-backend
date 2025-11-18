@@ -1,14 +1,17 @@
-// models/SocialMediaModels/StoryReport.js
 const mongoose = require('mongoose');
 
-const storyReportSchema = new mongoose.Schema({
-  storyId: {
+const commentReportSchema = new mongoose.Schema({
+  
+  postId:{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Story',
+    ref: 'Post',
     required: true
   },
+  commentId: {
+     type: String,
+  },
   reportType:{
-    type: String
+    type: String,
   },
   reportedBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -26,4 +29,4 @@ const storyReportSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-module.exports = mongoose.model('StoryReport', storyReportSchema);
+module.exports = mongoose.model('CommentReport', commentReportSchema);

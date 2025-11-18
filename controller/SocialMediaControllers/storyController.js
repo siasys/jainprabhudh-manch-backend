@@ -128,13 +128,16 @@ const getAllStories = asyncHandler(async (req, res) => {
     const userId = req.query.userId || req.user.id;
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    // 1️⃣ Users jise "main" follow karta hoon
+    // ⛔ FETCH all stories the user has reported
+    const reportedStories = await StoryReport.find({ reportedBy: userId }).select("storyId");
+    const hideStoryIds = reportedStories.map(r => r.storyId.toString());
+
+    // Users list logic same
     const followingList = await Friendship.find({
       follower: userId,
       followStatus: "following",
     }).select("following");
 
-    // 2️⃣ Users jinhone "mujhe" follow kiya hai
     const followerList = await Friendship.find({
       following: userId,
       followStatus: "following",
@@ -143,16 +146,16 @@ const getAllStories = asyncHandler(async (req, res) => {
     const followingIds = followingList.map(f => f.following.toString());
     const followerIds = followerList.map(f => f.follower.toString());
 
-    // ✅ Unique userIds collect karo (Set se duplicates hatao)
     const storyUserIds = new Set([...followingIds, ...followerIds, userId]);
 
-    // 🔍 Ab in users ki stories fetch karo
+    // 🎯 FILTER REPORTED STORIES
     const stories = await Story.find({
       createdAt: { $gte: twentyFourHoursAgo },
       userId: { $in: Array.from(storyUserIds) },
+      _id: { $nin: hideStoryIds }
     })
-      .populate("userId", "profilePicture firstName lastName fullName")
-      .populate("sanghId", "name sanghImage");
+    .populate("userId", "profilePicture firstName lastName fullName")
+    .populate("sanghId", "name sanghImage");
 
     res.status(200).json({
       success: true,
@@ -170,34 +173,41 @@ const getAllStories = asyncHandler(async (req, res) => {
 });
 
 
-
-
-// Get Stories by User
 const getStoriesByUser = asyncHandler(async (req, res) => {
-    try {
-        const { userId } = req.params;
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  try {
+    const userId = req.user.id;
+    const { userId: targetUserId } = req.params;
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-        const stories = await Story.find({
-            userId,
-            createdAt: { $gte: twentyFourHoursAgo }
-        }).populate("userId", "profilePicture firstName lastName fullName")
-          .populate("sanghId", "name sanghImage");
+    // ⛔ Stories user has reported
+    const reportedStories = await StoryReport.find({ reportedBy: userId }).select("storyId");
+    const hideStoryIds = reportedStories.map(r => r.storyId.toString());
 
-        if (!stories.length) {
-            return errorResponse(res, 'No active stories found for this user', 404);
-        }
-        const cdnStories = stories.map(story => ({
-            ...story.toObject(),
-            media: story.media.map(url => convertS3UrlToCDN(url))
-          }));
-          
-        return successResponse(res, cdnStories, "Stories fetched successfully", 200);
-    } catch (error) {
-        console.error('Error fetching user stories:', error);
-        return errorResponse(res, 'Error fetching user stories', 500, error.message);
+    const stories = await Story.find({
+      userId: targetUserId,
+      createdAt: { $gte: twentyFourHoursAgo },
+      _id: { $nin: hideStoryIds }
+    })
+    .populate("userId", "profilePicture firstName lastName fullName")
+    .populate("sanghId", "name sanghImage");
+
+    if (!stories.length) {
+      return errorResponse(res, 'No active stories found for this user', 404);
     }
+
+    const cdnStories = stories.map(story => ({
+      ...story.toObject(),
+      media: story.media.map(url => convertS3UrlToCDN(url))
+    }));
+
+    return successResponse(res, cdnStories, "Stories fetched successfully", 200);
+
+  } catch (error) {
+    console.error('Error fetching user stories:', error);
+    return errorResponse(res, 'Error fetching user stories', 500, error.message);
+  }
 });
+
 // Delete Story
 const deleteStory = asyncHandler(async (req, res) => {
     try {
@@ -261,7 +271,7 @@ const deleteStoryMedia = asyncHandler(async (req, res) => {
       });
     }
 
-    const updatedMedia = story.media.filter(url => url.trim() !== normalizedMediaUrl);
+const updatedMedia = story.media.filter(mediaItem => mediaItem.url !== normalizedMediaUrl);
 
     if (updatedMedia.length === 0) {
       // Delete entire story
@@ -300,14 +310,57 @@ const deleteStoryMedia = asyncHandler(async (req, res) => {
     });
   }
 });
+const adminDeleteStory = asyncHandler(async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const userRole = req.user.role;
 
+    if (userRole !== "superadmin") {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Only superadmin can delete stories." 
+      });
+    }
 
+    const story = await Story.findById(storyId);
+    if (!story) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Story not found" 
+      });
+    }
+
+    // Delete story
+    await Story.findByIdAndDelete(storyId);
+
+    // Remove from user
+    await User.findByIdAndUpdate(story.userId, { 
+      $pull: { story: storyId } 
+    });
+
+    // Delete reports
+    await StoryReport.deleteMany({ storyId });
+
+    return res.json({
+      success: true,
+      message: "Story deleted by superadmin"
+    });
+
+  } catch (error) {
+    return res.status(500).json({ 
+      success: false, 
+      message: "Error deleting story", 
+      error: error.message 
+    });
+  }
+});
 module.exports = {
     createStory,
     getAllStories,
     getStoriesByUser,
     deleteStory,
-    deleteStoryMedia
+    deleteStoryMedia,
+    adminDeleteStory
 };
 
 // exports.createStory = async (req, res) => {

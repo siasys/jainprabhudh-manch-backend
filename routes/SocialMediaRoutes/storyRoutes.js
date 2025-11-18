@@ -1,5 +1,5 @@
 const express = require('express');
-const { createStory, getAllStories, getStoriesByUser, deleteStory, deleteStoryMedia } = require('../../controller/SocialMediaControllers/storyController');
+const { createStory, getAllStories, getStoriesByUser, deleteStory, deleteStoryMedia, adminDeleteStory } = require('../../controller/SocialMediaControllers/storyController');
 const upload = require('../../middlewares/upload');
 const { authMiddleware } = require('../../middlewares/authMiddlewares');
 const router = express.Router();
@@ -37,7 +37,9 @@ router.post("/", upload.storyUpload, storyCreationLimiter,createStory);
 router.get('/get', getAllStories); 
 router.get('/:userId', getStoriesByUser);
 router.delete('/delete/:userId/:storyId', deleteStory);
+router.delete('/admin/delete/:storyId', adminDeleteStory);
 router.delete('/delete/:storyId',deleteStoryMedia);
+
 // router.post("/", upload.array("media"), createStory);
 // router.get('/get', getAllStories); 
 // router.get('/:userId', getStoriesByUser);

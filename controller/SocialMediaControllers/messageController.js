@@ -11,6 +11,7 @@ const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { getOrSetCache,invalidateCache } = require('../../utils/cache');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 const expressAsyncHandler = require('express-async-handler');
+const { containsBadWords } = require('../../utils/filterBadWords');
 
 exports.sharePost = async (req, res) => {
   try {
@@ -39,7 +40,7 @@ exports.sharePost = async (req, res) => {
       return res.status(404).json({ message: "Receiver User not found" });
     }
 
-    // ✅ Block check
+    //  Block check
     if (receiverUser?.blockedUsers?.includes(sender)) {
       return res.status(403).json({
         success: false,
@@ -47,7 +48,7 @@ exports.sharePost = async (req, res) => {
       });
     }
 
-    // ✅ Find Post
+    // Find Post
     const post = await Post.findById(postId);
     if (!post) {
       return res.status(404).json({ message: "Post not found" });
@@ -127,8 +128,13 @@ exports.createMessage = async (req, res) => {
     if (!message || message.trim() === "") {
       return res.status(400).json({ message: 'Message cannot be empty' });
     }
-
-    // 🧠 2. Validate sender authorization
+    if (containsBadWords(message)) {
+      return res.status(400).json({
+        success: false,
+        message: "Your message contains inappropriate or unsafe words. Please modify it."
+      });
+    }
+    //  2. Validate sender authorization
     if (senderType === 'sangh') {
       const sangh = await HierarchicalSangh.findById(sender);
       if (!sangh) {
@@ -367,7 +373,7 @@ exports.clearAllMessagesBetweenUsers = async (req, res) => {
         }
       );
 
-      // ✅ Notify receiver via socket
+      // Notify receiver via socket
       const io = getIo();
       io.to(receiverId.toString()).emit('allMessagesCleared', { senderId: userId });
     }

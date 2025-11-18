@@ -1,0 +1,46 @@
+// badWords.js
+module.exports = [
+  "bhosd", "bhosdi", "bhsd", "bhsdk",
+  "randi", "r**i", "r***i",
+  "chut", "chutiya", "chutiy", "chut*", "chutya",
+  "gandu", "gand", "gandm", "ganduf",
+  "lavde", "lavd",
+  "madarchod", "m*darchod", "mc", "m*c",
+  "behenchod", "bh*nchod", "bc", "b*c",
+  "gaand", "gaandf", "gaandm",
+  "hijra", "chakka",
+
+  "rape", "rapist",
+  "sex", "porn", "adult content", "nude", "naked",
+
+  "kill", "murder", "suicide", "self-harm",
+  "terrorist", "bomb",
+
+  "drug", "weed", "ganja", "cocaine", "heroin",
+
+  "fuck","fucking","fucker","fucked","motherfucker","mf","mofo",
+  "shit","bullshit","piss",
+  "bitch","bitches","son of a bitch",
+  "ass","asshole",
+  "bastard","bloody",
+  "slut","whore","hoe","cunt",
+  "dick","dickhead","cock",
+  "pussy","vagina","penis","balls",
+  "boobs","tits","nipple",
+  "masturbate","masturbation",
+  "molest","molester",
+  "dead","dying",
+  "hate","hateful",
+  "idiot","stupid","moron",
+  "fraud","scam",
+  "escort","callgirl","callboy",
+  "fetish","bdsm",
+  "cum","orgasm",
+  "incest",
+  "horny",
+  "strip","stripper",
+  "pimp",
+  "blood","gore",
+  "pedophile","child porn",
+  "nsfw"
+];

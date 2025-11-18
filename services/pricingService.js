@@ -13,11 +13,9 @@ const DEFAULT_PRICES = {
 const getPrice = async (entityType) => {
     try {
         const pricingConfig = await PricingConfig.findOne({ entityType });
-        
         if (pricingConfig) {
             return pricingConfig.amount;
         }
-        
         // If no config exists, use default price
         return DEFAULT_PRICES[entityType] || 0;
     } catch (error) {

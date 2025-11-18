@@ -1,8 +1,11 @@
 // controllers/reportController.js
 const Report = require('../../model/SocialMediaModels/Report');
 const StoryReport = require('../../model/SocialMediaModels/StoryReport');
+const CommentReport = require('../../model/SocialMediaModels/CommentReport');
+const Post = require('../../model/SocialMediaModels/postModel');
+const userModel = require('../../model/UserRegistrationModels/userModel');
 
-// POST /api/reports
+//POST /api/reports
 exports.createReport = async (req, res) => {
   try {
     const { postId, reportedUser, reportType, reason } = req.body;
@@ -10,6 +13,23 @@ exports.createReport = async (req, res) => {
     if (!reportType || !reason) {
       return res.status(400).json({ message: "Report type and reason are required." });
     }
+
+    // ✅ Prevent Duplicate Report by Same User for Same Post
+    if (postId) {
+      const alreadyReported = await Report.findOne({
+        postId,
+        reportedBy: req.user._id
+      });
+
+      if (alreadyReported) {
+        return res.status(400).json({
+          success: false,
+          message: "You have already reported this post."
+        });
+      }
+    }
+
+    // Save new report
     const report = new Report({
       postId: postId || null,
       reportedUser: reportedUser || null,
@@ -17,13 +37,21 @@ exports.createReport = async (req, res) => {
       reportType,
       reason,
     });
+
     await report.save();
-    res.status(201).json({ success: true, message: "Report submitted successfully.", report });
+
+    res.status(201).json({
+      success: true,
+      message: "Report submitted successfully.",
+      report
+    });
+
   } catch (error) {
     console.error("Create Report Error:", error);
     res.status(500).json({ success: false, message: "Server error." });
   }
 };
+
 
 exports.getAllReports = async (req, res) => {
   try {
@@ -71,7 +99,7 @@ exports.getMyReports = async (req, res) => {
 };
 exports.createStoryReport = async (req, res) => {
   try {
-    const { storyId, reason } = req.body;
+    const { storyId, reason, reportType } = req.body;
     const reportedBy = req.user._id;
 
     const alreadyReported = await StoryReport.findOne({ storyId, reportedBy });
@@ -79,7 +107,7 @@ exports.createStoryReport = async (req, res) => {
       return res.status(400).json({ message: 'You already reported this story' });
     }
 
-    const report = new StoryReport({ storyId, reportedBy, reason });
+    const report = new StoryReport({ storyId, reportedBy, reason,reportType });
     await report.save();
     res.status(201).json({ message: 'Story reported successfully', report });
   } catch (error) {
@@ -106,3 +134,134 @@ exports.getAllStoryReports = async (req, res) => {
 
   }
 };
+exports.createCommentReport = async (req, res) => {
+  try {
+    const { commentId, reason, reportType, postId } = req.body;
+    const reportedBy = req.user._id;
+
+    // Validation
+    if (!commentId || !reason || !reportType || !postId) {
+      return res.status(400).json({
+        success: false,
+        message: "commentId, postId, reason, and reportType are required"
+      });
+    }
+
+    if (!['Comment', 'Reply'].includes(reportType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid reportType. Must be 'Comment' or 'Reply'"
+      });
+    }
+
+    // Prevent Duplicate
+    const alreadyReported = await CommentReport.findOne({ 
+      commentId,
+      reportedBy
+    });
+    if (alreadyReported) {
+      return res.status(400).json({
+        success: false,
+        message: `You have already reported this ${reportType.toLowerCase()}`
+      });
+    }
+
+    // Create report
+    const report = new CommentReport({
+      commentId,
+      postId,         // ✅ NEW
+      reportedBy,
+      reason,
+      reportType,
+      status: 'Pending'
+    });
+
+    await report.save();
+
+    res.status(201).json({
+      success: true,
+      message: `${reportType} reported successfully`,
+      report
+    });
+
+  } catch (error) {
+    console.error("Error creating comment report:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error creating comment report",
+      error: error.message
+    });
+  }
+};
+
+exports.getAllCommentReports = async (req, res) => {
+  try {
+    const reports = await CommentReport.find()
+      .populate("reportedBy", "fullName profilePicture")
+      .sort({ createdAt: -1 });
+
+    const finalReports = [];
+
+    for (const report of reports) {
+      const { commentId, postId } = report;
+
+      // 🟦 1. Fetch Post
+      const post = await Post.findById(postId)
+        .populate("user", "fullName profilePicture")
+        .lean();
+
+      if (!post) continue;
+
+      // 🟩 2. Find comment inside post.comments array
+      const comment = post.comments?.find(
+        (c) => c?._id?.toString() === commentId?.toString()
+      );
+
+      if (!comment) {
+        console.log("⚠ Comment not found for commentId:", commentId);
+      }
+
+      // 🟧 3. Fetch commenting user
+      let commentedUser = null;
+
+      if (comment?.user) {
+        commentedUser = await userModel.findById(comment.user).select(
+          "fullName profilePicture"
+        );
+      }
+
+      // 🟨 4. Prepare clean final object
+      finalReports.push({
+        ...report.toObject(),
+
+        commentId: {
+          _id: comment?._id || null,
+          text: comment?.text || "",
+          media: comment?.media || [],
+          userId: commentedUser,
+          createdAt: comment?.createdAt || null,
+        },
+
+        postId: {
+          _id: post._id,
+          media: post.media || [],
+          postType: post.postType || "",
+          caption: post.caption || "",
+        }
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      reports: finalReports,
+    });
+
+  } catch (error) {
+    console.error("❌ Error fetching comment reports:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching comment reports",
+    });
+  }
+};
+

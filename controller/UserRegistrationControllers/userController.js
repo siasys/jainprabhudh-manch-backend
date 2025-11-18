@@ -259,13 +259,18 @@ const registerFinalUser = asyncHandler(async (req, res) => {
     newUserData.sadhuName = sadhuName?.trim() || "";
     newUserData.shravakId = shravakId || "";
   }
-  else {
-    // 👤 Regular User Registration
-    newUserData.firstName = firstName?.trim() || "";714916
-    newUserData.lastName = lastName?.trim() || "";
-    newUserData.fullName = fullName?.trim() || "";
-    newUserData.birthDate = birthDate || "";
+ else {
+  // 👤 Regular User Registration
+  newUserData.firstName = firstName?.trim() || "";
+  newUserData.lastName = lastName?.trim() || "";
+  newUserData.fullName = fullName?.trim() || "";
+
+  // BirthDate optional — only add if provided
+  if (birthDate) {
+    newUserData.birthDate = birthDate;
   }
+}
+
 
   // ✅ Create user in DB
   const newUser = await User.create(newUserData);
@@ -1211,11 +1216,11 @@ const loginUser = [
 
 const getAllUsers = asyncHandler(async (req, res) => {
   const { search, city, gender, role, page = 1, limit = 10 } = req.query;
-  const currentUserId = req.user._id;
+  const currentUserId = req.user._id.toString();
 
   let query = {};
 
-  // Search
+  // 🔍 Search filter
   if (search) {
     const searchRegex = new RegExp(search, 'i');
     query.$or = [
@@ -1227,35 +1232,36 @@ const getAllUsers = asyncHandler(async (req, res) => {
     ];
   }
 
-  // City, Gender, Role filters
   if (city) query.city = new RegExp(city, 'i');
   if (gender) query.gender = gender;
   if (role) query.role = role;
 
-  // ✅ Block logic: get all users I blocked or who blocked me
-  const blockedRelations = await Block.find({
+  // 🔐 FETCH ALL BLOCK RELATIONS
+  const blockRelations = await Block.find({
     $or: [
       { blocker: currentUserId },
-      { blocked: currentUserId },
+      { blocked: currentUserId }
     ]
-  });
+  }).lean();
 
-  // Get IDs to exclude
-  const blockedUserIds = blockedRelations.map(rel => (
-    rel.blocker.toString() === currentUserId.toString()
+  // 🔥 Extract users to hide (mutual)
+  const blockedUserIds = blockRelations.map(rel =>
+    rel.blocker.toString() === currentUserId
       ? rel.blocked.toString()
       : rel.blocker.toString()
-  ));
+  );
 
-  // Add condition to exclude those users
-  query._id = { $nin: [...blockedUserIds, currentUserId] }; // also exclude self
+  // ❌ Hide blocked users + hide self
+  query._id = { $nin: [...blockedUserIds, currentUserId] };
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
+
   const users = await User.find(query)
-    .select('-password -__v')
+    .select("-password -__v")
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(parseInt(limit));
+    .limit(parseInt(limit))
+    .lean();
 
   const total = await User.countDocuments(query);
 
@@ -1272,57 +1278,65 @@ const getAllUsers = asyncHandler(async (req, res) => {
     totalPages: Math.ceil(total / parseInt(limit)),
   });
 });
+
 // Enhanced user profile retrieval
 const getUserById = asyncHandler(async (req, res) => {
-    const { id } = req.params;
+  const { id } = req.params;
+  const currentUserId = req.user._id.toString();
 
-    const user = await User.findById(id)
-        .select('-password -__v')
-        .populate('friends', 'firstName lastName profilePicture accountType businessName accountTitle sadhuName')
-        .populate({
-            path: 'posts',
-            select: '-__v',
-            options: { sort: { createdAt: -1 } }
-        })
-        .populate('story', 'content createdAt');
+  // 🔐 First check block status
+  const blockRelation = await Block.findOne({
+    $or: [
+      { blocker: currentUserId, blocked: id },
+      { blocker: id, blocked: currentUserId }
+    ]
+  });
 
-    if (!user) {
-        return res.status(404).json({ error: 'User not found' });
-    }
-    
-    if (user.profilePicture) {
-        user.profilePicture = convertS3UrlToCDN(user.profilePicture);
-    }
-    
-    // ✅ Convert to object with flattenMaps option
-    const userResponse = user.toObject({ flattenMaps: true });
-    
-    // ✅ Process posts to handle pollVotes Map properly
-    if (userResponse.posts && userResponse.posts.length > 0) {
-        userResponse.posts = userResponse.posts.map(post => {
-            // If post is still a Mongoose document, convert it
-            const postObj = post.toObject ? post.toObject({ flattenMaps: true }) : post;
-            
-            // ✅ Ensure pollVotes is properly converted from Map to Object
-            if (postObj.pollVotes instanceof Map) {
-                postObj.pollVotes = Object.fromEntries(postObj.pollVotes);
-            }
-            
-            // Convert empty Map to proper object structure
-            if (postObj.pollVotes && Object.keys(postObj.pollVotes).length === 0) {
-                // Check if this is actually empty or improperly converted
-                console.log('Empty pollVotes detected for post:', postObj._id);
-            }
-            
-            return postObj;
-        });
-    }
-    
-    userResponse.friendCount = user.friends.length;
-    userResponse.postCount = user.posts.length;
+  // ❌ If either blocked → hide whole profile
+  if (blockRelation) {
+    return res.status(403).json({
+      error: "This profile is not available."
+    });
+  }
 
-    res.json(userResponse);
+  // 🔍 Fetch user if not blocked
+  const user = await User.findById(id)
+    .select("-password -__v")
+    .populate("friends", "firstName lastName profilePicture accountType businessName accountTitle sadhuName")
+    .populate({
+      path: "posts",
+      select: "-__v",
+      options: { sort: { createdAt: -1 } }
+    })
+    .populate("story", "content createdAt");
+
+  if (!user) {
+    return res.status(404).json({ error: "User not found" });
+  }
+
+  if (user.profilePicture) {
+    user.profilePicture = convertS3UrlToCDN(user.profilePicture);
+  }
+
+  const userResponse = user.toObject({ flattenMaps: true });
+
+  // Fix posts map flattening
+  if (userResponse.posts?.length > 0) {
+    userResponse.posts = userResponse.posts.map(post => {
+      const postObj = post.toObject ? post.toObject({ flattenMaps: true }) : post;
+      if (postObj.pollVotes instanceof Map) {
+        postObj.pollVotes = Object.fromEntries(postObj.pollVotes);
+      }
+      return postObj;
+    });
+  }
+
+  userResponse.friendCount = user.friends.length;
+  userResponse.postCount = user.posts.length;
+
+  res.json(userResponse);
 });
+
 // New: Get User Activity by type
 const getUserActivityByType = asyncHandler(async (req, res) => {
   const { id, type } = req.params;

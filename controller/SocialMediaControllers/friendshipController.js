@@ -3,6 +3,20 @@ const asyncHandler = require('express-async-handler');
 const Notification = require('../../model/SocialMediaModels/notificationModel');
 const User = require('../../model/UserRegistrationModels/userModel');
 const expressAsyncHandler = require('express-async-handler');
+const Block = require('../../model/Block User/Block');
+
+
+const getBlockedUsersList = async (userId) => {
+  const blockRelations = await Block.find({
+    $or: [{ blocker: userId }, { blocked: userId }]
+  }).lean();
+
+  return blockRelations.map(rel =>
+    rel.blocker.toString() === userId.toString()
+      ? rel.blocked.toString()
+      : rel.blocker.toString()
+  );
+};
 
 // Follow a user (Modified with User Model Friends Array)
 const followUser = asyncHandler(async (req, res) => {
@@ -90,14 +104,27 @@ const unfollowUser = asyncHandler(async (req, res) => {
 
 const getFollowers = asyncHandler(async (req, res) => {
   const { userId } = req.params;
+
   try {
+    // ⭐ Blocked users list (both directions)
+    const blockedUsers = await getBlockedUsersList(userId);
+
     const followers = await Friendship.find({ following: userId })
-      .populate('follower', 'firstName lastName fullName profilePicture accountType businessName sadhuName');
+      .populate(
+        'follower',
+        'firstName lastName fullName profilePicture accountType businessName sadhuName'
+      );
+
+    // ⭐ Filter users who are blocked OR who blocked you
+    const filteredFollowers = followers.filter(f => {
+      const followerId = f.follower?._id?.toString();
+      return followerId && !blockedUsers.includes(followerId);
+    });
 
     res.status(200).json({
       success: true,
-      count: followers.length,
-      followers: followers.map(f => {
+      count: filteredFollowers.length,
+      followers: filteredFollowers.map(f => {
         const follower = f.follower;
         return {
           id: follower._id,
@@ -117,6 +144,7 @@ const getFollowers = asyncHandler(async (req, res) => {
         };
       })
     });
+
   } catch (error) {
     console.error("Error fetching followers:", error);
     res.status(500).json({ success: false, message: "Internal Server Error" });
@@ -125,17 +153,29 @@ const getFollowers = asyncHandler(async (req, res) => {
 
 const getFollowing = asyncHandler(async (req, res) => {
   const { userId } = req.params;
-  try {
-    const following = await Friendship.find({ follower: userId })
-      .populate('following', 'firstName lastName fullName profilePicture accountType businessName sadhuName');
 
-    // 🔐 Filter out any broken references (null following)
+  try {
+    // ⭐ Blocked users list (two-way)
+    const blockedUsers = await getBlockedUsersList(userId);
+
+    const following = await Friendship.find({ follower: userId })
+      .populate(
+        'following',
+        'firstName lastName fullName profilePicture accountType businessName sadhuName'
+      );
+
     const validFollowing = following.filter(f => f.following);
+
+    // ⭐ Hide blocked + who blocked me
+    const filtered = validFollowing.filter(f => {
+      const uid = f.following._id.toString();
+      return !blockedUsers.includes(uid);
+    });
 
     res.status(200).json({
       success: true,
-      count: validFollowing.length,
-      following: validFollowing.map(f => {
+      count: filtered.length,
+      following: filtered.map(f => {
         const user = f.following;
         return {
           id: user._id,
@@ -155,6 +195,7 @@ const getFollowing = asyncHandler(async (req, res) => {
         };
       })
     });
+
   } catch (error) {
     console.error("Error fetching following:", error);
     res.status(500).json({ success: false, message: "Internal Server Error" });

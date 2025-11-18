@@ -9,6 +9,7 @@ const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel')
 const User = require('../../model/UserRegistrationModels/userModel');
 const fuzzysort = require('fuzzysort');
+const { containsBadWords } = require('../../utils/filterBadWords');
 // 1. Create Group Chat
 exports.createGroupChat = async (req, res) => {
   try {
@@ -516,7 +517,12 @@ exports.sendGroupMessage = async (req, res) => {
       }
       return errorResponse(res, "Not a group member", 403);
     }
-
+    if (message && message.trim() !== "" && containsBadWords(message)) {
+        return res.status(400).json({
+          success: false,
+          message: "Your message contains inappropriate or unsafe words. Please modify it."
+        });
+      }
     const newMessage = {
       sender,
       message: message || 'Image',
