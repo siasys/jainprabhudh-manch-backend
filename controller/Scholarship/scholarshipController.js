@@ -1,5 +1,6 @@
 const Scholarship = require("../../model/Scholarship Modal/scholarshipModal");
 const { convertS3UrlToCDN } = require("../../utils/s3Utils");
+const ScholarshipSponsor = require("../../model/Scholarship Modal/ScholarshipSponsor");
 
 // ------------------------ CREATE ------------------------
 exports.applyScholarship = async (req, res) => {
@@ -11,36 +12,26 @@ exports.applyScholarship = async (req, res) => {
       return res.status(400).json({ message: "Category type is required" });
     }
 
-    // Required fields
-    const requiredFields = [
-      "name",
-      "dob",
-      "address",
-      "gender",
-      "fatherName",
-      "fatherOccupation",
-      "fatherMonthlyIncome",
-      "contact",
-      "bankDetails",
-      //"scholarshipAmount",
-    ];
-
-    for (let field of requiredFields) {
-      if (!data[field]) {
-        return res.status(400).json({ message: `${field} is required` });
-      }
-    }
-
-     const marksheetFiles = (req.files?.lastYearMarksheet || []).map((file) => ({
+    // Convert uploaded files
+    const marksheetFiles = (req.files?.lastYearMarksheet || []).map((file) => ({
       fileUrl: convertS3UrlToCDN(file.location),
       fileType: file.mimetype,
     }));
 
+    // Prepare Scholarship Details Object
+    const scholarshipDetails = {
+      type: data["scholarshipDetails.type"] || "",
+      declaration: data["scholarshipDetails.declaration"] || "",
+      reason: data["scholarshipDetails.reason"] || ""
+    };
+
     // Save in DB
     const scholarship = new Scholarship({
       ...data,
-      lastYearMarksheet: marksheetFiles
+      lastYearMarksheet: marksheetFiles,
+      scholarshipDetails: scholarshipDetails,
     });
+
     await scholarship.save();
 
     res.status(201).json({
@@ -51,6 +42,57 @@ exports.applyScholarship = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Error applying scholarship",
+      error: error.message,
+    });
+  }
+};
+
+exports.createScholarshipSponsor = async (req, res) => {
+  try {
+    const data = req.body;
+
+    // Create sponsor
+    const sponsor = new ScholarshipSponsor({
+      sponsorName: data.sponsorName || "",
+      address: data.address || "",
+      contactNumber: data.contactNumber || "",
+      totalSponsorshipAmount: data.totalSponsorshipAmount || "",
+      numberOfStudents: data.numberOfStudents || "",
+      sponsorshipType: data.sponsorshipType || "",  // yearly, monthly, one-time
+      createdBy: data.createdBy || "",              // user id optional
+    });
+
+    await sponsor.save();
+
+    res.status(201).json({
+      message: "Scholarship sponsor added successfully",
+      sponsor,
+    });
+
+  } catch (error) {
+    console.error("Sponsor creation error:", error);
+
+    res.status(500).json({
+      message: "Error creating scholarship sponsor",
+      error: error.message,
+    });
+  }
+};
+exports.getAllScholarshipSponsors = async (req, res) => {
+  try {
+    const sponsors = await ScholarshipSponsor.find().sort({ createdAt: -1 });
+
+    res.status(200).json({
+      message: "All scholarship sponsors fetched successfully",
+      count: sponsors.length,
+      sponsors,
+    });
+
+  } catch (error) {
+    console.error("Get sponsors error:", error);
+
+    res.status(500).json({
+      message: "Error fetching scholarship sponsors",
       error: error.message,
     });
   }
@@ -127,6 +169,56 @@ exports.deleteScholarship = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Error deleting scholarship",
+      error: error.message,
+    });
+  }
+};
+// ------------------------ UPDATE STATUS ------------------------
+exports.updateScholarshipStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    // allowed statuses
+    const allowed = ["pending", "approved", "rejected"];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
+
+    const updated = await Scholarship.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: "Scholarship not found" });
+    }
+
+    res.json({
+      message: "Status updated successfully",
+      scholarship: updated,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Error updating scholarship status",
+      error: error.message,
+    });
+  }
+};
+exports.getScholarshipByUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const forms = await Scholarship.find({ createdBy: userId })
+      .sort({ createdAt: -1 });
+
+    res.json(forms);
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching user scholarship forms",
       error: error.message,
     });
   }

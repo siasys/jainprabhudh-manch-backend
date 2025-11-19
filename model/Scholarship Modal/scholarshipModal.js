@@ -2,31 +2,38 @@ const mongoose = require("mongoose");
 
 const ScholarshipSchema = new mongoose.Schema(
   {
+    createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true
+},
     categoryType: {
       type: String,
       enum: ["6th-12th", "Graduation", "Post Graduation"],
       required: true,
     },
-
+    shravakId:{
+      type: String
+    },
     // Common Details
-    name: { type: String, required: true },
-    dob: { type: String, required: true },
-    address: { type: String, required: true },
-    gender: { type: String, required: true },
+    name: { type: String },
+    dob: { type: String },
+    address: { type: String },
+    gender: { type: String },
 
-    fatherName: { type: String, required: true },
-    fatherOccupation: { type: String, required: true },
-    fatherMonthlyIncome: { type: Number, required: true },
+    fatherName: { type: String},
+    fatherOccupation: { type: String },
+    fatherMonthlyIncome: { type: Number },
 
-    contact: { type: String, required: true },
-    email: { type: String,},
+    contact: { type: String },
+    email: { type: String},
 
     // 6th–12th specific
-    runningClass: { type: String }, 
+    runningClass: { type: String },
     schoolName: { type: String },
 
     // Graduation specific
-    degree: { type: String }, 
+    degree: { type: String },
     collegeName: { type: String },
     yearOfStudy : {type : String},
     // Post Graduation specific
@@ -38,21 +45,22 @@ const ScholarshipSchema = new mongoose.Schema(
         fileType: String,
     }
     ],
-
-
-    // Bank Details
-    bankDetails: {
-      holderName: { type: String, required: true },
-      accountNo: { type: String, required: true },
-      ifsc: { type: String, required: true },
-      bankName: { type: String, required: true },
-      branch: { type: String, required: true },
+   scholarshipDetails: {
+      type: {
+        type: String,
+      },
+      declaration: {
+        type: String,   // why should we select you?
+      },
+      reason: {
+        type: String,   // why do you need scholarship?
+      }
     },
-
-    // Scholarship Amount
-    scholarshipAmount: {
-      type: Number,
-    },
+  status: {
+        type: String,
+        enum: ["pending", "approved", "rejected"],
+        default: "pending",
+      }
   },
   { timestamps: true }
 );

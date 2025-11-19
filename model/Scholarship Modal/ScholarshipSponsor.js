@@ -1,0 +1,47 @@
+const mongoose = require("mongoose");
+
+const ScholarshipSponsorSchema = new mongoose.Schema(
+  {
+    sponsorName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    address: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    contactNumber: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    totalSponsorshipAmount: {
+      type: Number,
+      required: true,
+    },
+
+    numberOfStudents: {
+      type: Number,
+      required: true,
+    },
+
+    sponsorshipType: {
+      type: String,
+      enum: ["yearly", "monthly", "one-time"],
+      required: true,
+    },
+
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model("ScholarshipSponsor", ScholarshipSponsorSchema);
