@@ -1292,12 +1292,12 @@ const getUserById = asyncHandler(async (req, res) => {
     ]
   });
 
-  // ❌ If either blocked → hide whole profile
-  if (blockRelation) {
-    return res.status(403).json({
-      error: "This profile is not available."
-    });
-  }
+  // // ❌ If either blocked → hide whole profile
+  // if (blockRelation) {
+  //   return res.status(403).json({
+  //     error: "This profile is not available."
+  //   });
+  // }
 
   // 🔍 Fetch user if not blocked
   const user = await User.findById(id)
