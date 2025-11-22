@@ -7,6 +7,9 @@ const RojgarRecruiteeSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    jainAadhar: {
+      type: String,
+    },
     jobType: {
       type: String,
       default: 'recruitee',
@@ -14,13 +17,13 @@ const RojgarRecruiteeSchema = new mongoose.Schema(
     candidateName: {
       type: String,
     },
-    mobile: {
+    education: {
       type: String,
     },
-    email: {
+    field: {
       type: String,
     },
-    address: {
+    experience: {
       type: String,
     },
     gender: {

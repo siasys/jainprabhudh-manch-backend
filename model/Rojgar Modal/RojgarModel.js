@@ -19,11 +19,15 @@ const rojgarSchema = new mongoose.Schema(
     jobDescription: {
       type: String,
     },
+    education: {
+      type: String,
+    },
     experience: {
       type: String,
     },
     salary: {
       type: String,
+       required: true,
     },
     age: {
       type: String,
@@ -42,7 +46,6 @@ const rojgarSchema = new mongoose.Schema(
     },
     jobEmail: {
       type: String,
-      required: true,
     },
     jobPost: [
       {
