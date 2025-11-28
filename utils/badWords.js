@@ -1,46 +1,63 @@
-// badWords.js
 module.exports = [
+  // --- INDIAN ABUSE ---
   "bhosd", "bhosdi", "bhsd", "bhsdk",
-  "randi", "r**i", "r***i",
-  "chut", "chutiya", "chutiy", "chut*", "chutya",
+  "randi", "chut", "chutiya", "chutiy", "chutya",
   "gandu", "gand", "gandm", "ganduf",
   "lavde", "lavd",
-  "madarchod", "m*darchod", "mc", "m*c",
-  "behenchod", "bh*nchod", "bc", "b*c",
+  "madarchod", "mc",
+  "behenchod", "bc",
   "gaand", "gaandf", "gaandm",
   "hijra", "chakka",
 
-  "rape", "rapist",
-  "sex", "porn", "adult content", "nude", "naked",
+  // --- SEXUAL / NUDE ---
+  "sex", "boobs", "tits", "nipple", "pussy", "vagina", "penis", "dick", "cock", "cum",
+  "masturbate", "masturbation", "fetish", "bdsm", "strip", "stripper",
+  "slut", "whore", "hoe", "escort", "callgirl", "callboy",
 
-  "kill", "murder", "suicide", "self-harm",
-  "terrorist", "bomb",
+  // --- ENGLISH ABUSE ---
+  "fuck", "fucking", "fucker", "motherfucker", "mf", "mofo",
+  "shit", "bullshit", "piss",
+  "bitch", "bitches", "son of a bitch",
+  "ass", "asshole",
+  "bastard", "bloody",
+  "cunt",
 
-  "drug", "weed", "ganja", "cocaine", "heroin",
+  // --- DRUGS ---
+  "drug", "weed", "ganja", "cocaine", "heroin", "meth", "lsd", "opium",
 
-  "fuck","fucking","fucker","fucked","motherfucker","mf","mofo",
-  "shit","bullshit","piss",
-  "bitch","bitches","son of a bitch",
-  "ass","asshole",
-  "bastard","bloody",
-  "slut","whore","hoe","cunt",
-  "dick","dickhead","cock",
-  "pussy","vagina","penis","balls",
-  "boobs","tits","nipple",
-  "masturbate","masturbation",
-  "molest","molester",
-  "dead","dying",
-  "hate","hateful",
-  "idiot","stupid","moron",
-  "fraud","scam",
-  "escort","callgirl","callboy",
-  "fetish","bdsm",
-  "cum","orgasm",
-  "incest",
-  "horny",
-  "strip","stripper",
-  "pimp",
-  "blood","gore",
-  "pedophile","child porn",
-  "nsfw"
+  // --- VIOLENCE / CRIME / THREATS ---
+  "kill", "killed", "killing",
+  "murder", "murders", "murdering",
+  "attack", "attacking", "attacked",
+  "stab", "stabbing", "stabbed",
+  "shoot", "shooting", "shot",
+  "gun", "pistol", "revolver", "rifle", "ak47", "weapon", "knife", "blade", "sword",
+  "bomb", "explosive", "grenade", "blast", "terrorist", "terror", "militant",
+
+  // --- HARMFUL INTENT ---
+  "i will kill you",
+  "i am going to kill",
+  "i will attack",
+  "i am planning to attack",
+  "i want to hurt someone",
+  "i will stab you",
+  "i will shoot you",
+  "i will bomb",
+  "i want to destroy",
+  "kill yourself",
+  "go die",
+  "i will harm you",
+  "harm someone",
+
+  // --- SUICIDE / SELF-HARM ---
+  "suicide", "self-harm", "cut myself", "i want to die", "i want to kill myself",
+
+  // --- BLOOD / GORE ---
+  "blood", "gore", "dead", "dying",
+
+  // --- CRIME / ILLEGAL ---
+  "fraud", "scam", "kidnap", "kidnapping", "human trafficking", "illegal",
+
+  // --- CHILD SAFETY ---
+  "molest", "molester", "pedophile", "child porn", "underage", "rape", "rapist"
 ];

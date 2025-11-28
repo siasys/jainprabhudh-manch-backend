@@ -21,24 +21,24 @@ const validateRequest = (req, res, next) => {
 };
 
 // Rate limiting for story creation to prevent spam
-const storyCreationLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 10, // limit each user to 10 stories per hour
-    message: {
-        success: false,
-        message: 'Too many stories created. Please try again later.'
-    },
-    standardHeaders: true,
-    keyGenerator: (req) => req.user ? req.user.id : req.ip
-});
+// const storyCreationLimiter = rateLimit({
+//     windowMs: 60 * 60 * 1000, // 1 hour
+//     max: 10, // limit each user to 10 stories per hour
+//     message: {
+//         success: false,
+//         message: 'Too many stories created. Please try again later.'
+//     },
+//     standardHeaders: true,
+//     keyGenerator: (req) => req.user ? req.user.id : req.ip
+// });
 
 // Story routes
-router.post("/", upload.storyUpload, storyCreationLimiter,createStory);
+router.post("/", upload.storyUpload, createStory);
 router.get('/get', getAllStories); 
 router.get('/:userId', getStoriesByUser);
 router.delete('/delete/:userId/:storyId', deleteStory);
 router.delete('/admin/delete/:storyId', adminDeleteStory);
-router.delete('/delete/:storyId',deleteStoryMedia);
+router.delete('/delete/:storyId', deleteStoryMedia);
 
 // router.post("/", upload.array("media"), createStory);
 // router.get('/get', getAllStories); 

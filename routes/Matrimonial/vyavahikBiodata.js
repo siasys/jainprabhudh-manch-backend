@@ -1,12 +1,12 @@
 const express = require('express');
-const { createBiodata, updateBiodata, getBiodata, getAllBiodatas, checkUserBiodata } = require('../controller/vyavahikBiodataController');
-const upload = require('../middlewares/upload');
+const { createBiodata, updateBiodata, getBiodata, getAllBiodatas, checkUserBiodata, getBiodataByUserId } = require('../../controller/Matrimonial/vyavahikBiodataController');
+const upload = require('../../middlewares/upload');
 const { 
     createBiodataPaymentOrder,
     verifyBiodataPayment,
     completeBiodataRegistration
-  } = require('../controller/PaymentControllers/paymentController');
-const { authMiddleware } = require('../middlewares/authMiddlewares');
+  } = require('../../controller/PaymentControllers/paymentController');
+const { authMiddleware } = require('../../middlewares/authMiddlewares');
 const router = express.Router();
 
 router.use(authMiddleware);
@@ -24,6 +24,7 @@ router.put('/:id', updateBiodata);
 
 // Get a single biodata by ID
 router.get('/:id', getBiodata);
+router.get('/user/:userId', getBiodataByUserId);
 
 // Get all biodatas
 router.get('/', getAllBiodatas);

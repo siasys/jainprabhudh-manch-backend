@@ -23,6 +23,8 @@ const Sangh = require('../../model/SanghModels/hierarchicalSanghModel');
 const { containsBadWords } = require("../../utils/filterBadWords");
 const CommentReport = require('../../model/SocialMediaModels/CommentReport');
 const Block = require('../../model/Block User/Block');
+const { moderateImage, moderateVideo } = require('../../utils/moderation');
+
 
 const createPost = [
   upload.postMediaUpload,
@@ -40,7 +42,6 @@ const createPost = [
     }),
 
   asyncHandler(async (req, res) => {
-
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -56,18 +57,92 @@ const createPost = [
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const media = [];
-    if (req.files?.image) {
-      req.files.image.forEach(file => {
-        media.push({ url: convertS3UrlToCDN(file.location), type: 'image' });
-      });
-    }
-    if (req.files?.video) {
-      req.files.video.forEach(file => {
-        media.push({ url: convertS3UrlToCDN(file.location), type: 'video' });
+
+    // -----------------------------
+    // IMAGE MODERATION + S3 UPLOAD
+    // -----------------------------
+  if (req.files?.image) {
+  for (const file of req.files.image) {
+
+    // Convert directly to CDN URL
+    const cdnUrl = convertS3UrlToCDN(file.location);
+  console.log("Checking video moderation for:", cdnUrl);
+    // MODERATION on CDN URL
+    const safe = await moderateImage(cdnUrl);
+    if (!safe) {
+      return res.status(400).json({
+        error: "Your image contains unsafe or harmful content."
       });
     }
 
-    // Save or update hashtags
+    // Push only if safe
+    media.push({ url: cdnUrl, type: 'image' });
+  }
+}
+
+    // -----------------------------
+    // VIDEO MODERATION (optional same logic)
+    // -----------------------------
+if (req.files?.video) {
+  for (const file of req.files.video) {
+
+    // Convert S3 URL → CDN URL
+    const cdnUrl = convertS3UrlToCDN(file.location);
+    console.log("Checking video moderation for:", cdnUrl);
+
+    // MODERATION using CDN URL (GET request)
+    const safe = await moderateVideo(cdnUrl);
+    if (!safe) {
+      return res.status(400).json({
+        error: "Your video contains unsafe or harmful content."
+      });
+    }
+
+    // Save only safe moderated CDN URL
+    media.push({ url: cdnUrl, type: 'video' });
+  }
+}
+
+
+    // -----------------------------
+    // TEXT CHECK USING BAD-WORD FILTER
+    // -----------------------------
+    const textInputs = [
+      caption || "",
+      pollQuestion || "",
+      ...(Array.isArray(pollOptions) ? pollOptions : [])
+    ];
+
+    for (const text of textInputs) {
+      if (text && containsBadWords(text)) {
+        return res.status(400).json({
+          error: "Your post contains inappropriate or harmful words."
+        });
+      }
+    }
+
+    // -----------------------------
+    // POLL PARSING
+    // -----------------------------
+    let parsedPollOptionsArray = [];
+    try {
+      if (reqPostType === 'poll') {
+        parsedPollOptionsArray = Array.isArray(pollOptions)
+          ? pollOptions
+          : JSON.parse(pollOptions);
+        if (!pollQuestion || parsedPollOptionsArray.length < 2 || !pollDuration) {
+          return res.status(400).json({
+            error: 'Poll requires question, minimum 2 options, and duration'
+          });
+        }
+      }
+    } catch (err) {
+      return res.status(400).json({ error: "pollOptions must be valid JSON array" });
+    }
+
+    // -----------------------------
+    // Save Hashtags
+    // -----------------------------
     for (const tag of parsedHashtags) {
       await Hashtag.findOneAndUpdate(
         { name: tag.toLowerCase() },
@@ -75,46 +150,8 @@ const createPost = [
         { upsert: true, new: true }
       );
     }
-    let postType = reqPostType;
-    if (!postType) {
-      postType = media.length > 0 ? 'media' : 'text';
-    }
 
-    // **BAD WORD CHECK — ADD HERE**
-    let parsedPollOptionsArray = [];
-
-    try {
-      if (postType === 'poll') {
-        parsedPollOptionsArray = Array.isArray(pollOptions)
-          ? pollOptions
-          : JSON.parse(pollOptions);
-      }
-    } catch (err) {
-      return res.status(400).json({ error: "pollOptions must be valid JSON array" });
-    }
-
-    const textInputs = [
-      caption || "",
-      pollQuestion || "",
-      ...(Array.isArray(parsedPollOptionsArray) ? parsedPollOptionsArray : [])
-    ];
-
-    for (const text of textInputs) {
-      if (text && containsBadWords(text)) {
-        return res.status(400).json({
-          error: "Your Post contains inappropriate or unsafe words. Please modify it."
-        });
-      }
-    }
-
-    // Poll validation
-    if (postType === 'poll') {
-      if (!pollQuestion || !parsedPollOptionsArray || parsedPollOptionsArray.length < 2 || !pollDuration) {
-        return res.status(400).json({
-          error: 'Poll requires question, minimum 2 options, and duration'
-        });
-      }
-    }
+    let postType = reqPostType || (media.length > 0 ? 'media' : 'text');
 
     const postData = {
       user: userId,
@@ -129,17 +166,14 @@ const createPost = [
       postData.pollQuestion = pollQuestion;
       postData.pollOptions = parsedPollOptionsArray;
       postData.pollDuration = pollDuration;
-
-      const votesInit = {};
-      parsedPollOptionsArray.forEach((_, index) => {
-        votesInit[index] = [];
-      });
-
-      postData.pollVotes = votesInit;
+      postData.pollVotes = parsedPollOptionsArray.reduce((acc, _, i) => {
+        acc[i] = [];
+        return acc;
+      }, {});
       postData.votedUsers = [];
     }
 
-    // Add refId to corresponding field
+    // RefId mapping
     if (type === 'sangh') postData.sanghId = refId;
     else if (type === 'panch') postData.sanghId = refId;
     else if (type === 'sadhu') postData.sadhuId = refId;
@@ -150,12 +184,8 @@ const createPost = [
     if (!type) {
       user.posts.push(post._id);
       await user.save();
-    } else {
-      if (type === 'sangh' || type === 'panch') {
-        await Sangh.findByIdAndUpdate(refId, {
-          $push: { posts: post._id },
-        });
-      }
+    } else if (type === 'sangh' || type === 'panch') {
+      await Sangh.findByIdAndUpdate(refId, { $push: { posts: post._id } });
     }
 
     await invalidateCache('combinedFeed:*');

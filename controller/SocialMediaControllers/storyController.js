@@ -6,6 +6,9 @@ const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 const StoryReport = require('../../model/SocialMediaModels/StoryReport');
 const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
 const Friendship = require('../../model/SocialMediaModels/friendshipModel');
+const { containsBadWords } = require("../../utils/filterBadWords");
+
+const { moderateImage, moderateVideo } = require('../../utils/moderation');
 
 const createStory = asyncHandler(async (req, res) => {
   try {
@@ -31,7 +34,7 @@ const createStory = asyncHandler(async (req, res) => {
 
     //Convert S3 to CDN URLs
     const mediaFiles = req.files
-      ? req.files.map((file) => convertS3UrlToCDN(file.location))
+      ? req.files.map((file) => ({ location: file.location, type: type || 'image' }))
       : [];
 
     if (mediaFiles.length === 0 && !text?.length) {
@@ -41,18 +44,57 @@ const createStory = asyncHandler(async (req, res) => {
       });
     }
 
-    // Build media array
-    const mediaArray = mediaFiles.map((fileUrl, index) => ({
-      url: fileUrl,
-      type: type || 'image',
-      text: Array.isArray(text) ? text[index] || '' : text || '',
-      textStyle: Array.isArray(textStyle) ? textStyle[index] || {} : textStyle || {},
-      mentionUsers: Array.isArray(mentionUsers)
-        ? mentionUsers
-            .filter((id) => mongoose.Types.ObjectId.isValid(id))
-            .map((id) => new mongoose.Types.ObjectId(id))
-        : [],
-    }));
+    const mediaArray = [];
+
+    // -----------------------------
+    // 🛡️ Moderation: Check each media before adding
+    // -----------------------------
+    for (const [index, file] of mediaFiles.entries()) {
+      // Convert S3 → CDN URL first
+      const cdnUrl = convertS3UrlToCDN(file.location);
+
+      if (file.type === 'image') {
+        console.log("Moderating image URL:", cdnUrl);
+        const safe = await moderateImage(cdnUrl);
+        console.log("Moderation result:", safe);
+        if (!safe) {
+          return res.status(400).json({
+            success: false,
+            message: 'Your image contains unsafe or harmful content.',
+          });
+        }
+      } else if (file.type === 'video') {
+        const safe = await moderateVideo(cdnUrl);
+        if (!safe) {
+          return res.status(400).json({
+            success: false,
+            message: 'Your video contains unsafe or harmful content.',
+          });
+        }
+      }
+      // ✅ Check text inside this media
+      const mediaText = Array.isArray(text) ? text[index] || '' : text || '';
+      if (mediaText && containsBadWords(mediaText)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Your media text contains inappropriate or harmful words.',
+        });
+      }
+
+
+      // ✅ Push safe media into array
+      mediaArray.push({
+        url: cdnUrl,
+        type: file.type,
+        text: Array.isArray(text) ? text[index] || '' : text || '',
+        textStyle: Array.isArray(textStyle) ? textStyle[index] || {} : textStyle || {},
+        mentionUsers: Array.isArray(mentionUsers)
+          ? mentionUsers
+              .filter((id) => mongoose.Types.ObjectId.isValid(id))
+              .map((id) => new mongoose.Types.ObjectId(id))
+          : [],
+      });
+    }
 
     // ✏️ Handle text-only story (no media)
     if (mediaArray.length === 0 && text?.length > 0) {

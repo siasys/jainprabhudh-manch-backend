@@ -277,8 +277,12 @@ module.exports.biodataImageUpload = upload.fields([
   { name: 'passportPhoto', maxCount: 1 },
   { name: 'fullPhoto', maxCount: 1 },
   { name: 'familyPhoto', maxCount: 1 },
-  { name: 'legalDocument', maxCount: 1 }
+  { name: 'healthCertificate', maxCount: 1 },
+  { name: 'educationCertificate', maxCount: 1 },
+  {name: 'paymentScreenshot',maxCount:1},
+  {name: 'divorceCertificate', maxCount: 1 }
 ]);
+
 module.exports.sadhuDocs = upload.fields([
   { name: 'entityPhoto', maxCount: 5 },
   { name: 'entityDocuments', maxCount: 5 },

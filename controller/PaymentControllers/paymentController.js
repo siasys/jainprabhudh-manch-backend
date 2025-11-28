@@ -2,7 +2,7 @@ const Payment = require('../../model/PaymentModels/paymentModel');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const razorpayService = require('../../services/razorpayService');
 const JainVyapar = require('../../model/VyaparModels/vyaparModel');
-const VyavahikBiodata = require('../../model/VyavahikBiodata');
+const VyavahikBiodata = require('../../model/Matrimonial/VyavahikBiodata');
 const User = require('../../model/UserRegistrationModels/userModel');
 
 // Constants for payment amounts
@@ -117,9 +117,7 @@ const createBiodataPaymentOrder = async (req, res) => {
             formData,
             receipt
         });
-        
         await payment.save();
-        
         // Return order details to client
         return successResponse(res, {
             orderId: order.id,
@@ -142,32 +140,29 @@ const createBiodataPaymentOrder = async (req, res) => {
 const verifyVyaparPayment = async (req, res) => {
     try {
         const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-        
         // Verify payment signature
         const isValidSignature = razorpayService.verifyPaymentSignature({
             orderId: razorpay_order_id,
             paymentId: razorpay_payment_id,
             signature: razorpay_signature
         });
-        
+
         if (!isValidSignature) {
             return errorResponse(res, 'Invalid payment signature', 400);
         }
-        
+
         // Get payment details from database
         const payment = await razorpayService.getPaymentByOrderId(razorpay_order_id);
-        
+
         if (!payment) {
             return errorResponse(res, 'Payment record not found', 404);
         }
-        
         // Update payment status to paid
         await razorpayService.updatePaymentStatus({
             orderId: razorpay_order_id,
             paymentId: razorpay_payment_id,
             status: 'paid'
         });
-        
         // Return success response with payment ID
         return successResponse(res, {
             message: 'Payment verified successfully',

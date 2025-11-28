@@ -1,10 +1,20 @@
 const badWords = require("./badWords");
 
+const urlRegex = /(https?:\/\/[^\s]+)/gi;
+const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z]{2,}\b/gi;
+const numberRegex = /\b\d+\b/g;
+
 exports.containsBadWords = (text = "") => {
   if (!text) return false;
 
+  // Skip URLs, emails, numbers
+  let textWithoutUrlsEmailsNumbers = text
+    .replace(urlRegex, "")
+    .replace(emailRegex, "")
+    .replace(numberRegex, "");
+
   // Normalize & clean text (Hindi + English)
-  let cleanText = text
+  let cleanText = textWithoutUrlsEmailsNumbers
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
