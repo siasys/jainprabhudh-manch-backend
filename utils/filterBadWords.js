@@ -15,8 +15,7 @@ exports.containsBadWords = (text = "") => {
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\u0900-\u097F\s]/g, ""); // remove symbols, keep spaces for word split
-
+    .replace(/[^a-z0-9\u0900-\u097F\s]/g, ""); 
   // 2️⃣ Split into words for exact matching
   const words = cleanText.split(/\s+/);
 

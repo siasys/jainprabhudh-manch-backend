@@ -91,30 +91,79 @@ const createBiodata = async (req, res) => {
 const updateBiodata = async (req, res) => {
   try {
     const { id } = req.params;
-    const updatedBiodata = await VyavahikBiodata.findByIdAndUpdate(
-      id,
-      req.body,
-      { new: true }
-    );
+
+    // Extract S3 uploaded URLs — ONLY 3 IMAGES
+    const passportPhotoS3 = req.files?.passportPhoto?.[0]?.location || null;
+    const fullPhotoS3 = req.files?.fullPhoto?.[0]?.location || null;
+    const familyPhotoS3 = req.files?.familyPhoto?.[0]?.location || null;
+
+    // Convert S3 → CDN ONLY 3 IMAGES
+    const passportPhoto = passportPhotoS3 ? convertS3UrlToCDN(passportPhotoS3) : undefined;
+    const fullPhoto = fullPhotoS3 ? convertS3UrlToCDN(fullPhotoS3) : undefined;
+    const familyPhoto = familyPhotoS3 ? convertS3UrlToCDN(familyPhotoS3) : undefined;
+
+    // Build update object
+    let updateData = {
+      ...req.body, // normal fields update honge
+    };
+
+    if (passportPhoto) updateData.passportPhoto = passportPhoto;
+    if (fullPhoto) updateData.fullPhoto = fullPhoto;
+    if (familyPhoto) updateData.familyPhoto = familyPhoto;
+
+    // Update database
+    const updatedBiodata = await VyavahikBiodata.findByIdAndUpdate(id, updateData, { new: true });
+
     if (!updatedBiodata) {
       return res.status(404).json({
         success: false,
-        message: 'Biodata not found',
+        message: "Biodata not found",
       });
     }
+
     res.status(200).json({
       success: true,
-      message: 'Biodata updated successfully!',
+      message: "Biodata updated successfully!",
       data: updatedBiodata,
     });
+
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error updating biodata',
+      message: "Error updating biodata",
       error: error.message,
     });
   }
 };
+
+// Delete API
+const deleteBiodata = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const deletedBiodata = await VyavahikBiodata.findByIdAndDelete(id);
+
+    if (!deletedBiodata) {
+      return res.status(404).json({
+        success: false,
+        message: "Biodata not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Biodata deleted successfully!",
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error deleting biodata",
+      error: error.message,
+    });
+  }
+};
+
 
 // Get Single Biodata API
 const getBiodata = async (req, res) => {
@@ -243,5 +292,6 @@ module.exports = {
   getBiodata,
   getBiodataByUserId,
   getAllBiodatas,
-  checkUserBiodata
+  checkUserBiodata,
+  deleteBiodata
 };

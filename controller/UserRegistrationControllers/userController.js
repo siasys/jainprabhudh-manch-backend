@@ -197,6 +197,102 @@ const verifyRegisterOtp = asyncHandler(async (req, res) => {
   }
 });
 
+// const registerFinalUser = asyncHandler(async (req, res) => {
+//   let { userData } = req.body;
+
+//   if (!userData) {
+//     return errorResponse(res, "User data is required", 400);
+//   }
+
+//   if (typeof userData === "string") {
+//     userData = JSON.parse(userData);
+//   }
+
+//   const {
+//     firstName,
+//     lastName,
+//     fullName,
+//     birthDate,
+//     email,
+//     phoneNumber,
+//     accountType,
+//     sadhuName,
+//     businessName,
+//     businessDate,
+//     shravakId,
+//     password,
+//     isEmailVerified = false,
+//     isPhoneVerified = false,
+//   } = userData;
+
+//   // ✅ Duplicate check only for the field user is using
+//   if (phoneNumber && (!email || email.trim() === "")) {
+//     const existingPhoneUser = await User.findOne({ phoneNumber: String(phoneNumber) });
+//     if (existingPhoneUser) {
+//       return errorResponse(res, "User with this phone number already exists", 400);
+//     }
+//   }
+
+//   if (email && (!phoneNumber || phoneNumber.trim() === "")) {
+//     const existingEmailUser = await User.findOne({ email: email.toLowerCase() });
+//     if (existingEmailUser) {
+//       return errorResponse(res, "User with this email already exists", 400);
+//     }
+//   }
+
+//   //Create user object based on accountType
+//   let newUserData = {
+//     email: email?.trim() || undefined,
+//     phoneNumber: phoneNumber?.trim() || undefined,
+//     accountType,
+//     isEmailVerified,
+//     isPhoneVerified,
+//     password
+//   };
+
+//   if (accountType === "business") {
+//     newUserData.businessName = businessName?.trim() || "";
+//     newUserData.businessDate = businessDate || "";
+//     newUserData.shravakId = shravakId || "";
+//   }
+//   else if (accountType === "sadhu") {
+//     newUserData.sadhuName = sadhuName?.trim() || "";
+//     newUserData.shravakId = shravakId || "";
+//   }
+//  else {
+//   // 👤 Regular User Registration
+//   newUserData.firstName = firstName?.trim() || "";
+//   newUserData.lastName = lastName?.trim() || "";
+//   newUserData.fullName = fullName?.trim() || "";
+
+//   // BirthDate optional — only add if provided
+//   if (birthDate) {
+//     newUserData.birthDate = birthDate;
+//   }
+// }
+
+
+//   // ✅ Create user in DB
+//   const newUser = await User.create(newUserData);
+
+//   // ✅ Generate token
+//   const token = generateToken(newUser);
+//   newUser.token = token;
+//   await newUser.save();
+
+//   // ✅ Prepare response
+//   const userResponse = newUser.toObject();
+//   delete userResponse.password;
+//   delete userResponse.__v;
+
+//   return successResponse(
+//     res,
+//     { newUser: userResponse, token },
+//     "User registered successfully."
+//   );
+// });
+
+// New register without numebr and email check
 const registerFinalUser = asyncHandler(async (req, res) => {
   let { userData } = req.body;
 
@@ -225,22 +321,9 @@ const registerFinalUser = asyncHandler(async (req, res) => {
     isPhoneVerified = false,
   } = userData;
 
-  // ✅ Duplicate check only for the field user is using
-  if (phoneNumber && (!email || email.trim() === "")) {
-    const existingPhoneUser = await User.findOne({ phoneNumber: String(phoneNumber) });
-    if (existingPhoneUser) {
-      return errorResponse(res, "User with this phone number already exists", 400);
-    }
-  }
+  // 🚨 NO DUPLICATE CHECK — multiple accounts allowed from same phone/email
 
-  if (email && (!phoneNumber || phoneNumber.trim() === "")) {
-    const existingEmailUser = await User.findOne({ email: email.toLowerCase() });
-    if (existingEmailUser) {
-      return errorResponse(res, "User with this email already exists", 400);
-    }
-  }
-
-  //Create user object based on accountType
+  // Prepare user object
   let newUserData = {
     email: email?.trim() || undefined,
     phoneNumber: phoneNumber?.trim() || undefined,
@@ -259,28 +342,21 @@ const registerFinalUser = asyncHandler(async (req, res) => {
     newUserData.sadhuName = sadhuName?.trim() || "";
     newUserData.shravakId = shravakId || "";
   }
- else {
-  // 👤 Regular User Registration
-  newUserData.firstName = firstName?.trim() || "";
-  newUserData.lastName = lastName?.trim() || "";
-  newUserData.fullName = fullName?.trim() || "";
-
-  // BirthDate optional — only add if provided
-  if (birthDate) {
-    newUserData.birthDate = birthDate;
+  else {
+    newUserData.firstName = firstName?.trim() || "";
+    newUserData.lastName = lastName?.trim() || "";
+    newUserData.fullName = fullName?.trim() || "";
+    if (birthDate) {
+      newUserData.birthDate = birthDate;
+    }
   }
-}
 
-
-  // ✅ Create user in DB
   const newUser = await User.create(newUserData);
 
-  // ✅ Generate token
   const token = generateToken(newUser);
   newUser.token = token;
   await newUser.save();
 
-  // ✅ Prepare response
   const userResponse = newUser.toObject();
   delete userResponse.password;
   delete userResponse.__v;
@@ -291,7 +367,6 @@ const registerFinalUser = asyncHandler(async (req, res) => {
     "User registered successfully."
   );
 });
-
 
 // Register new user with enhanced security 
 // const registerUser = asyncHandler(async (req, res) => {
@@ -354,10 +429,10 @@ const sendOtp = asyncHandler(async (req, res) => {
 
   // 📱 Phone number case
   if (phoneNumber) {
-    const existingUser = await User.findOne({ phoneNumber: String(phoneNumber) });
-    if (existingUser) {
-      return errorResponse(res, "User with this phone number already exists", 400);
-    }
+    // const existingUser = await User.findOne({ phoneNumber: String(phoneNumber) });
+    // if (existingUser) {
+    //   return errorResponse(res, "User with this phone number already exists", 400);
+    // }
 
     await MobileOtpVerification.deleteMany({ phoneNumber, isVerified: false });
 
@@ -377,10 +452,10 @@ const sendOtp = asyncHandler(async (req, res) => {
 
   // 📧 Email case
   if (email) {
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
-    if (existingUser) {
-      return errorResponse(res, "User with this email already exists", 400);
-    }
+    // const existingUser = await User.findOne({ email: email.toLowerCase() });
+    // if (existingUser) {
+    //   return errorResponse(res, "User with this email already exists", 400);
+    // }
 
     await EmailVerification.deleteMany({ email, isVerified: false });
 

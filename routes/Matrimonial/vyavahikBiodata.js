@@ -1,5 +1,5 @@
 const express = require('express');
-const { createBiodata, updateBiodata, getBiodata, getAllBiodatas, checkUserBiodata, getBiodataByUserId } = require('../../controller/Matrimonial/vyavahikBiodataController');
+const { createBiodata, updateBiodata, getBiodata, getAllBiodatas, checkUserBiodata, getBiodataByUserId, deleteBiodata } = require('../../controller/Matrimonial/vyavahikBiodataController');
 const upload = require('../../middlewares/upload');
 const { 
     createBiodataPaymentOrder,
@@ -20,11 +20,12 @@ router.post('/complete-registration/:orderId', upload.biodataImageUpload, comple
 
 
 // Update a biodata by ID
-router.put('/:id', updateBiodata);
+router.put('/:id', upload.biodataImageUpload, updateBiodata);
 
 // Get a single biodata by ID
 router.get('/:id', getBiodata);
 router.get('/user/:userId', getBiodataByUserId);
+router.delete('/delete/:id', deleteBiodata);
 
 // Get all biodatas
 router.get('/', getAllBiodatas);
