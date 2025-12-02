@@ -5,7 +5,7 @@ const upload = require("../../middlewares/upload");
 
 // Apply for scholarship
 router.post("/apply", upload.scholarshipUpload, applyScholarship);
-router.post("/sponsor", createScholarshipSponsor);
+router.post("/sponsor", upload.sponsorUpload, createScholarshipSponsor);
 router.get("/get/sponsor", getAllScholarshipSponsors);
 
 // Get scholarship by ID

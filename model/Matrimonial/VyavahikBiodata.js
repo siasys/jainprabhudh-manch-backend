@@ -95,6 +95,9 @@ const vyavahikBiodataSchema = new mongoose.Schema(
     gotra: {
       type: String,
     },
+    subGotra:{
+      type: String,
+    },
     mamaGotra: {
       type: String,
     },
@@ -169,6 +172,12 @@ const vyavahikBiodataSchema = new mongoose.Schema(
      contactPerson: {
         type: String,
      },
+    alternativeNumber: {
+      type: String,
+    },
+    contactNameRelation: {
+    type: String,
+    },
     email: {
         type: String,
      },
@@ -218,10 +227,28 @@ const vyavahikBiodataSchema = new mongoose.Schema(
     healthCertificate: {
       type: String,
     },
+    healthReport: {
+    wearsSpectacles: { type: String, enum: ["yes", "no"], default: "no" },
+    diabetes: { type: String, enum: ["yes", "no"], default: "no" },
+    bloodPressure: { type: String, enum: ["yes", "no"], default: "no" },
+    thyroid: { type: String, enum: ["yes", "no"], default: "no" },
+    asthma: { type: String, enum: ["yes", "no"], default: "no" },
+    migraine: { type: String, enum: ["yes", "no"], default: "no" },
+    heartIssue: { type: String, enum: ["yes", "no"], default: "no" },
+    hearingIssue: { type: String, enum: ["yes", "no"], default: "no" },
+    skinIssue: { type: String, enum: ["yes", "no"], default: "no" },
+    anyAddiction: { type: String, enum: ["yes", "no"], default: "no" },
+    previousSurgery: { type: String, enum: ["yes", "no"], default: "no" },
+    tongueIssue: { type: String, enum: ["yes", "no"], default: "no" },
+    menstrualIssue: { type: String, enum: ["yes", "no"], default: "no" }     // "yes"/"no"
+    },
     paymentScreenshot: {
       type: String,
     },
     partnerPreference: {
+      type: String,
+    },
+    specialInformation: {
       type: String,
     },
     paymentStatus: {

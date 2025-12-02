@@ -40,6 +40,11 @@ const ScholarshipSponsorSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    sponserImage: {
+      type: String,
+      default: null,
+    },
+
   },
   { timestamps: true }
 );

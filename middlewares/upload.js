@@ -306,5 +306,9 @@ module.exports.uploadActivityFiles = upload.fields([
 module.exports.scholarshipUpload = upload.fields([
   { name: "lastYearMarksheet", maxCount: 5 }
 ]);
+
+module.exports.sponsorUpload = upload.fields([
+  { name: "sponserImage", maxCount: 1 }
+]);
 // Add entity post upload configuration (standardized for all entities)
 module.exports.entityPostUpload = upload.array('media', 10);

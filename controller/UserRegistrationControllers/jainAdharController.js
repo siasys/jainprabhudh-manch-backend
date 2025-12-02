@@ -518,22 +518,26 @@ const getCheckShravk = asyncHandler(async (req, res) => {
     if (!shravakId || shravakId.trim() === "") {
       return errorResponse(res, "Shravak Id is required", 400);
     }
+
     // check shravakId against jainAdharNumber
     const record = await JainAadhar.findOne({ jainAadharNumber: shravakId });
 
     if (!record) {
       return errorResponse(res, "Shravak Id not valid", 404);
     }
+
     return successResponse(
       res,
-      { jainAadharNumber: record.jainAadharNumber, name: record.name },
+      record,  // 🔥 pura record bhej rahe hain
       "Shravak Id valid",
       200
     );
+
   } catch (error) {
     return errorResponse(res, "Error checking Shravak Id", 500, error.message);
   }
 });
+
 
 // Admin: Get all applications
 const getAllApplications = asyncHandler(async (req, res) => {

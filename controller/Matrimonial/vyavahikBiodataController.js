@@ -88,31 +88,19 @@ const createBiodata = async (req, res) => {
 
 
 // Update API
+// Update API for details only
 const updateBiodata = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Extract S3 uploaded URLs — ONLY 3 IMAGES
-    const passportPhotoS3 = req.files?.passportPhoto?.[0]?.location || null;
-    const fullPhotoS3 = req.files?.fullPhoto?.[0]?.location || null;
-    const familyPhotoS3 = req.files?.familyPhoto?.[0]?.location || null;
+    // Update text fields only (images not included here)
+    let updateData = { ...req.body };
 
-    // Convert S3 → CDN ONLY 3 IMAGES
-    const passportPhoto = passportPhotoS3 ? convertS3UrlToCDN(passportPhotoS3) : undefined;
-    const fullPhoto = fullPhotoS3 ? convertS3UrlToCDN(fullPhotoS3) : undefined;
-    const familyPhoto = familyPhotoS3 ? convertS3UrlToCDN(familyPhotoS3) : undefined;
-
-    // Build update object
-    let updateData = {
-      ...req.body, // normal fields update honge
-    };
-
-    if (passportPhoto) updateData.passportPhoto = passportPhoto;
-    if (fullPhoto) updateData.fullPhoto = fullPhoto;
-    if (familyPhoto) updateData.familyPhoto = familyPhoto;
-
-    // Update database
-    const updatedBiodata = await VyavahikBiodata.findByIdAndUpdate(id, updateData, { new: true });
+    const updatedBiodata = await VyavahikBiodata.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true }
+    );
 
     if (!updatedBiodata) {
       return res.status(404).json({
@@ -123,18 +111,77 @@ const updateBiodata = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Biodata updated successfully!",
+      message: "Biodata details updated successfully!",
       data: updatedBiodata,
     });
 
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Error updating biodata",
+      message: "Error updating biodata details",
       error: error.message,
     });
   }
 };
+// Update API for images only
+const updateBiodataImages = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Extract ONLY 3 images from Multer-S3 response
+    const passportPhotoS3 = req.files?.passportPhoto?.[0]?.location || null;
+    const fullPhotoS3 = req.files?.fullPhoto?.[0]?.location || null;
+    const familyPhotoS3 = req.files?.familyPhoto?.[0]?.location || null;
+
+    // Convert S3 URL → CDN URL
+    const passportPhoto = passportPhotoS3 ? convertS3UrlToCDN(passportPhotoS3) : undefined;
+    const fullPhoto = fullPhotoS3 ? convertS3UrlToCDN(fullPhotoS3) : undefined;
+    const familyPhoto = familyPhotoS3 ? convertS3UrlToCDN(familyPhotoS3) : undefined;
+
+    // Prepare update object
+    let updateData = {};
+
+    // Insert only new uploaded photos
+    if (passportPhoto) updateData.passportPhoto = passportPhoto;
+    if (fullPhoto) updateData.fullPhoto = fullPhoto;
+    if (familyPhoto) updateData.familyPhoto = familyPhoto;
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No images uploaded",
+      });
+    }
+
+    // Update the biodata
+    const updatedBiodata = await VyavahikBiodata.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true }
+    );
+
+    if (!updatedBiodata) {
+      return res.status(404).json({
+        success: false,
+        message: "Biodata not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Biodata images updated successfully!",
+      data: updatedBiodata,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error updating biodata images",
+      error: error.message,
+    });
+  }
+};
+
 
 // Delete API
 const deleteBiodata = async (req, res) => {
@@ -293,5 +340,6 @@ module.exports = {
   getBiodataByUserId,
   getAllBiodatas,
   checkUserBiodata,
-  deleteBiodata
+  deleteBiodata,
+  updateBiodataImages
 };
