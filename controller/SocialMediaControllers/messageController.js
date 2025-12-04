@@ -697,8 +697,8 @@ exports.getAllMessages = async (req, res) => {
       return await Message.find({
         $or: [{ sender: userId }, { receiver: userId }],
       })
-        .populate('sender', 'firstName lastName profilePicture accountType businessName sadhuName')
-        .populate('receiver', 'firstName lastName profilePicture accountType businessName sadhuName')
+        .populate('sender', 'firstName lastName profilePicture accountType businessName sadhuName tirthName')
+        .populate('receiver', 'firstName lastName profilePicture accountType businessName sadhuName tirthName')
         .sort({ createdAt: -1 });
     }, 60); // Cache for 1 minute
 
@@ -737,8 +737,8 @@ exports.getConversation = async (req, res) => {
       ]
     })
       .sort({ createdAt: -1 })
-      .populate('sender', 'fullName profilePicture accountType businessName sadhuName')
-      .populate('receiver', 'fullName profilePicture accountType businessName sadhuName');
+      .populate('sender', 'fullName profilePicture accountType businessName sadhuName tirthName')
+      .populate('receiver', 'fullName profilePicture accountType businessName sadhuName tirthName');
 
     const conversationMap = new Map();
 

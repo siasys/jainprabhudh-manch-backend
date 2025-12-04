@@ -29,6 +29,9 @@ const userSchema = new mongoose.Schema(
      sadhuName: {
       type: String,
      },
+     tirthName:{
+      type: String,
+     },
     email: {
     type: String,
     unique: true,
@@ -95,7 +98,7 @@ const userSchema = new mongoose.Schema(
     },
      accountType: {
       type: String,
-      enum: ["user", "business", "sadhu"],
+      enum: ["user", "business", "sadhu","tirth"],
       default: "user",
     },
       location: {

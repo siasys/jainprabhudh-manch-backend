@@ -71,7 +71,7 @@ exports.getBlockedUsers = async (req, res) => {
     const blockerUserId = req.user._id;
 
     const blocks = await Block.find({ blocker: blockerUserId })
-      .populate("blocked", "fullName profilePicture accountType businessName");
+      .populate("blocked", "fullName profilePicture accountType businessName sadhuName tirthName");
 
     const blockedUsers = blocks.map((b) => b.blocked);
 

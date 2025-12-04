@@ -314,15 +314,15 @@ const getPostsByUser = asyncHandler(async (req, res) => {
 
   // Get complete posts with all populated data
   const posts = await Post.find({ user: userId })
-    .populate("user", "firstName lastName fullName profilePicture accountType accountStatus sadhuName")
+    .populate("user", "firstName lastName fullName profilePicture accountType accountStatus sadhuName tirthName")
     .populate("sanghId", "name sanghImage")
     .populate({
       path: "comments.user",
-      select: "firstName lastName fullName profilePicture accountType accountStatus sadhuName"
+      select: "firstName lastName fullName profilePicture accountType accountStatus sadhuName tirthName"
     })
     .populate({
       path: "comments.replies.user", 
-      select: "firstName lastName fullName profilePicture accountType accountStatus sadhuName"
+      select: "firstName lastName fullName profilePicture accountType accountStatus sadhuName tirthName"
     })
     .sort({ createdAt: -1 })
     .skip(skip)
@@ -370,15 +370,15 @@ const getPostById = asyncHandler(async (req, res) => {
 
   const post = await getOrSetCache(`post:${postId}`, async () => {
     let query = Post.findById(postId)
-      .populate('user', 'firstName lastName fullName profilePicture accountType businessName sadhuName')
+      .populate('user', 'firstName lastName fullName profilePicture accountType businessName sadhuName tirthName')
       .populate({
         path: 'comments.user',
-        select: 'firstName lastName fullName profilePicture accountType businessName sadhuName',
+        select: 'firstName lastName fullName profilePicture accountType businessName sadhuName tirthName',
       })
       .populate({
         path: 'comments.replies.user',
         model: 'User',
-        select: 'firstName lastName fullName profilePicture accountType businessName sadhuName',
+        select: 'firstName lastName fullName profilePicture accountType businessName sadhuName tirthName',
       })
       .populate('sanghId', 'name sanghImage')
       .populate('panchId', 'name sanghImage');
@@ -395,6 +395,7 @@ const getPostById = asyncHandler(async (req, res) => {
     if (!u) return 'User';
     if (u.accountType === 'business') return u.businessName || u.fullName || 'User';
     if (u.accountType === 'sadhu') return u.sadhuName || u.fullName || 'User';
+    if (u.accountType === 'tirth') return u.tirthName || u.fullName || 'User';
     return u.fullName || 'User';
   };
 
@@ -633,7 +634,7 @@ const getAllPosts = async (req, res) => {
     let postsRaw = await Post.find(query)
       .populate(
         "user",
-        "firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName"
+        "firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName tirthName"
       )
       .populate("sanghId", "name sanghImage")
       .sort({ createdAt: -1 })
@@ -763,7 +764,7 @@ const getAllVideoPosts = async (req, res) => {
     let postsRaw = await Post.find(query)
       .populate(
         "user",
-        "firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName"
+        "firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName tirthName"
       )
       .populate("sanghId", "name sanghImage")
       .sort({ createdAt: -1 })
@@ -1003,7 +1004,7 @@ const getLikedUsers = asyncHandler(async (req, res) => {
 
   const post = await Post.findById(postId).populate({
     path: 'likes',
-    select: 'fullName profilePicture businessName accountType sadhuName',
+    select: 'fullName profilePicture businessName accountType sadhuName tirthName',
   });
 
   if (!post) {
@@ -1243,7 +1244,7 @@ const addComment = async (req, res) => {
     await invalidateCache(`post:${postId}`);
     await invalidateCache(`postComments:${postId}`);
 
-    await post.populate('comments.user', 'firstName lastName fullName profilePicture accountType businessName sadhuName');
+    await post.populate('comments.user', 'firstName lastName fullName profilePicture accountType businessName sadhuName tirthName');
 
     // Send notification
     const notification = new Notification({
@@ -1514,7 +1515,7 @@ const getReplies = async (req, res) => {
     if (!comment) {
       return res.status(404).json({ message: 'Comment not found' });
     }
-    await post.populate('comments.replies.user', 'firstName lastName fullName profilePicture accountType businessName sadhuName');
+    await post.populate('comments.replies.user', 'firstName lastName fullName profilePicture accountType businessName sadhuName tirthName');
       res.status(200).json({
       message: 'Replies fetched successfully',
       replies: comment.replies,

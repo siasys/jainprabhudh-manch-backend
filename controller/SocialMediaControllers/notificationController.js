@@ -53,7 +53,7 @@ exports.getNotifications = async (req, res) => {
       .populate({
         path: "senderId",
         select:
-          "firstName lastName fullName profilePicture privacy accountType businessName sadhuName",
+          "firstName lastName fullName profilePicture privacy accountType businessName sadhuName tirthName",
       })
       .populate({
         path: "postId",

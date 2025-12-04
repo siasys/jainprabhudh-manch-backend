@@ -18,7 +18,8 @@ const {
     getCityTirths,
     tirthLogin,
     getAllTirths,
-    getAllTirth
+    getAllTirth,
+    deleteTirth
 } = require('../../controller/TirthControllers/tirthController');
 
 // Public routes
@@ -56,7 +57,7 @@ router.get('/details/:tirthId',
    // verifyTirthRole,
     getTirthDetails
 );
-
+router.delete('/delete/:tirthId', deleteTirth);
 // Tirth management routes - require tirth manager role
 router.put('/update/:tirthId',
     verifyTirthRole,

@@ -144,8 +144,8 @@ const sadhuSchema = new mongoose.Schema({
         }
     },
     uploadImage: {
-        type: String,
-        default: ''
+        type: [String],
+        default: []
     },
 
     // Application Status

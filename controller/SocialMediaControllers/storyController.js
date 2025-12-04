@@ -146,7 +146,7 @@ const createStory = asyncHandler(async (req, res) => {
     // Populate mentionUsers for response
     const populatedStory = await Story.findById(savedStory._id)
       .populate('userId', 'fullName profilePicture')
-      .populate('media.mentionUsers', 'fullName profilePicture');
+      .populate('media.mentionUsers', 'fullName profilePicture accountType accountStatus sadhuName tirthName');
 
     res.status(201).json({
       success: true,
@@ -196,7 +196,7 @@ const getAllStories = asyncHandler(async (req, res) => {
       userId: { $in: Array.from(storyUserIds) },
       _id: { $nin: hideStoryIds }
     })
-    .populate("userId", "profilePicture firstName lastName fullName")
+    .populate("userId", "profilePicture firstName lastName fullName accountType accountStatus sadhuName tirthName")
     .populate("sanghId", "name sanghImage");
 
     res.status(200).json({
@@ -230,7 +230,7 @@ const getStoriesByUser = asyncHandler(async (req, res) => {
       createdAt: { $gte: twentyFourHoursAgo },
       _id: { $nin: hideStoryIds }
     })
-    .populate("userId", "profilePicture firstName lastName fullName")
+    .populate("userId", "profilePicture firstName lastName fullName accountType accountStatus sadhuName tirthName")
     .populate("sanghId", "name sanghImage");
 
     if (!stories.length) {

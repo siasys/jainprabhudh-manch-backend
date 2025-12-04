@@ -315,13 +315,12 @@ const registerFinalUser = asyncHandler(async (req, res) => {
     sadhuName,
     businessName,
     businessDate,
+    tirthName,       // ✅ Add tirthName here
     shravakId,
     password,
     isEmailVerified = false,
     isPhoneVerified = false,
   } = userData;
-
-  // 🚨 NO DUPLICATE CHECK — multiple accounts allowed from same phone/email
 
   // Prepare user object
   let newUserData = {
@@ -340,6 +339,10 @@ const registerFinalUser = asyncHandler(async (req, res) => {
   }
   else if (accountType === "sadhu") {
     newUserData.sadhuName = sadhuName?.trim() || "";
+    newUserData.shravakId = shravakId || "";
+  }
+  else if (accountType === "tirth") {
+    newUserData.tirthName = tirthName?.trim() || "";
     newUserData.shravakId = shravakId || "";
   }
   else {
@@ -367,6 +370,7 @@ const registerFinalUser = asyncHandler(async (req, res) => {
     "User registered successfully."
   );
 });
+
 
 // Register new user with enhanced security 
 // const registerUser = asyncHandler(async (req, res) => {
@@ -1303,7 +1307,9 @@ const getAllUsers = asyncHandler(async (req, res) => {
       { lastName: searchRegex },
       { fullName: searchRegex },
       { businessName: searchRegex },
-      { city: searchRegex }
+      { city: searchRegex },
+      { tirthName: searchRegex },
+      { sadhuName: searchRegex }
     ];
   }
 
@@ -1377,7 +1383,7 @@ const getUserById = asyncHandler(async (req, res) => {
   // 🔍 Fetch user if not blocked
   const user = await User.findById(id)
     .select("-password -__v")
-    .populate("friends", "firstName lastName profilePicture accountType businessName accountTitle sadhuName")
+    .populate("friends", "firstName lastName profilePicture accountType businessName accountTitle sadhuName tirthName")
     .populate({
       path: "posts",
       select: "-__v",

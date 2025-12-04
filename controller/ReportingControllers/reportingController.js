@@ -90,7 +90,7 @@ exports.getReportById = async (req, res) => {
     const report = await Reporting.findById(id)
       .populate('submittingSanghId', 'name level')
       .populate('recipientSanghId', 'name level')
-      .populate('submittedById', 'firstName lastName');
+      .populate('submittedById', 'firstName lastName accountType businessName sadhuName tirthName');
 
     if (!report) {
       return errorResponse(res, 'Report not found', 404);

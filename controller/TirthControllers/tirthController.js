@@ -21,108 +21,84 @@ const getAvailableCities = async (req, res) => {
 
 // Submit new Tirth application
 const submitTirthApplication = async (req, res) => {
-    try {
-        console.log("Headers Authorization:", req.headers.authorization);
-        console.log("Received Body:", req.body);
+  try {
+    console.log("📩 Received Body → ", req.body);
 
-        const {
-            type, name, userId, tirthType, tirthShetra, otherTirthShetra,
-            regionName, mulPratima, description, location, citySanghId,
-            managerName, facilities, prabandhInputs, transport,
-            nearestCity, nearestTirth, regionHistory, projects,
-        } = req.body;
+    const data = req.body;
 
-        const parsedManagerName = JSON.parse(managerName);
-        const parsedFacilities = JSON.parse(facilities);
-        const parsedPrabandhInputs = JSON.parse(prabandhInputs);
-        const parsedTransport = JSON.parse(transport);
-
-        const citySangh = await HierarchicalSangh.findOne({
-            _id: citySanghId,
-            level: 'city',
-            status: 'active'
-        });
-
-        if (!citySangh) {
-            return errorResponse(res, 'Invalid city Sangh selected', 400);
-        }
-
-        // Convert uploaded URLs to CDN
-        const photos = [];
-        const documents = [];
-
-        if (req.files) {
-            if (req.files.entityPhoto) {
-                photos.push(...req.files.entityPhoto.map(file => ({
-                    url: convertS3UrlToCDN(file.location),
-                    type: file.mimetype.startsWith('image/') ? 'image' : 'other'
-                })));
-            }
-
-            if (req.files.entityDocuments) {
-                documents.push(...req.files.entityDocuments.map(file => ({
-                    url: convertS3UrlToCDN(file.location),
-                    type: file.mimetype === 'application/pdf' ? 'pdf' : 'other'
-                })));
-            }
-        }
-
-        const tirth = new Tirth({
-            type,
-            name,
-            tirthType,
-            tirthShetra,
-            otherTirthShetra,
-            regionName,
-            mulPratima,
-            description,
-            location,
-            citySanghId,
-            userId,
-            managerName: parsedManagerName,
-            photos,
-            documents,
-            nearestCity,
-            nearestTirth,
-            regionHistory,
-            projects,
-            facilities: parsedFacilities,
-            prabandhInputs: parsedPrabandhInputs,
-            transport: parsedTransport
-        });
-
-        await tirth.save();
-
-        return successResponse(res, {
-            message: 'Tirth application submitted successfully',
-            tirthId: tirth._id
-        });
-    } catch (error) {
-        // Clean up on error
-        if (req.files) {
-            const deletePromises = [];
-            if (req.files.entityPhoto) {
-                deletePromises.push(...req.files.entityPhoto.map(file =>
-                    s3Client.send(new DeleteObjectCommand({
-                        Bucket: process.env.AWS_BUCKET_NAME,
-                        Key: extractS3KeyFromUrl(file.location)
-                    }))
-                ));
-            }
-            if (req.files.entityDocuments) {
-                deletePromises.push(...req.files.entityDocuments.map(file =>
-                    s3Client.send(new DeleteObjectCommand({
-                        Bucket: process.env.AWS_BUCKET_NAME,
-                        Key: extractS3KeyFromUrl(file.location)
-                    }))
-                ));
-            }
-            await Promise.all(deletePromises);
-        }
-
-        return errorResponse(res, error.message, 500);
+    // ---------------------------------------------------
+    // PROCESS PHOTOS (ONLY STRING URL ARRAY)
+    // ---------------------------------------------------
+    let tirthPhotos = [];
+    if (req.files && req.files.tirthPhoto) {
+      tirthPhotos = req.files.tirthPhoto.map(file =>
+        convertS3UrlToCDN(file.location) // 📌 only URL string
+      );
     }
+
+    // ---------------------------------------------------
+    // GENERATE RANDOM TIRTH ID
+    // ---------------------------------------------------
+    const random6Digit = Math.floor(100000 + Math.random() * 900000); // 6-digit
+    const generatedTirthID = `TIRTH${random6Digit}`;
+
+    // ---------------------------------------------------
+    // CREATE NEW TIRTH DOCUMENT
+    // ---------------------------------------------------
+    const tirth = new Tirth({
+      ...data,
+      tirthPhotos,
+      userId: req.user._id,
+      submittedBy: req.user._id,
+      tirthID: generatedTirthID,
+    });
+
+    await tirth.save();
+
+    // ---------------------------------------------------
+    // UPDATE USER SCHEMA WITH TIRTH ROLE
+    // ---------------------------------------------------
+    const User = require("../../model/UserRegistrationModels/userModel"); // import User model
+    await User.findByIdAndUpdate(
+      req.user._id,
+      {
+        $push: {
+          tirthRoles: {
+            tirthId: tirth._id, // reference the saved Tirth document
+            role: "manager",
+            approvedAt: new Date()
+          }
+        }
+      },
+      { new: true }
+    );
+
+    return successResponse(res, {
+      message: "Tirth created successfully and role assigned",
+       tirthId: tirth._id
+    });
+
+  } catch (error) {
+    console.error("❌ Error creating Tirth:", error);
+
+    // DELETE FILES IF ERROR HAPPENS
+    if (req.files && req.files.tirthPhoto) {
+      await Promise.all(
+        req.files.tirthPhoto.map(file =>
+          s3Client.send(
+            new DeleteObjectCommand({
+              Bucket: process.env.AWS_BUCKET_NAME,
+              Key: file.key
+            })
+          )
+        )
+      );
+    }
+
+    return errorResponse(res, error.message, 500);
+  }
 };
+
 
 // Get pending applications for city president
 const getPendingApplications = async (req, res) => {
@@ -230,7 +206,7 @@ const getTirthDetails = async (req, res) => {
         const tirth = await Tirth.findOne({
             _id: tirthId,
             status: 'active'
-        }).populate('citySanghId', 'name location');
+        })
 
         if (!tirth) {
             return errorResponse(res, 'Tirth not found', 404);
@@ -241,6 +217,38 @@ const getTirthDetails = async (req, res) => {
         return errorResponse(res, error.message, 500);
     }
 };
+// Delete Tirth by ID
+const deleteTirth = async (req, res) => {
+  try {
+    const { tirthId } = req.params;
+
+    // Check if tirth exists
+    const tirth = await Tirth.findById(tirthId);
+    if (!tirth) {
+      return res.status(404).json({
+        success: false,
+        message: "Tirth not found"
+      });
+    }
+
+    // Soft delete: mark as deleted
+    tirth.status = "deleted"; // ya hard delete: await Tirth.deleteOne({ _id: tirthId });
+    await tirth.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Tirth deleted successfully"
+    });
+
+  } catch (error) {
+    console.error("Delete Tirth Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 
 // Update Tirth details
 const updateTirthDetails = async (req, res) => {
@@ -428,17 +436,16 @@ const getAllTirths = async (req, res) => {
 };
 // Get all Tirths (public)
 const getAllTirth = async (req, res) => {
-    try {
-        const tirths = await Tirth.find(
-            { status: 'active' }, // Removed applicationStatus
-            'name tirthType location description uploadImage userId'
-        ).sort({ name: 1 });
+  try {
+    // Fetch all active tirths without projection
+    const tirths = await Tirth.find({ status: 'active' }).sort({ tirthName: 1 });
 
-        return successResponse(res, tirths);
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
-    }
+    return successResponse(res, tirths);
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
 };
+
 
 
 module.exports = {
@@ -451,5 +458,6 @@ module.exports = {
     getCityTirths,
     tirthLogin,
     getAllTirths,
-    getAllTirth
+    getAllTirth,
+    deleteTirth
 }; 

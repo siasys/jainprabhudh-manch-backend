@@ -27,7 +27,6 @@ const rojgarSchema = new mongoose.Schema(
     },
     salary: {
       type: String,
-       required: true,
     },
     age: {
       type: String,

@@ -46,7 +46,7 @@ const followUser = asyncHandler(async (req, res) => {
 const getFollowRequests = asyncHandler(async (req, res) => {
     const { userId } = req.params;
     const requests = await Friendship.find({ following: userId, followStatus: 'following' })
-        .populate('follower', 'firstName lastName fullName profilePicture accountType businessName sadhuName');
+        .populate('follower', 'firstName lastName fullName profilePicture accountType businessName sadhuName tirthName');
     res.json({ success: true, requests });
 });
 
@@ -112,7 +112,7 @@ const getFollowers = asyncHandler(async (req, res) => {
     const followers = await Friendship.find({ following: userId })
       .populate(
         'follower',
-        'firstName lastName fullName profilePicture accountType businessName sadhuName'
+        'firstName lastName fullName profilePicture accountType businessName sadhuName tirthName'
       );
 
     // ⭐ Filter users who are blocked OR who blocked you
@@ -135,11 +135,17 @@ const getFollowers = asyncHandler(async (req, res) => {
           followStatus: f.followStatus,
           accountType: follower.accountType,
           businessName: follower.businessName,
+          sadhuName: follower.sadhuName,
+          tirthName: follower.tirthName,
+
+          // ⭐ Updated Display Name Logic including tirthName
           displayName:
             follower.accountType === "business"
               ? follower.businessName
               : follower.accountType === "sadhu"
               ? follower.sadhuName
+              : follower.accountType === "tirth"
+              ? follower.tirthName
               : follower.fullName,
         };
       })
@@ -151,22 +157,21 @@ const getFollowers = asyncHandler(async (req, res) => {
   }
 });
 
+
 const getFollowing = asyncHandler(async (req, res) => {
   const { userId } = req.params;
 
   try {
-    // ⭐ Blocked users list (two-way)
     const blockedUsers = await getBlockedUsersList(userId);
 
     const following = await Friendship.find({ follower: userId })
       .populate(
         'following',
-        'firstName lastName fullName profilePicture accountType businessName sadhuName'
+        'firstName lastName fullName profilePicture accountType businessName sadhuName tirthName'
       );
 
     const validFollowing = following.filter(f => f.following);
 
-    // ⭐ Hide blocked + who blocked me
     const filtered = validFollowing.filter(f => {
       const uid = f.following._id.toString();
       return !blockedUsers.includes(uid);
@@ -186,11 +191,17 @@ const getFollowing = asyncHandler(async (req, res) => {
           followStatus: f.followStatus,
           accountType: user.accountType,
           businessName: user.businessName,
+          sadhuName: user.sadhuName,
+          tirthName: user.tirthName,
+
+          // 👉 Display name logic updated
           displayName:
             user.accountType === "business"
               ? user.businessName
               : user.accountType === "sadhu"
               ? user.sadhuName
+              : user.accountType === "tirth"
+              ? user.tirthName
               : user.fullName,
         };
       })

@@ -183,9 +183,9 @@ exports.getGroupDetails = async (req, res) => {
     }
 
     const group = await GroupChat.findById(groupId)
-      .populate('creator', 'fullName profilePicture accountType businessName sadhuName')
-      .populate('admins', 'fullName profilePicture accountType businessName sadhuName')
-      .populate('groupMembers.user', 'fullName profilePicture accountType businessName sadhuName');
+      .populate('creator', 'fullName profilePicture accountType businessName sadhuName tirthName')
+      .populate('admins', 'fullName profilePicture accountType businessName sadhuName tirthName')
+      .populate('groupMembers.user', 'fullName profilePicture accountType businessName sadhuName tirthName');
 
     if (!group) {
       return res.status(404).json({ message: "Group not found." });
@@ -394,11 +394,11 @@ exports.getAllGroups = async (req, res) => {
     })
       .populate(
         "groupMembers.user",
-        "firstName fullName lastName profilePicture accountType businessName sadhuName"
+        "firstName fullName lastName profilePicture accountType businessName sadhuName tirthName"
       )
       .populate(
         "creator",
-        "firstName lastName fullName profilePicture accountType businessName sadhuName"
+        "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName"
       )
       .populate("groupMessages");
 
@@ -409,11 +409,11 @@ exports.getAllGroups = async (req, res) => {
     })
       .populate(
         "groupMembers.user",
-        "firstName fullName lastName profilePicture accountType businessName sadhuName"
+        "firstName fullName lastName profilePicture accountType businessName sadhuName tirthName"
       )
       .populate(
         "creator",
-        "firstName lastName fullName profilePicture accountType businessName sadhuName"
+        "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName"
       )
       .populate("groupMessages");
 

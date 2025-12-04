@@ -12,11 +12,11 @@ const submitSadhuInfo = async (req, res) => {
     const sadhuData = { ...req.body };
     sadhuData.submittedBy = req.user._id;
 
-    // ✅ Generate unique Sadhu ID (e.g., SADHU123456)
+    // Generate unique Sadhu ID
     const randomNum = Math.floor(100000 + Math.random() * 900000);
     sadhuData.sadhuID = `SADHU${randomNum}`;
 
-    // ✅ Parse upadhiList if present
+    // Parse upadhiList array
     if (req.body.upadhiList) {
       try {
         sadhuData.upadhiList = JSON.parse(req.body.upadhiList);
@@ -25,12 +25,19 @@ const submitSadhuInfo = async (req, res) => {
       }
     }
 
-    // ✅ Handle file uploads
+    // Ensure uploadImage is an array
+    sadhuData.uploadImage = [];
+
+    // Handle file uploads
     if (req.files) {
+      // ⬇️ MULTIPLE PHOTOS (entityPhoto)
       if (req.files.entityPhoto) {
-        const s3Url = req.files.entityPhoto[0].location;
-        sadhuData.uploadImage = convertS3UrlToCDN(s3Url);
+        sadhuData.uploadImage = req.files.entityPhoto.map(photo =>
+          convertS3UrlToCDN(photo.location)
+        );
       }
+
+      // ⬇️ MULTIPLE DOCUMENTS
       if (req.files.entityDocuments) {
         sadhuData.documents = req.files.entityDocuments.map(doc =>
           convertS3UrlToCDN(doc.location)
@@ -38,11 +45,11 @@ const submitSadhuInfo = async (req, res) => {
       }
     }
 
-    // ✅ Save Sadhu
+    // Save Sadhu
     const sadhu = new Sadhu(sadhuData);
     await sadhu.save();
 
-    // ✅ Add Sadhu reference to User
+    // Add Sadhu reference to User
     const user = await User.findById(req.user._id);
     if (!user.sadhuRoles) user.sadhuRoles = [];
     user.sadhuRoles.push({
@@ -51,7 +58,6 @@ const submitSadhuInfo = async (req, res) => {
     });
     await user.save();
 
-    // ✅ Send response with Sadhu ID
     return successResponse(
       res,
       'Sadhu information submitted successfully for review',
@@ -64,7 +70,6 @@ const submitSadhuInfo = async (req, res) => {
     return errorResponse(res, error.message);
   }
 };
-
 
 
 
