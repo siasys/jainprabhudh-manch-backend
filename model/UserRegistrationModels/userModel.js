@@ -195,6 +195,11 @@ const userSchema = new mongoose.Schema(
         default: 0,
       },
     ],
+    postCount: {
+      type: Number,
+      default: 0
+    },
+
     likedPosts: [
       {
         type: mongoose.Schema.Types.ObjectId,

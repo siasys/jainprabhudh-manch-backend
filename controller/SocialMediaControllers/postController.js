@@ -23,7 +23,7 @@ const Sangh = require('../../model/SanghModels/hierarchicalSanghModel');
 const { containsBadWords } = require("../../utils/filterBadWords");
 const CommentReport = require('../../model/SocialMediaModels/CommentReport');
 const Block = require('../../model/Block User/Block');
-const { moderateImage, moderateVideo } = require('../../utils/moderation');
+const { moderateImage } = require('../../utils/moderation');
 
 
 const createPost = [
@@ -56,6 +56,15 @@ const createPost = [
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
+    /* ✅ POST LIMIT CHECK (ONLY THIS STEP) */
+    if (user.postCount >= 3) {
+      return res.status(403).json({
+        error: "POST_LIMIT_REACHED",
+        message:
+          "You have reached your free post limit. You can add only 3 posts. To continue posting, please upgrade your plan."
+      });
+    }
+
     const media = [];
 
     // -----------------------------
@@ -85,23 +94,15 @@ const createPost = [
     // -----------------------------
 if (req.files?.video) {
   for (const file of req.files.video) {
-
-    // Convert S3 URL → CDN URL
     const cdnUrl = convertS3UrlToCDN(file.location);
-    console.log("Checking video moderation for:", cdnUrl);
 
-    // MODERATION using CDN URL (GET request)
-    const safe = await moderateVideo(cdnUrl);
-    if (!safe) {
-      return res.status(400).json({
-        error: "Your video contains unsafe or harmful content."
-      });
-    }
+    console.log("Skipping VIDEO moderation for:", cdnUrl);
 
-    // Save only safe moderated CDN URL
+    // ✅ Directly accept video (no moderation call)
     media.push({ url: cdnUrl, type: 'video' });
   }
 }
+
 
 
     // -----------------------------
@@ -180,6 +181,11 @@ if (req.files?.video) {
     else if (type === 'vyapar') postData.vyaparId = refId;
 
     const post = await Post.create(postData);
+    // ✅ increment postCount ONLY after successful post creation
+      await User.findByIdAndUpdate(
+        userId,
+        { $inc: { postCount: 1 } }
+      );
 
     if (!type) {
       user.posts.push(post._id);
@@ -1091,6 +1097,11 @@ const deletePost = asyncHandler(async (req, res) => {
   }
   // ✅ Delete post
   await post.deleteOne();
+  // ✅ Decrease user's post count safely
+  await User.findByIdAndUpdate(
+    post.user,
+    { $inc: { postCount: -1 } }
+  );
 
   // ✅ Clear cache (optional if used)
   await invalidateCache(`post:${postId}`);
