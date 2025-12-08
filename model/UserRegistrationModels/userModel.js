@@ -82,8 +82,8 @@ const userSchema = new mongoose.Schema(
     },
     phoneNumber: {
       type: String,
-       unique: true,
-         sparse: true,
+      //  unique: true,
+        sparse: true,
       // validate: {
       //   validator: function (v) {
       //     return /\d{10}/.test(v);
@@ -376,10 +376,10 @@ userSchema.pre('save', hashPassword);
 userSchema.methods.isPasswordMatched = isPasswordMatched;
 
 // Update indexes to match schema changes
-userSchema.index({ phoneNumber: 1 }, { unique: true, sparse: true });
-userSchema.index({ email: 1 }, { unique: true, sparse: true });
-userSchema.index({ jainAadharNumber: 1 }, { sparse: true });
-userSchema.index({ jainAadharStatus: 1 });
+// userSchema.index({ phoneNumber: 1 }, { unique: true, sparse: true });
+// userSchema.index({ email: 1 }, { unique: true, sparse: true });
+// userSchema.index({ jainAadharNumber: 1 }, { sparse: true });
+// userSchema.index({ jainAadharStatus: 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ createdAt: -1 });
 

@@ -56,7 +56,7 @@ const createPost = [
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    /* ✅ POST LIMIT CHECK (ONLY THIS STEP) */
+    /* POST LIMIT CHECK (ONLY THIS STEP) */
     if (user.postCount >= 3) {
       return res.status(403).json({
         error: "POST_LIMIT_REACHED",
