@@ -55,13 +55,18 @@ const createPost = [
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
+   
+    // ✅ ✅ ✅ POST LIMIT CHECK (ONLY business / sadhu / tirth)
+    const restrictedAccounts = ['business', 'sadhu', 'tirth'];
 
-    /* POST LIMIT CHECK (ONLY THIS STEP) */
-    if (user.postCount >= 3) {
+    if (
+      restrictedAccounts.includes(user.accountType) &&
+      user.postCount >= 3
+    ) {
       return res.status(403).json({
-        error: "POST_LIMIT_REACHED",
+        error: 'POST_LIMIT_REACHED',
         message:
-          "You have reached your free post limit. You can add only 3 posts. To continue posting, please upgrade your plan."
+          'You have reached your free post limit. You can add only 3 posts. To continue posting, please upgrade your plan.'
       });
     }
 
