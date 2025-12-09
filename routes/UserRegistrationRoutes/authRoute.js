@@ -33,7 +33,8 @@ const {
     sendOtp,
     registerFinalUser,
     resendOtp,
-    getUserActivityByType
+    getUserActivityByType,
+    getCitiesByMultipleStates
 } = require('../../controller/UserRegistrationControllers/userController');
 const { authMiddleware, checkAccess, authenticate } = require('../../middlewares/authMiddlewares');
 const upload = require('../../middlewares/upload');
@@ -86,6 +87,7 @@ router.post("/register-verify", verifyRegisterOtp);// ui me bhi api change krna 
 router.post("/verify-otp", verifyOtp);
 //router.get('/cities', getAllCities);
 router.get('/location', getCitiesByState);
+router.get('/location/multiple', getCitiesByMultipleStates);
 
 // Password reset
 router.post('/password-reset', requestPasswordResetMobile);

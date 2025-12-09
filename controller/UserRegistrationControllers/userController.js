@@ -1777,6 +1777,43 @@ const searchUsers = asyncHandler(async (req, res) => {
   res.status(200).json({ state, cities });
 });
 
+const getCitiesByMultipleStates = asyncHandler(async (req, res) => {
+  const { states } = req.query;
+
+  // ✅ Expect: states=Madhya Pradesh,Gujarat
+  if (!states) {
+    return res.status(400).json({
+      success: false,
+      message: 'States are required',
+    });
+  }
+
+  const stateArray = states.split(',').map(s => s.trim());
+
+  const result = {};
+  let allCities = [];
+
+  stateArray.forEach(stateName => {
+    if (stateCityData[stateName]) {
+      result[stateName] = stateCityData[stateName];
+      allCities = allCities.concat(stateCityData[stateName]);
+    }
+  });
+
+  if (Object.keys(result).length === 0) {
+    return res.status(404).json({
+      success: false,
+      message: 'No cities found for provided states',
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    states: result,      // ✅ state-wise
+    cities: allCities,   // ✅ combined list
+  });
+});
+
 module.exports = {
     registerUser,
     loginUser,
@@ -1809,5 +1846,6 @@ module.exports = {
     sendOtp,
     registerFinalUser,
     resendOtp,
-    getUserActivityByType
+    getUserActivityByType,
+    getCitiesByMultipleStates
 };
