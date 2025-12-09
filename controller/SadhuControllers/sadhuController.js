@@ -31,18 +31,18 @@ const submitSadhuInfo = async (req, res) => {
     // Handle file uploads
     if (req.files) {
       // ⬇️ MULTIPLE PHOTOS (entityPhoto)
-      if (req.files.entityPhoto) {
-        sadhuData.uploadImage = req.files.entityPhoto.map(photo =>
-          convertS3UrlToCDN(photo.location)
-        );
+        if (req.files?.uploadImage) {
+  sadhuData.uploadImage = req.files.uploadImage.map(file =>
+    convertS3UrlToCDN(file.location)
+  );
       }
 
       // ⬇️ MULTIPLE DOCUMENTS
-      if (req.files.entityDocuments) {
-        sadhuData.documents = req.files.entityDocuments.map(doc =>
-          convertS3UrlToCDN(doc.location)
-        );
-      }
+      // if (req.files.entityDocuments) {
+      //   sadhuData.documents = req.files.entityDocuments.map(doc =>
+      //     convertS3UrlToCDN(doc.location)
+      //   );
+      // }
     }
 
     // Save Sadhu
@@ -128,24 +128,43 @@ const updateSadhuProfile = async (req, res) => {
     const updates = req.body;
     const files = req.files;
 
-    // 🧩 Find the Sadhu record
     const sadhu = await Sadhu.findById(sadhuId);
     if (!sadhu) {
       return errorResponse(res, 'Sadhu not found');
     }
 
-    // 🖼️ Handle profile image update
-    if (files?.entityPhoto) {
-      if (sadhu.uploadImage) {
-        const key = extractS3KeyFromUrl(sadhu.uploadImage);
-        await s3Client.send(new DeleteObjectCommand({ Key: key }));
-      }
-      sadhu.uploadImage = files.entityPhoto[0].location;
-    }
+    /* ============================
+       ✅ HANDLE IMAGE UPDATE
+    ============================ */
 
-    // 🧾 Merge updates safely
+if (files?.uploadImage?.length) {
+  if (!Array.isArray(sadhu.uploadImage)) sadhu.uploadImage = [];
+
+  if (updates?.updateIndex !== undefined) {
+    // 📝 Replace image at index
+    const index = parseInt(updates.updateIndex, 10);
+    const oldImageUrl = sadhu.uploadImage[index];
+    if (oldImageUrl) {
+      const key = extractS3KeyFromUrl(oldImageUrl);
+      if (key) {
+        await s3Client.send(
+          new DeleteObjectCommand({ Bucket: process.env.AWS_BUCKET_NAME, Key: key })
+        );
+      }
+    }
+    sadhu.uploadImage[index] = convertS3UrlToCDN(files.uploadImage[0].location);
+  } else {
+    // 📝 Add new images at the end
+    files.uploadImage.forEach((file) => {
+      sadhu.uploadImage.push(convertS3UrlToCDN(file.location));
+    });
+  }
+}
+
+    /* ============================
+       ✅ MERGE BODY UPDATES
+    ============================ */
     for (const key in updates) {
-      // Nested objects ko handle karo
       if (typeof updates[key] === 'object' && !Array.isArray(updates[key])) {
         sadhu[key] = {
           ...(sadhu[key] || {}),
@@ -156,10 +175,10 @@ const updateSadhuProfile = async (req, res) => {
       }
     }
 
-    // ✅ Save updated record
     await sadhu.save();
 
     return successResponse(res, 'Profile updated successfully', sadhu);
+
   } catch (error) {
     console.error('Sadhu Update Error:', error);
     return errorResponse(res, error.message);

@@ -186,7 +186,7 @@ if (req.files?.video) {
     else if (type === 'vyapar') postData.vyaparId = refId;
 
     const post = await Post.create(postData);
-    // ✅ increment postCount ONLY after successful post creation
+    // increment postCount ONLY after successful post creation
       await User.findByIdAndUpdate(
         userId,
         { $inc: { postCount: 1 } }

@@ -19,6 +19,9 @@ const rojgarSchema = new mongoose.Schema(
     jobDescription: {
       type: String,
     },
+    jobType:{
+      type: String,
+    },
     education: {
       type: String,
     },

@@ -6,7 +6,7 @@ const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 // Create a new job
 exports.createJob = async (req, res) => {
   try {
-    const { user, jainAadhar, jobName, jobDescription, education, experience, salary, age, language, gender, location, jobContact, jobEmail } = req.body;
+    const { user, jainAadhar, jobName, jobType, jobDescription, education, experience, salary, age, language, gender, location, jobContact, jobEmail } = req.body;
 
     // Extract jobPost files from req.files
     let jobPost = [];
@@ -24,6 +24,7 @@ exports.createJob = async (req, res) => {
       jobName,
       jobDescription,
       education,
+      jobType,
       experience,
       salary,
       age,

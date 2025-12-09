@@ -258,7 +258,10 @@ module.exports.sangathanDocs = upload.fields([
   { name: 'coverImage', maxCount: 1 },
   { name: 'sanghImage', maxCount: 1 },
 ]);
-module.exports.memberPhoto = upload.single('memberPhoto');
+module.exports.memberUploads = upload.fields([
+  { name: 'memberPhoto', maxCount: 1 },
+  { name: 'memberScreenshot', maxCount: 1 }
+]);
 
 // Add specific Panch document upload configuration for all 5 members
 module.exports.panchGroupDocs = upload.fields([

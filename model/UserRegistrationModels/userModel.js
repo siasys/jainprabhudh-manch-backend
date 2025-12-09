@@ -83,7 +83,7 @@ const userSchema = new mongoose.Schema(
     phoneNumber: {
       type: String,
       //  unique: true,
-        sparse: true,
+      //  sparse: true,
       // validate: {
       //   validator: function (v) {
       //     return /\d{10}/.test(v);

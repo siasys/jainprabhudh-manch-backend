@@ -93,20 +93,54 @@ const sadhuSchema = new mongoose.Schema({
         type: String,
     },
     },
-    occupation:{
-        student:{
-             type: String, 
-        },
-        job:{
-            type: String, 
-        },
-        retired:{
-            type: String,
-        },
-        business:{
-           type: String, 
-        }
+   occupation: {
+  occupationType: {
+    type: String,
+    enum: ["student", "job", "retired", "business"],
+    required: true,
+  },
+
+  details: {
+    // ✅ Student details
+    degree: {
+      type: String,
+      default: "",
     },
+    institute: {
+      type: String,
+      default: "",
+    },
+
+    // ✅ Job details
+    companyName: {
+      type: String,
+      default: "",
+    },
+    position: {
+      type: String,
+      default: "",
+    },
+    jobAddress: {
+      type: String,
+      default: "",
+    },
+
+    // ✅ Business details
+    businessType: {
+      type: String,
+      default: "",
+    },
+    businessName: {
+      type: String,
+      default: "",
+    },
+    businessAddress: {
+      type: String,
+      default: "",
+    },
+  },
+},
+
     religiousConversion:{
    caste:{
         type: String,
@@ -119,7 +153,7 @@ const sadhuSchema = new mongoose.Schema({
     },
     },
     contactDetails: {
-          country: {
+        country: {
             type: String,
             default: ''
         },

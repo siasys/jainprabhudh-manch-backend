@@ -82,20 +82,13 @@ router.patch('/member-status', updateMemberStatus);
 router.put('/update/:id', upload.sangathanDocs, updateHierarchicalSangh);
 
 // Member management routes with updated permissions
-router.post('/:sanghId/members', upload.single('memberPhoto'), addSanghMember);
+router.post('/:sanghId/members', upload.memberUploads, addSanghMember);
 router.delete('/:sanghId/sangh-team/:memberId', deleteSanghTeamMember);
 router.delete('/:sanghId/members/:memberId', isOfficeBearer,
     //validateSanghAccess,
     removeSanghMember);
 
-router.put('/:sanghId/members/:memberId',
-    //isOfficeBearer,
-    upload.fields([
-        { name: 'memberPhoto', maxCount: 1 }
-    ]),
-    //validateSanghAccess,
-    updateMemberDetails
-);
+router.put('/:sanghId/members/:memberId', upload.memberUploads, updateMemberDetails);
 
 router.get('/:sanghId/members', 
     validateSanghAccess,

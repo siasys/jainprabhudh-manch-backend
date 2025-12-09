@@ -56,6 +56,9 @@ const officeBearerSchema = new mongoose.Schema({
         enum: ['pending', 'paid', 'overdue'],
         default: 'pending'
     },
+    memberScreenshot: {
+    type: String,
+    },
     termEndDate: {
         type: Date,
         default: () => new Date(Date.now() + (2 * 365 * 24 * 60 * 60 * 1000)),
@@ -144,6 +147,9 @@ const memberSchema = new mongoose.Schema({
     phoneNumber: String,
     document: String,
     userImage: String,
+    memberScreenshot: {
+    type: String,
+    },
     address: {
         street: String,
         city: String,

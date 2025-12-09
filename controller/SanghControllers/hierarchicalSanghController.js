@@ -1088,6 +1088,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
           //   });
           //   continue;
           // }
+          const paymentStatus = member.paymentStatus || 'pending';
 
           const location = user?.jainAadharApplication?.location || {};
           const contact = user?.jainAadharApplication?.contactDetails || {};
@@ -1095,7 +1096,13 @@ const addSanghMember = asyncHandler(async (req, res) => {
             (req.file?.location || req.file?.path) ||
             user?.jainAadharApplication?.userProfile  ||
             user?.profileImage || '';
-
+          const rawScreenshot =
+            req.files?.memberScreenshot?.[0]?.location ||
+            req.files?.memberScreenshot?.[0]?.path ||
+            '';
+            const memberScreenshot = rawScreenshot
+              ? convertS3UrlToCDN(rawScreenshot)
+              : '';
             const userImage = rawImage ? convertS3UrlToCDN(rawImage) : '';
           const newMember = {
             userId: user._id,
@@ -1105,6 +1112,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             phoneNumber: contact.number || user.phoneNumber,
             postMember: member.postMember || '',
             userImage,
+             memberScreenshot,
             address: {
               street: location.address || '',
               city: location.city || '',
@@ -1112,7 +1120,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
               state: location.state || '',
               pincode: location.pinCode || ''
             },
-            paymentStatus: paidRecord ? 'paid' : 'pending',
+            paymentStatus,
             addedBy: req.user._id,
             addedAt: new Date(),
             status: 'inactive',
@@ -1158,7 +1166,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
     }
 
     // ======= SINGLE MEMBER ADDITION =======
-    const { jainAadharNumber, postMember,level, sanghType } = req.body;
+    const { jainAadharNumber, postMember,level, sanghType,paymentStatus  } = req.body;
 
     // ✅ Parse localSangh if needed
     if (req.body.localSangh && typeof req.body.localSangh === 'string') {
@@ -1188,12 +1196,16 @@ const addSanghMember = asyncHandler(async (req, res) => {
     (req.file?.location || req.file?.path) ||
     user?.jainAadharApplication?.userProfile  ||
     user?.profileImage || '';
-    const paidRecord = await SanghPayment.findOne({
-      memberId: user._id,
-      sanghId: sangh._id,
-      status: 'paid'
-    });
     const userImage = rawImage ? convertS3UrlToCDN(rawImage) : '';
+    const rawScreenshot =
+      req.files?.memberScreenshot?.[0]?.location ||
+      req.files?.memberScreenshot?.[0]?.path ||
+      '';
+
+    const memberScreenshot = rawScreenshot
+      ? convertS3UrlToCDN(rawScreenshot)
+      : '';
+
     const newMember = {
       userId: user._id,
       name: user?.jainAadharApplication?.name || 'Unknown',
@@ -1204,6 +1216,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
       level: level || '',
       sanghType: sanghType || 'main',
       userImage,
+       memberScreenshot,
       address: {
         street: location.address || '',
         city: location.city || '',
@@ -1211,7 +1224,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
         state: location.state || '',
         pincode: location.pinCode || ''
       },
-      paymentStatus: paidRecord ? 'paid' : 'pending',
+      paymentStatus,
       localSangh: req.body.localSangh?.sanghId ? {
             state: req.body.localSangh.state || '',
             district: req.body.localSangh.district || '',
@@ -1358,34 +1371,65 @@ const updateMemberDetails = asyncHandler(async (req, res) => {
       return errorResponse(res, 'Member not found', 404);
     }
 
-    // ===  Handle photo update with CDN conversion ===
-    if (req.files && req.files['memberPhoto']) {
-      if (sangh.members[memberIndex].userImage) {
-        await deleteS3File(sangh.members[memberIndex].userImage);
+    const member = sangh.members[memberIndex];
+
+    /* =======================
+       ✅ MEMBER PHOTO UPDATE
+    ======================= */
+    if (req.files?.memberPhoto) {
+      if (member.userImage) {
+        await deleteS3File(member.userImage);
       }
 
-      const s3Url = req.files['memberPhoto'][0].location;
+      const s3Url = req.files.memberPhoto[0].location;
       updates.userImage = convertS3UrlToCDN(s3Url);
     }
 
-    // === Update address fields ===
-    sangh.members[memberIndex].address = {
-      ...sangh.members[memberIndex].address,
-      street: updates.street || sangh.members[memberIndex].address?.street,
-      district: updates.district || sangh.members[memberIndex].address?.district,
-      state: updates.state || sangh.members[memberIndex].address?.state,
-      pincode: updates.pincode || sangh.members[memberIndex].address?.pincode,
+    /* =======================
+       ✅ PAYMENT SCREENSHOT UPDATE
+       (when pending → paid)
+    ======================= */
+    if (req.files?.memberScreenshot) {
+      if (member.memberScreenshot) {
+        await deleteS3File(member.memberScreenshot);
+      }
+
+      const screenshotS3Url = req.files.memberScreenshot[0].location;
+      updates.memberScreenshot = convertS3UrlToCDN(screenshotS3Url);
+    }
+
+    /* =======================
+       ✅ ADDRESS UPDATE
+    ======================= */
+    member.address = {
+      ...member.address,
+      street: updates.street ?? member.address?.street,
+      district: updates.district ?? member.address?.district,
+      state: updates.state ?? member.address?.state,
+      pincode: updates.pincode ?? member.address?.pincode,
     };
 
-    // ===  Update main fields ===
-    Object.assign(sangh.members[memberIndex], {
-      ...sangh.members[memberIndex].toObject(),
-      ...updates,
-      name: updates.name || sangh.members[memberIndex].name,
-    });
+    /* =======================
+       ✅ MAIN FIELD UPDATE
+       paymentStatus frontend se
+    ======================= */
+   if (Array.isArray(updates.paymentStatus)) {
+  updates.paymentStatus = updates.paymentStatus[updates.paymentStatus.length - 1];
+}
+
+Object.assign(member, {
+  ...updates,
+  name: updates.name || member.name,
+  paymentStatus: updates.paymentStatus ?? member.paymentStatus,
+});
 
     await sangh.save();
-    return successResponse(res, sangh, 'Member details updated successfully');
+
+    return successResponse(
+      res,
+      member,
+      'Member details updated successfully'
+    );
   } catch (error) {
     if (req.files) {
       await deleteS3Files(req.files);
@@ -1393,6 +1437,7 @@ const updateMemberDetails = asyncHandler(async (req, res) => {
     return errorResponse(res, error.message, 500);
   }
 });
+
 
 // Get Sangh members
 const getSanghMembers = asyncHandler(async (req, res) => {
