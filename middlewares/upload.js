@@ -262,7 +262,9 @@ module.exports.memberUploads = upload.fields([
   { name: 'memberPhoto', maxCount: 1 },
   { name: 'memberScreenshot', maxCount: 1 }
 ]);
-
+module.exports.boostUploads = upload.fields([
+  { name: "paymentScreenshot", maxCount: 1 }
+]);
 // Add specific Panch document upload configuration for all 5 members
 module.exports.panchGroupDocs = upload.fields([
   { name: 'members[0].jainAadharPhoto', maxCount: 1 },

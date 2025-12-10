@@ -45,6 +45,16 @@ const postSchema = new mongoose.Schema(
         type: String
       }
     }],
+    // isBoosted: {
+    //   type: Boolean,
+    // },
+
+    // activeBoost: {
+    //   type: mongoose.Schema.Types.ObjectId,
+    //   ref: "BoostPlan",
+    //   default: null
+    // },
+
     postType: { type: String, enum: ['text', 'media', 'poll'], default: 'text' },
     // Poll fields
     pollQuestion: { type: String },

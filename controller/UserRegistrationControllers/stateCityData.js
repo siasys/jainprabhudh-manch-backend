@@ -82,11 +82,11 @@ module.exports = {
     "Harda","Narmdapuram(Hoshangabad)", "Indore", "Itarsi", "Jabalpur","Katni","Jhabua", "Khajuraho", "Khandwa", "Khargone",
     "Mandla", "Mandsaur", "Morena","Mauganj","Maihar","Murwara", "Narsinghpur", "Narsinghgarh","Niwari","Narwar", "Neemuch", "Nowgong",
     "Orchha", "Panna","Pandhurna","Raisen", "Rajgarh", "Ratlam", "Rewa", "Sagar", "Sarangpur", "Satna","Sidhi","Singrauli", "Sehore", "Seoni",
-    "Shahdol", "Shajapur", "Sheopur", "Shivpuri","TikamGrah", "Ujjain","Umariya", "Vidisha"
+    "Shahdol", "Shajapur", "Sheopur", "Shivpuri", "TikamGrah", "Ujjain","Umariya", "Vidisha"
   ],
   "Maharashtra": [
   "Ahmadnagar", "Akola", "Amravati", "Aurangabad", "Bhandara", "Bhusawal", "Bid", "Buldhana",
-  "Chandrapur", "Daulatabad", "Dhule", "Jalgaon", "Kalyan", "Karli", "Kolhapur", "Mahabaleshwar",
+  "Chandrapur", "Daulatabad", "Dhule","Hingoli", "Jalgaon", "Kalyan", "Karli", "Kolhapur", "Mahabaleshwar",
   "Malegaon", "Matheran", "Mumbai", "Nagpur", "Nanded", "Nashik", "Osmanabad", "Pandharpur",
   "Parbhani", "Pune", "Ratnagiri", "Sangli", "Satara", "Sevagram", "Solapur", "Thane",
   "Ulhasnagar", "Vasai-Virar", "Wardha", "Yavatmal"

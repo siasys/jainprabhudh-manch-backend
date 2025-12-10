@@ -2,6 +2,7 @@ const express = require("express");
 const http = require("http");
 const dbConnect = require("./config/dbConnect");
 const app = express();
+// require('./services/boostExpiry'); 
 const path = require('path')
 const dotenv = require("dotenv");
 const helmet = require('helmet');
@@ -63,8 +64,8 @@ const deleteAccountRoutes = require('./routes/Account delete/deleteAccountRoutes
 const projectRoutes = require('./routes/SanghRoutes/projectRoutes');
 const activityRoute = require('./routes/Activities/activityRoutes');
 const scholarshipRoute = require('./routes/Scholarship/scholarshipRoutes');
+const boostRoute = require('./routes/BoostPlan/boostRoutes');
 //const appVersionRoute = require('./routes/Update apk/appVersion');
-
 app.set('trust proxy',1);
 // connect to databse
 dbConnect();
@@ -150,6 +151,9 @@ app.use('/api/inqury', inquiryRoutes);
 app.use('/api', projectRoutes);
 // uplaod biolers
 app.use('/api/bailors', bailorRoutes);
+
+// Post boostup 
+app.use('/api/boost', boostRoute);
 
 // Activity Api
 app.use('/api/activity', activityRoute);

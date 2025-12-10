@@ -34,9 +34,9 @@ const userSchema = new mongoose.Schema(
      },
     email: {
     type: String,
-    unique: true,
-    trim: true,
-    sparse: true,
+    // unique: true,
+    // trim: true,
+    // sparse: true,
     lowercase: true,
     validate: {
       validator: function(v) {
@@ -199,7 +199,22 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0
     },
-
+    // activeBoosts: [
+    //   {
+    //     type: mongoose.Schema.Types.ObjectId,
+    //     ref: "BoostPlan"
+    //   }
+    // ],
+    // isBoostActive: {
+    //   type: Boolean,
+    //   default: false
+    // },
+    // boosts: [
+    //   {
+    //     type: mongoose.Schema.Types.ObjectId,
+    //     ref: "BoostPlan"
+    //   }
+    // ],
     likedPosts: [
       {
         type: mongoose.Schema.Types.ObjectId,
