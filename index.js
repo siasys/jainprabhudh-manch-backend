@@ -2,7 +2,7 @@ const express = require("express");
 const http = require("http");
 const dbConnect = require("./config/dbConnect");
 const app = express();
-// require('./services/boostExpiry'); 
+require('./services/boostExpiry'); 
 const path = require('path')
 const dotenv = require("dotenv");
 const helmet = require('helmet');

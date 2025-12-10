@@ -75,21 +75,12 @@ const createPost = [
     // -----------------------------
     // IMAGE MODERATION + S3 UPLOAD
     // -----------------------------
-  if (req.files?.image) {
+ if (req.files?.image) {
   for (const file of req.files.image) {
-
     // Convert directly to CDN URL
     const cdnUrl = convertS3UrlToCDN(file.location);
-  console.log("Checking video moderation for:", cdnUrl);
-    // MODERATION on CDN URL
-    const safe = await moderateImage(cdnUrl);
-    if (!safe) {
-      return res.status(400).json({
-        error: "Your image contains unsafe or harmful content."
-      });
-    }
 
-    // Push only if safe
+    // Push directly without moderation
     media.push({ url: cdnUrl, type: 'image' });
   }
 }
