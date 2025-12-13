@@ -9,7 +9,22 @@ const JainGranthSchema = new mongoose.Schema(
     title: {
       type: String,
     },
+    jainShravakId:{
+        type: String
+    },
     description: {
+      type: String,
+    },
+    mulJain: {
+      type: String,
+    },
+    panth: {
+      type: String,
+    },
+    author: {
+      type: String,
+    },
+    publisher:{
       type: String,
     },
     fileUrl: {

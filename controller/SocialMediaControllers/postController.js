@@ -24,6 +24,7 @@ const { containsBadWords } = require("../../utils/filterBadWords");
 const CommentReport = require('../../model/SocialMediaModels/CommentReport');
 const Block = require('../../model/Block User/Block');
 const { moderateImage } = require('../../utils/moderation');
+const BoostPlan = require('../../model/BoostPlan/BoostPlan')
 
 
 const createPost = [
@@ -55,27 +56,29 @@ const createPost = [
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
-   
-    // ✅ ✅ ✅ POST LIMIT CHECK (ONLY business / sadhu / tirth)
-    const restrictedAccounts = ['business', 'sadhu', 'tirth'];
 
-    if (
-      restrictedAccounts.includes(user.accountType) &&
-      user.postCount >= 3
-    ) {
-      return res.status(403).json({
-        error: 'POST_LIMIT_REACHED',
-        message:
-          'You have reached your free post limit. You can add only 3 posts. To continue posting, please upgrade your plan.'
-      });
-    }
+    // ✅ POST LIMIT CHECK (ONLY business / sadhu / tirth)
+    const restrictedAccounts = ['business', 'sadhu', 'tirth'];
+      if (
+        restrictedAccounts.includes(user.accountType) &&
+        user.postCount >= 3 &&
+        !user.isBoostActive
+      ) {
+        return res.status(403).json({
+          error: 'BOOST_REQUIRED',
+          message:
+            'You have reached your free post limit. Please boost to continue posting.'
+        });
+      }
+
 
     const media = [];
 
     // -----------------------------
     // IMAGE MODERATION + S3 UPLOAD
     // -----------------------------
- if (req.files?.image) {
+
+if (req.files?.image) {
   for (const file of req.files.image) {
     // Convert directly to CDN URL
     const cdnUrl = convertS3UrlToCDN(file.location);
@@ -176,7 +179,39 @@ if (req.files?.video) {
     else if (type === 'sadhu') postData.sadhuId = refId;
     else if (type === 'vyapar') postData.vyaparId = refId;
 
+
+// ASSIGN ACTIVE BOOST TO POST
+let activeBoostId = null;
+if (user.activeBoosts && user.activeBoosts.length > 0) {
+  // Find first boost which is active AND not already used
+  const unusedBoost = await BoostPlan.findOne({
+  _id: { $in: user.activeBoosts },
+  $or: [
+    { post: { $exists: false } },
+    { post: null }
+  ]
+});
+  if (!unusedBoost) {
+    return res.status(403).json({
+      error: "BOOST_ALREADY_USED",
+      message: "All your active boosts are already used for posts. Please purchase a new boost to continue posting."
+    });
+  }
+
+  activeBoostId = unusedBoost._id;
+  postData.activeBoost = activeBoostId;
+  postData.isBoosted = true;
+}
+
     const post = await Post.create(postData);
+
+// -------------------------
+// LINK POST TO BOOST PLAN
+// -------------------------
+if (activeBoostId) {
+  await BoostPlan.findByIdAndUpdate(activeBoostId, { post: post._id });
+}
+
     // increment postCount ONLY after successful post creation
       await User.findByIdAndUpdate(
         userId,
@@ -189,6 +224,16 @@ if (req.files?.video) {
     } else if (type === 'sangh' || type === 'panch') {
       await Sangh.findByIdAndUpdate(refId, { $push: { posts: post._id } });
     }
+    // -------------------------
+    // OPTIONAL: REMOVE EXPIRED BOOSTS
+    // -------------------------
+    const now = new Date();
+    user.activeBoosts = user.activeBoosts.filter(async (boostId) => {
+      const boost = await BoostPlan.findById(boostId);
+      return boost && boost.endDate > now;
+    });
+    if (user.activeBoosts.length === 0) user.isBoostActive = false;
+    await user.save();
 
     await invalidateCache('combinedFeed:*');
     await invalidateCache('combinedFeed:firstPage:limit:10');
@@ -196,7 +241,6 @@ if (req.files?.video) {
     res.status(201).json(post);
   })
 ];
-
 
 const voteOnPoll = async (req, res) => {
   try {
@@ -587,9 +631,6 @@ const getPostById = asyncHandler(async (req, res) => {
 //     return errorResponse(res, 'Failed to fetch posts', 500, error.message);
 //   }
 // };
-
-// Get all post new loading logic
-// Get all post new loading logic
 const getAllPosts = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 5;
@@ -597,87 +638,166 @@ const getAllPosts = async (req, res) => {
     const userId = req.query.userId;
 
     const user = await User.findById(userId).lean();
-    if (!user) {
-      return successResponse(
-        res,
-        { posts: [], pagination: { nextCursor: null, hasMore: false } },
-        "User not found"
-      );
-    }
+    if (!user)
+      return successResponse(res, { posts: [], pagination: { nextCursor: null, hasMore: false } }, "User not found");
 
-    // ⭐ GET BLOCK RELATIONS
-    const blockRelations = await Block.find({
+    // ------------------------------
+    // BLOCKED USERS & REPORTED POSTS
+    // ------------------------------
+    const blockedUsers = (await Block.find({
       $or: [{ blocker: userId }, { blocked: userId }]
-    }).lean();
-
-    const blockedUsers = blockRelations.map(rel =>
-      rel.blocker.toString() === userId.toString()
-        ? rel.blocked.toString()
-        : rel.blocker.toString()
+    }).lean()).map(rel =>
+      rel.blocker.toString() === userId ? rel.blocked.toString() : rel.blocker.toString()
     );
 
-    // ⭐ HIDE REPORTED POSTS
-    const reports = await Report.find({
+    const reportedPostIds = (await Report.find({
       reportedBy: userId,
       postId: { $ne: null }
-    }).select("postId");
+    }).select("postId").lean()).map(r => r.postId.toString());
 
-    const reportedPostIds = reports
-      .map(r => r.postId?.toString())
-      .filter(Boolean);
-
-    // ⭐ SAME LOGIC AS VIDEO API (FINAL FIX)
-    const query = {
+    // ------------------------------
+    // NORMAL POSTS (excluding boosted)
+    // ------------------------------
+    const normalQuery = {
       _id: { $nin: reportedPostIds },
-      user: { $nin: blockedUsers }, // 🔥 SAME LOGIC AS VIDEO POSTS
+      user: { $nin: blockedUsers },
+
+      // ❗ Show ONLY posts which were never boosted OR expired boosts
+      $or: [
+        { isBoosted: { $exists: false } },
+        { isBoosted: false, activeBoost: { $exists: false } }
+      ],
+
       ...(cursor ? { createdAt: { $lt: new Date(cursor) } } : {})
     };
 
-    let postsRaw = await Post.find(query)
-      .populate(
-        "user",
-        "firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName tirthName"
-      )
+    let normalPosts = await Post.find(normalQuery)
+      .populate("user", "firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName tirthName")
       .populate("sanghId", "name sanghImage")
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
 
-    // Remove deactivated users 
-    postsRaw = postsRaw.filter(
-      post => post.user?.accountStatus !== "deactivated"
-    );
+    // Remove deactivated users
+    normalPosts = normalPosts.filter(p => p.user?.accountStatus !== "deactivated");
 
-    // ⭐ Poll expiry logic
+    // REMOVE EXPIRED POLLS
     const now = new Date();
-    postsRaw = postsRaw.filter(post => {
-      if (post.postType !== "poll") return true;
-      if (post.pollDuration === "Always") return true;
+    normalPosts = normalPosts.filter(p => {
+      if (p.postType !== "poll") return true;
+      if (p.pollDuration === "Always") return true;
 
-      const createdAt = new Date(post.createdAt);
-      let expiry;
+      const createdAt = new Date(p.createdAt);
+      const durations = { "1day": 1, "1week": 7, "1month": 30 };
 
-      switch (post.pollDuration) {
-        case "1day":
-          expiry = new Date(createdAt.getTime() + 1 * 24 * 60 * 60 * 1000);
-          break;
-        case "1week":
-          expiry = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
-          break;
-        case "1month":
-          expiry = new Date(createdAt.getTime() + 30 * 24 * 60 * 60 * 1000);
-          break;
-        default:
-          return true;
-      }
+      if (!durations[p.pollDuration]) return true;
+
+      const expiry = new Date(
+        createdAt.getTime() + durations[p.pollDuration] * 24 * 60 * 60 * 1000
+      );
       return now <= expiry;
     });
 
-    // ⭐ Hashtag score logic
+    // ------------------------------
+    // ACTIVE BOOST PLANS
+    // ------------------------------
+    const activeBoosts = await BoostPlan.find({
+      status: "active",
+      paymentStatus: "verified",
+      startDate: { $lte: new Date() },
+      endDate: { $gte: new Date() }
+    }).populate({
+      path: "post",
+      populate: {
+        path: "user",
+        select: "firstName lastName fullName sadhuName tirthName accountType profilePicture accountStatus"
+      }
+    }).lean();
+
+    const userState = user.location?.state;
+    const userDistrict = user.location?.district;
+    const userCity = user.location?.city;
+
+    // ------------------------------
+    // FILTER BOOSTS BY LOCATION + ACTIVE BOOST
+    // ------------------------------
+    let targetedBoosts = activeBoosts.filter(boost => {
+      if (!boost.post) return false;
+
+      // Post must still be boosted
+      if (boost.post.isBoosted !== true) return false;
+      if (!boost.post.activeBoost) return false;
+      if (boost.post.activeBoost.toString() !== boost._id.toString()) return false;
+
+      const t = boost.targeting;
+      const isSelf = boost.post.user._id.toString() === userId.toString();
+
+      const match =
+        t?.states?.includes(userState) ||
+        t?.districts?.includes(userDistrict) ||
+        t?.cities?.includes(userCity);
+
+      return isSelf || match;
+    });
+
+    // REMOVE duplicates
+    const normalIds = new Set(normalPosts.map(p => p._id.toString()));
+    targetedBoosts = targetedBoosts.filter(b => !normalIds.has(b.post._id.toString()));
+
+    // ---------------------------------------
+    // 🟩 SEPARATE BOOSTED POSTS:
+    // 1. boostedPostsForSelf → creator sees immediately (normal feed)
+    // 2. boostedPostsForOthers → others see after 4 posts
+    // ---------------------------------------
+   let boostedPostsForSelf = [];
+let boostedPostsForOthers = [];
+
+targetedBoosts.forEach(b => {
+  const post = { ...b.post };
+  if (post.user._id.toString() === userId.toString()) {
+    boostedPostsForSelf.push(post); // normal feed me merge
+  } else {
+    boostedPostsForOthers.push({ ...post, isBoostSlot: true });
+  }
+});
+
+// Merge creator's boosted posts into normal feed
+normalPosts = [...boostedPostsForSelf, ...normalPosts];
+normalPosts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+const boostedPosts = boostedPostsForOthers;
+
+    // ------------------------------
+    // INSERT BOOST AFTER EVERY 4 POSTS
+    // ------------------------------
+    let finalFeed = [];
+    let normalCount = 0;
+    let boostIndex = 0;
+
+    for (let i = 0; i < normalPosts.length; i++) {
+      finalFeed.push(normalPosts[i]);
+      normalCount++;
+
+      if (normalCount === 4 && boostIndex < boostedPosts.length) {
+        finalFeed.push(boostedPosts[boostIndex]);
+        boostIndex++;
+        normalCount = 0;
+      }
+    }
+
+    // Add remaining boosted posts at end
+    while (boostIndex < boostedPosts.length) {
+      finalFeed.push(boostedPosts[boostIndex]);
+      boostIndex++;
+    }
+
+    // ------------------------------
+    // HASHTAG SCORE
+    // ------------------------------
     const userHashtags = user.hashtags || [];
-    postsRaw = postsRaw.map(post => {
+    finalFeed = finalFeed.map(post => {
       let score = 0;
-      if (post.hashtags?.length && userHashtags?.length) {
+      if (post.hashtags?.length && userHashtags.length) {
         post.hashtags.forEach(tag => {
           const match = userHashtags.find(h => h.name === tag);
           if (match) score += match.score;
@@ -686,29 +806,28 @@ const getAllPosts = async (req, res) => {
       return { ...post, _score: score };
     });
 
+    // ------------------------------
+    // PAGINATION
+    // ------------------------------
     const nextCursor =
-      postsRaw.length > 0
-        ? postsRaw[postsRaw.length - 1].createdAt.toISOString()
+      normalPosts.length > 0
+        ? normalPosts[normalPosts.length - 1].createdAt.toISOString()
         : null;
 
     return successResponse(
       res,
       {
-        posts: postsRaw,
-        pagination: {
-          nextCursor,
-          hasMore: postsRaw.length === limit
-        }
+        posts: finalFeed,
+        pagination: { nextCursor, hasMore: normalPosts.length === limit }
       },
       "All posts fetched successfully"
     );
-  } catch (error) {
-    console.error("❌ Error:", error);
-    return errorResponse(res, "Failed to fetch posts", 500, error.message);
+
+  } catch (err) {
+    console.error("❌ Error:", err);
+    return errorResponse(res, "Failed to fetch posts", 500, err.message);
   }
 };
-
-
 
 const getAllVideoPosts = async (req, res) => {
   try {
@@ -716,70 +835,112 @@ const getAllVideoPosts = async (req, res) => {
     const cursor = req.query.cursor;
     const userId = req.query.userId;
 
-    // ⭐ 1. Find User
+    // 1️⃣ Find user
     const user = await User.findById(userId).lean();
-    if (!user) {
-      return successResponse(
-        res,
-        {
-          posts: [],
-          pagination: { nextCursor: null, hasMore: false }
-        },
-        "User not found"
-      );
-    }
-   const blockRelations = await Block.find({
-      $or: [
-        { blocker: userId },
-        { blocked: userId }
-      ]
-    }).lean();
+    if (!user)
+      return successResponse(res, { posts: [], pagination: { nextCursor: null, hasMore: false } }, "User not found");
 
-    const blockedUsers = blockRelations.map(rel =>
-      rel.blocker.toString() === userId
-        ? rel.blocked.toString()
-        : rel.blocker.toString()
-    );    // ⭐ 2. Fetch user's hashtags
-    const interestDoc = await UserInterest.findOne({ user: userId }).lean();
-    const userHashtags = interestDoc ? interestDoc.hashtags : [];
+    // 2️⃣ Blocked users
+    const blockedUsers = (await Block.find({ $or: [{ blocker: userId }, { blocked: userId }] }).lean())
+      .map(rel => rel.blocker.toString() === userId ? rel.blocked.toString() : rel.blocker.toString());
 
-    // ⭐ 3. Fetch Posts Reported by THIS User -> hide these posts
-    const reports = await Report.find({
-      reportedBy: userId,
-      postId: { $ne: null }
-    }).select("postId");
+    // 3️⃣ Reported posts
+    const reportedPostIds = (await Report.find({ reportedBy: userId, postId: { $ne: null } }).select("postId").lean())
+      .map(r => r.postId.toString());
 
-    const reportedPostIds = reports
-      .map(r => r.postId?.toString())
-      .filter(Boolean);
-
-    // console.log("🚫 Hide these reported posts:", reportedPostIds);
-
-    // ⭐ 4. Query Logic (Same as all posts)
-    const query = {
+    // 4️⃣ NORMAL VIDEO POSTS
+    const normalQuery = {
       _id: { $nin: reportedPostIds },
       "media.type": "video",
-      user: { $nin: blockedUsers }, // BLOCKED USERS' VIDEOS HIDE
+      user: { $nin: blockedUsers },
+
+      $or: [
+        // Post was never boosted
+        { isBoosted: { $exists: false } },
+
+        // Post was boosted before but now expired (isBoosted false + activeBoost removed)
+        { isBoosted: false, activeBoost: { $exists: false } }
+      ],
+
       ...(cursor ? { createdAt: { $lt: new Date(cursor) } } : {})
     };
-    // ⭐ 5. Fetch Posts
-    let postsRaw = await Post.find(query)
-      .populate(
-        "user",
-        "firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName tirthName"
-      )
+
+    let normalPosts = await Post.find(normalQuery)
+      .populate("user", "firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName tirthName")
       .populate("sanghId", "name sanghImage")
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
 
-    // 6. Filter Out Deactivated Users
-    postsRaw = postsRaw.filter(
-      post => post.user?.accountStatus !== "deactivated"
-    );
+    normalPosts = normalPosts.filter(p => p.user?.accountStatus !== "deactivated");
 
-    //  7. Hashtag Score (same as all posts)
-    let posts = postsRaw.map(post => {
+    // 5️⃣ ACTIVE BOOSTED POSTS
+    const activeBoosts = await BoostPlan.find({
+      status: "active",
+      paymentStatus: "verified",
+      startDate: { $lte: new Date() },
+      endDate: { $gte: new Date() },
+    }).populate({
+      path: "post",
+      populate: { path: "user", select: "firstName lastName fullName sadhuName tirthName accountType profilePicture accountStatus" }
+    }).lean();
+
+    const userState = user.location?.state;
+    const userDistrict = user.location?.district;
+    const userCity = user.location?.city;
+
+    // 6️⃣ Filter boosts by location + self-post
+   let targetedBoosts = activeBoosts.filter(boost => {
+  if (!boost.post) return false;
+
+  //  Video only
+  if (boost.post.media?.[0]?.type !== "video") return false;
+
+  //  Strict boost checks (IMPORTANT)
+  if (boost.post.isBoosted !== true) return false;
+  if (!boost.post.activeBoost) return false;
+  if (boost.post.activeBoost.toString() !== boost._id.toString()) return false;
+
+  const isSelf = boost.post.user._id.toString() === userId.toString();
+  const t = boost.targeting;
+
+  const match =
+    t?.states?.includes(userState) ||
+    t?.districts?.includes(userDistrict) ||
+    t?.cities?.includes(userCity);
+
+  return isSelf || match;
+});
+
+
+    const normalIds = new Set(normalPosts.map(p => p._id.toString()));
+    targetedBoosts = targetedBoosts.filter(b => !normalIds.has(b.post._id.toString()));
+
+    const boostedPosts = targetedBoosts.map(b => ({ ...b.post, isBoostSlot: true }));
+
+    // 7️⃣ Insert boosted after every 4 normal posts
+    let finalFeed = [];
+    let normalCount = 0;
+    let boostIndex = 0;
+
+    for (let i = 0; i < normalPosts.length; i++) {
+      finalFeed.push(normalPosts[i]);
+      normalCount++;
+      if (normalCount === 4 && boostIndex < boostedPosts.length) {
+        finalFeed.push(boostedPosts[boostIndex]);
+        boostIndex++;
+        normalCount = 0;
+      }
+    }
+
+    while (boostIndex < boostedPosts.length) {
+      finalFeed.push(boostedPosts[boostIndex]);
+      boostIndex++;
+    }
+
+    // 8️⃣ Hashtag score
+    const userHashtags = (await UserInterest.findOne({ user: userId }).lean())?.hashtags || [];
+    finalFeed = finalFeed.map(post => {
       let score = 0;
       if (post.hashtags?.length) {
         post.hashtags.forEach(tag => {
@@ -790,24 +951,17 @@ const getAllVideoPosts = async (req, res) => {
       return { ...post, _score: score };
     });
 
-    // ⭐ 8. Pagination Cursor
-    const nextCursor =
-      posts.length > 0
-        ? posts[posts.length - 1].createdAt.toISOString()
-        : null;
+    // 9️⃣ Pagination cursor
+    const nextCursor = normalPosts.length > 0 ? normalPosts[normalPosts.length - 1].createdAt.toISOString() : null;
 
-    return successResponse(
-      res,
-      {
-        posts,
-        pagination: { nextCursor, hasMore: posts.length === limit }
-      },
-      "Video posts fetched successfully"
-    );
+    return successResponse(res, {
+      posts: finalFeed,
+      pagination: { nextCursor, hasMore: normalPosts.length === limit },
+    }, "Video posts fetched successfully");
 
-  } catch (error) {
-    console.error("❌ Error in getAllVideoPosts:", error);
-    return errorResponse(res, "Failed to fetch video posts", 500, error.message);
+  } catch (err) {
+    console.error("❌ Error in getAllVideoPosts:", err);
+    return errorResponse(res, "Failed to fetch video posts", 500, err.message);
   }
 };
 

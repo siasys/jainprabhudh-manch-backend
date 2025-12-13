@@ -199,22 +199,22 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0
     },
-    // activeBoosts: [
-    //   {
-    //     type: mongoose.Schema.Types.ObjectId,
-    //     ref: "BoostPlan"
-    //   }
-    // ],
-    // isBoostActive: {
-    //   type: Boolean,
-    //   default: false
-    // },
-    // boosts: [
-    //   {
-    //     type: mongoose.Schema.Types.ObjectId,
-    //     ref: "BoostPlan"
-    //   }
-    // ],
+    activeBoosts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "BoostPlan"
+      }
+    ],
+    isBoostActive: {
+      type: Boolean,
+      default: false
+    },
+    boosts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "BoostPlan"
+      }
+    ],
     likedPosts: [
       {
         type: mongoose.Schema.Types.ObjectId,

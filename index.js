@@ -34,7 +34,7 @@ const groupChatRoutes = require('./routes/SocialMediaRoutes/groupChatRoutes');
 const rojgarRoutes = require('./routes/Rojgar/rojgarRoute');
 const reportingRoutes = require('./routes/ReportingRoutes/reportingRoutes');
 const suggestionComplaintRoutes = require('./routes/SuggestionComplaintRoutes/suggestionComplaintRoutes');
-const granthRoutes = require('./routes/jainGranthRoutes');
+const granthRoutes = require('./routes/Jain Granth/JainGranthRoute');
 const jainItihasRoutes = require('./routes/jainItihasRoutes');
 const storyRoutes = require('./routes/SocialMediaRoutes/storyRoutes');
 const notificationRoutes = require('./routes/SocialMediaRoutes/notificationRoutes')
@@ -65,6 +65,7 @@ const projectRoutes = require('./routes/SanghRoutes/projectRoutes');
 const activityRoute = require('./routes/Activities/activityRoutes');
 const scholarshipRoute = require('./routes/Scholarship/scholarshipRoutes');
 const boostRoute = require('./routes/BoostPlan/boostRoutes');
+const trainingRoute = require('./routes/Training Model/trainingRoute')
 //const appVersionRoute = require('./routes/Update apk/appVersion');
 app.set('trust proxy',1);
 // connect to databse
@@ -154,7 +155,7 @@ app.use('/api/bailors', bailorRoutes);
 
 // Post boostup 
 app.use('/api/boost', boostRoute);
-
+app.use('/api/training', trainingRoute);
 // Activity Api
 app.use('/api/activity', activityRoute);
 // Scholarship Api
