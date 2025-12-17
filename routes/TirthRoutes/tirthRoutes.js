@@ -19,7 +19,8 @@ const {
     tirthLogin,
     getAllTirths,
     getAllTirth,
-    deleteTirth
+    deleteTirth,
+    updateTirthImages // ✅ spelling same as export
 } = require('../../controller/TirthControllers/tirthController');
 
 // Public routes
@@ -59,6 +60,8 @@ router.get('/details/:tirthId',
 );
 router.delete('/delete/:tirthId', deleteTirth);
 // Tirth management routes - require tirth manager role
+router.put('/update-images/:tirthId', upload.tirthDocs, updateTirthImages);
+
 router.put('/update/:tirthId',
     verifyTirthRole,
     canManageTirth,

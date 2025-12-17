@@ -81,6 +81,17 @@ const participantSchema = new mongoose.Schema({
   submittedAt: {
     type: Date,
   },
+   certificate: {
+    generated: {
+      type: Boolean,
+      default: false,
+    },
+    certificateNo: String,
+    issuedAt: Date,
+    name: String,
+    place: String,
+    certificateUrl: String, // 👈 CDN URL
+  },
 });
 
 /* ================= TRAINING MODULE ================= */

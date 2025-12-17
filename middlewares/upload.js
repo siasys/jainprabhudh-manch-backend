@@ -250,6 +250,8 @@ module.exports.trainingMaterialUpload = upload.fields([
 ]);
 
 module.exports.govtYojanaUpload = upload.single('file');
+module.exports.certificateUpload = upload.single('certificate');
+
 module.exports.optimizeGroupIcon = optimizeImage;
 // Add Sangathan document upload configuration
 module.exports.sangathanDocs = upload.fields([

@@ -97,7 +97,11 @@ const getTrainingModuleById = async (req, res) => {
     const { id } = req.params;
 
     const training = await TrainingModule.findById(id)
-      .populate('createdBy', 'name email');
+      .populate('createdBy', 'name email')
+      .populate({
+        path: 'participants.userId',
+        select: 'fullName profilePicture gender location',
+      });
 
     if (!training) {
       return res.status(404).json({
@@ -194,10 +198,80 @@ const submitTrainingQuiz = async (req, res) => {
     });
   }
 };
+const uploadCertificateForParticipant = async (req, res) => {
+  try {
+    const { trainingId } = req.params;
+    const userId = req.user._id;
+
+    if (!req.file) {
+      return res.status(400).json({
+        message: 'Certificate image file is required',
+      });
+    }
+
+    const training = await TrainingModule.findById(trainingId)
+      .populate('participants.userId', 'fullName location');
+
+    if (!training) {
+      return res.status(404).json({ message: 'Training not found' });
+    }
+
+    const participant = training.participants.find(
+      p => p.userId._id.toString() === userId.toString()
+    );
+
+    if (!participant) {
+      return res.status(404).json({ message: 'Participant not found' });
+    }
+
+    if (participant.status !== 'completed') {
+      return res.status(400).json({
+        message: 'Training not completed yet',
+      });
+    }
+
+    // ✅ Already generated
+    if (participant.certificate?.generated) {
+      return res.status(200).json({
+        message: 'Certificate already generated',
+        certificate: participant.certificate,
+      });
+    }
+
+    /* ================= CERTIFICATE SAVE ================= */
+
+    const certificateUrl = convertS3UrlToCDN(req.file.location);
+
+    participant.certificate = {
+      generated: true,
+      certificateNo: `CERT-${trainingId.slice(-4)}-${userId
+        .toString()
+        .slice(-4)}`,
+      issuedAt: new Date(),
+      name: participant.userId.fullName,
+      place: participant.userId.location?.city || '—',
+      certificateUrl,
+    };
+
+    await training.save();
+
+    return res.status(200).json({
+      message: 'Certificate uploaded & generated successfully',
+      certificate: participant.certificate,
+    });
+
+  } catch (error) {
+    console.error('Upload Certificate Error:', error);
+    return res.status(500).json({
+      message: 'Something went wrong while uploading certificate',
+    });
+  }
+};
 
 module.exports = {
   createTrainingModule,
   getAllTrainingModules,
   getTrainingModuleById,
-  submitTrainingQuiz
+  submitTrainingQuiz,
+  uploadCertificateForParticipant
 };

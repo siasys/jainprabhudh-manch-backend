@@ -7,6 +7,9 @@ const tirthSchema = new mongoose.Schema({
     //     ref: 'User',
     //    required: true
     // },
+    type: {
+      type: String,
+    },
     tirthName: {
         type: String,
         trim: true
@@ -30,16 +33,35 @@ const tirthSchema = new mongoose.Schema({
         type: String,
        // required: true
     },
-    facilities: {
-    roomCount: String,
-    hallCount: String,
-    roomWithBath: String,
-    roomWithoutBath: String,
-    acRoomCount: String,
-    nonAcRoomCount: String,
-    airCoolerCount: String,
-    guestHouseCount: String,
-    yatriCapacity: String,
+  facilities: {
+  // already existing
+  roomCount: String,
+  hallCount: String,
+  roomWithBath: String,
+  roomWithoutBath: String,
+  acRoomCount: String,
+  nonAcRoomCount: String,
+  airCoolerCount: String,
+  guestHouseCount: String,
+  yatriCapacity: String,
+
+  hasDharmshala: {
+    type: Boolean,
+    default: false,
+  },
+
+  sadhuStay: {
+    type: String, // text input
+    default: "",
+  },
+  authorizedPersonContact: {
+    type: String, // text input
+    default: "",
+  },
+  otherFacilities: {
+    type: String, // text input
+    default: "",
+  },
 },
     additionalFacilities: {
     bhojanalay: {
@@ -128,7 +150,7 @@ nearestCities: [
       type: String,
     },
     distance: {
-      type: String    
+      type: String
     }
   }
 ],

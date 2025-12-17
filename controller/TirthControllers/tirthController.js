@@ -248,8 +248,6 @@ const deleteTirth = async (req, res) => {
     });
   }
 };
-
-
 // Update Tirth details
 const updateTirthDetails = async (req, res) => {
     try {
@@ -446,6 +444,70 @@ const getAllTirth = async (req, res) => {
   }
 };
 
+// Update Tirth Images
+const updateTirthImages = async (req, res) => {
+  try {
+    const { tirthId } = req.params;
+    const { replaceIndex } = req.body; // optional: index of image to replace
+
+    if (!tirthId) return errorResponse(res, "Tirth ID is required", 400);
+
+    const tirth = await Tirth.findById(tirthId);
+    if (!tirth) return errorResponse(res, "Tirth not found", 404);
+
+    // Process new uploaded images
+    let newImages = [];
+    if (req.files && Array.isArray(req.files.tirthPhoto) && req.files.tirthPhoto.length > 0) {
+      newImages = req.files.tirthPhoto
+        .filter(file => file?.location) // make sure file has location
+        .map(file => convertS3UrlToCDN(file.location));
+    }
+
+    if (newImages.length === 0) {
+      return errorResponse(res, "No valid images uploaded", 400);
+    }
+
+    // Update logic
+    if (
+      replaceIndex !== undefined &&
+      Number.isInteger(Number(replaceIndex)) &&
+      replaceIndex >= 0 &&
+      replaceIndex < tirth.tirthPhotos.length
+    ) {
+      // Replace specific image
+      tirth.tirthPhotos[replaceIndex] = newImages[0]; // only first image used
+    } else {
+      // Add new images at the end
+      tirth.tirthPhotos.push(...newImages);
+    }
+
+    await tirth.save();
+
+    return successResponse(res, {
+      message: "Tirth images updated successfully",
+      tirthPhotos: tirth.tirthPhotos
+    });
+
+  } catch (error) {
+    console.error("❌ Error updating Tirth images:", error);
+
+    // Delete uploaded files in case of error
+    if (req.files && Array.isArray(req.files.tirthPhoto)) {
+      await Promise.all(
+        req.files.tirthPhoto.map(file =>
+          s3Client.send(
+            new DeleteObjectCommand({
+              Bucket: process.env.AWS_BUCKET_NAME,
+              Key: file.key
+            })
+          )
+        )
+      );
+    }
+
+    return errorResponse(res, error.message, 500);
+  }
+};
 
 
 module.exports = {
@@ -459,5 +521,6 @@ module.exports = {
     tirthLogin,
     getAllTirths,
     getAllTirth,
-    deleteTirth
-}; 
+    deleteTirth,
+    updateTirthImages
+};
