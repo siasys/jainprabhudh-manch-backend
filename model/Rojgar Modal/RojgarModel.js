@@ -49,6 +49,9 @@ const rojgarSchema = new mongoose.Schema(
     jobEmail: {
       type: String,
     },
+    jobPdf: {
+      type: String,
+    },
     jobPost: [
       {
         url: {

@@ -235,7 +235,9 @@ module.exports.postMediaUpload = [upload.fields([
 ]), optimizeImage];
 module.exports.jobPostUpload = upload.fields([
   { name: 'jobPost', maxCount: 10 },
+  { name: 'jobPdf', maxCount: 1 }
 ]);
+
 module.exports.candidateResumeUpload = upload.fields([
   { name: 'candidateResume', maxCount: 1 }
 ]);
@@ -309,6 +311,7 @@ module.exports.tirthDocs = upload.fields([
 // Add JainVyapar document upload configuration
 module.exports.vyaparDocs = upload.fields([
   { name: 'entityPhoto', maxCount: 5 },
+  { name: 'businessLogo', maxCount: 1 },
   { name: 'entityDocuments', maxCount: 5 }
 ]);
 module.exports.uploadActivityFiles = upload.fields([

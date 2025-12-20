@@ -6,25 +6,45 @@ const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 // Create a new job
 exports.createJob = async (req, res) => {
   try {
-    const { user, jainAadhar, jobName, jobType, jobDescription, education, experience, salary, age, language, gender, location, jobContact, jobEmail } = req.body;
+    const {
+      user,
+      jainAadhar,
+      jobName,
+      jobType,
+      jobDescription,
+      education,
+      experience,
+      salary,
+      age,
+      language,
+      gender,
+      location,
+      jobContact,
+      jobEmail
+    } = req.body;
 
-    // Extract jobPost files from req.files
+    // ================= JOB POSTS (Images / Videos) =================
     let jobPost = [];
-    if (req.files && req.files.jobPost) {
+    if (req.files?.jobPost?.length > 0) {
       jobPost = req.files.jobPost.map((file) => ({
         url: convertS3UrlToCDN(file.location),
         type: file.mimetype.startsWith("video/") ? "video" : "image",
       }));
     }
-    console.log("Job Post Data:", jobPost);
+
+    // ================= JOB PDF (Single) =================
+    let jobPdf = null;
+    if (req.files?.jobPdf?.length > 0) {
+      jobPdf = convertS3UrlToCDN(req.files.jobPdf[0].location);
+    }
 
     const newJob = new Rojgar({
       user,
       jainAadhar,
       jobName,
+      jobType,
       jobDescription,
       education,
-      jobType,
       experience,
       salary,
       age,
@@ -33,15 +53,28 @@ exports.createJob = async (req, res) => {
       location,
       jobContact,
       jobEmail,
+
+      jobPdf,   // ✅ ADDED
       jobPost,
     });
 
     const savedJob = await newJob.save();
-    res.status(201).json(savedJob);
+
+    res.status(201).json({
+      success: true,
+      message: "Job created successfully",
+      data: savedJob
+    });
+
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error("Create Job Error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
   }
 };
+
 exports.createRecruitee = async (req, res) => {
   try {
     const { jainAadhar, candidateName, gender, user,field, education, experience } = req.body;
