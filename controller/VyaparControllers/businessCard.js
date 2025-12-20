@@ -50,10 +50,54 @@ const generateBusinessCard = async (req, res) => {
     ctx.fillStyle = '#000';
     ctx.font = '26px Georgia';
 
-    ctx.fillText(business.businessName || 'N/A', 720, 245);
-    ctx.fillText(business.ownerName || 'N/A', 720, 305);
-    ctx.fillText(business.location?.city || 'N/A', 720, 355);
-    ctx.fillText(business.contactPerson || 'N/A', 720, 402);
+    // 🔥 Text Wrapping Helper Function
+    const wrapTextMultiLine = (text, x, startY, maxWidth, lineHeight) => {
+      if (!text || text === 'N/A') {
+        ctx.fillText(text || 'N/A', x, startY);
+        return startY + lineHeight;
+      }
+
+      const words = text.split(' ');
+      let line = '';
+      let y = startY;
+
+      for (let i = 0; i < words.length; i++) {
+        const testLine = line + words[i] + ' ';
+        const metrics = ctx.measureText(testLine);
+        const testWidth = metrics.width;
+
+        if (testWidth > maxWidth && i > 0) {
+          ctx.fillText(line.trim(), x, y);
+          line = words[i] + ' ';
+          y += lineHeight;
+        } else {
+          line = testLine;
+        }
+      }
+      ctx.fillText(line.trim(), x, y);
+      return y + lineHeight;
+    };
+
+    // 🔥 Business Name with Wrapping (max 2 lines)
+    let currentY = 245;
+    currentY = wrapTextMultiLine(
+      business.businessName || 'N/A',
+      720,
+      currentY,
+      280, // max width for business name
+      32   // line height
+    );
+
+    // Owner Name
+    ctx.fillText(business.ownerName || 'N/A', 720, currentY + 0);
+    
+    // City
+    ctx.fillText(business.location?.city || 'N/A', 720, currentY + 45);
+    
+    // Contact Person
+    ctx.fillText(business.contactPerson || 'N/A', 720, currentY + 90);
+    
+    // Email (at fixed position)
     ctx.fillText(business.email || 'N/A', 580, 580);
 
     // ✅ VERIFIED BADGE (only if approved)
@@ -82,6 +126,7 @@ ${business.location?.city || ''}, ${business.location?.district || ''}
 ${business.location?.state || ''}
 `.trim();
 
+    // 🔥 Address Text Wrapping
     const wrapText = (text) => {
       const words = text.split(' ');
       let line = '';
@@ -109,7 +154,6 @@ ${business.location?.state || ''}
     );
 
     // ================= QR CODE =================
-    // 🔥 QR SCAN → BUSINESS VERIFIED PAGE
     const qrUrl = `https://jainprabhudh-manch-backend.onrender.com/api/vyapar/generate-card/verify/business/${business.businessCode}`;
     const qrDataURL = await QRCode.toDataURL(qrUrl, {
       errorCorrectionLevel: 'H'
@@ -118,8 +162,14 @@ ${business.location?.state || ''}
     const qrImage = await loadImage(qrDataURL);
     ctx.drawImage(qrImage, 760, HEIGHT + 260, 180, 180);
 
+    // 🔥 Add Headers for Better Compatibility
     res.setHeader('Content-Type', 'image/jpeg');
-    canvas.createJPEGStream().pipe(res);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
+    canvas.createJPEGStream({ quality: 0.95 }).pipe(res);
 
   } catch (error) {
     console.error('❌ Business card error:', error);
