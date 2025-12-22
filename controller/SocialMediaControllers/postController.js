@@ -62,7 +62,9 @@ const createPost = [
       if (
         restrictedAccounts.includes(user.accountType) &&
         user.postCount >= 3 &&
-        !user.isBoostActive
+        !user.isBoostActive &&
+        type !== 'sangh' &&
+        type !== 'panch'
       ) {
         return res.status(403).json({
           error: 'BOOST_REQUIRED',

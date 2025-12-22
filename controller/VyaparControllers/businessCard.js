@@ -90,7 +90,7 @@ const generateBusinessCard = async (req, res) => {
 
     // Owner Name
     ctx.fillText(business.ownerName || 'N/A', 720, currentY + 0);
-    
+  
     // City
     ctx.fillText(business.location?.city || 'N/A', 720, currentY + 45);
     

@@ -1191,6 +1191,43 @@ const editJainAadhar = asyncHandler(async (req, res) => {
     return errorResponse(res, error.message, 500);
   }
 });
+// Check Jain Aadhar application by mobile number
+const checkApplicationByNumber = asyncHandler(async (req, res) => {
+  try {
+    const { number } = req.query;
+
+    if (!number) {
+      return errorResponse(res, "Mobile number is required", 400);
+    }
+
+    const application = await JainAadhar.findOne({
+      "contactDetails.number": number
+    }).select("jainAadharNumber contactDetails.number name");
+
+    if (!application) {
+      return successResponse(
+        res,
+        null,
+        "No application found for this number",
+        200
+      );
+    }
+
+    return successResponse(
+      res,
+      application,
+      "Application already exists",
+      200
+    );
+  } catch (error) {
+    return errorResponse(
+      res,
+      "Error checking application by number",
+      500,
+      error.message
+    );
+  }
+});
 
 
 module.exports = {
@@ -1216,5 +1253,6 @@ module.exports = {
   verifyJainAadhar,
   sendSharavakOtp,
   verifySharavakOtp,
-  resendSharavakOtp
+  resendSharavakOtp,
+  checkApplicationByNumber
 };
