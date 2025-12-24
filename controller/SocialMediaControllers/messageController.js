@@ -832,79 +832,111 @@ exports.getMessageById = async (req, res) => {
 
 exports.deleteMessageById = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { messageIds } = req.body;
     const userId = req.user._id;
-    const message = await Message.findById(id);
 
-    if (!message) {
-      return res.status(404).json({ message: 'Message not found' });
+    if (!Array.isArray(messageIds) || messageIds.length === 0) {
+      return res.status(400).json({ message: 'messageIds array required' });
     }
 
-    if (message.sender.toString() !== userId.toString()) {
-      return res.status(403).json({ message: 'You can only delete your own messages' });
+    const messages = await Message.find({ _id: { $in: messageIds } });
+
+    if (!messages.length) {
+      return res.status(404).json({ message: 'Messages not found' });
     }
 
-    // ✅ Delete attachments if present
-    if (message.attachments && message.attachments.length > 0) {
-      for (const attachment of message.attachments) {
-        if (attachment.url && attachment.url.includes('.com/')) {
-          const key = attachment.url.split('.com/')[1];
-          if (key) {
-            try {
-              await s3Client.send(new DeleteObjectCommand({
-                Bucket: process.env.AWS_BUCKET_NAME,
-                Key: key
-              }));
-            } catch (s3Err) {
-              console.warn('S3 deletion failed for key:', key, s3Err.message);
+    const deletableMessages = messages.filter(
+      msg => msg.sender.toString() === userId.toString()
+    );
+
+    if (!deletableMessages.length) {
+      return res.status(403).json({
+        message: 'You can only delete your own messages'
+      });
+    }
+
+    // ✅ Delete attachments from S3
+    for (const message of deletableMessages) {
+      if (message.attachments?.length) {
+        for (const attachment of message.attachments) {
+          if (attachment.url?.includes('.com/')) {
+            const key = attachment.url.split('.com/')[1];
+            if (key) {
+              try {
+                await s3Client.send(
+                  new DeleteObjectCommand({
+                    Bucket: process.env.AWS_BUCKET_NAME,
+                    Key: key
+                  })
+                );
+              } catch (err) {
+                console.warn('S3 delete failed:', key);
+              }
             }
-          } else {
-            console.warn('No valid S3 key found in URL:', attachment.url);
           }
         }
       }
     }
 
-    await message.deleteOne();
+    // ✅ Delete messages
+    await Message.deleteMany({ _id: { $in: deletableMessages.map(m => m._id) } });
 
     const io = getIo();
-    io.to(message.receiver.toString()).emit('messageDeleted', { messageId: id });
+    deletableMessages.forEach(msg => {
+      io.to(msg.receiver.toString()).emit('messageDeleted', {
+        messageId: msg._id
+      });
+    });
 
-    res.status(200).json({ message: 'Message deleted successfully' });
+    res.status(200).json({
+      message: 'Messages deleted successfully',
+      deletedCount: deletableMessages.length
+    });
   } catch (error) {
-    console.error('Error deleting message:', error);
-    res.status(500).json({ message: 'Error deleting message', error: error.message });
+    console.error('Delete message error:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 exports.deleteMessageOnlyForMe = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { messageIds } = req.body;
     const userId = req.user._id;
-    const message = await Message.findById(id);
 
-    if (!message) {
-      return res.status(404).json({ message: 'Message not found' });
+    if (!Array.isArray(messageIds) || messageIds.length === 0) {
+      return res.status(400).json({ message: 'messageIds array required' });
     }
 
-    // ✅ Remove user from a "deletedBy" array
-    if (!message.deletedBy) {
-      message.deletedBy = [];
+    const messages = await Message.find({ _id: { $in: messageIds } });
+
+    if (!messages.length) {
+      return res.status(404).json({ message: 'Messages not found' });
     }
 
-    // Already deleted for this user?
-    if (message.deletedBy.includes(userId.toString())) {
-      return res.status(200).json({ message: 'Message already deleted for you' });
+    let updatedCount = 0;
+
+    for (const message of messages) {
+      if (!message.deletedBy) {
+        message.deletedBy = [];
+      }
+
+      if (!message.deletedBy.includes(userId.toString())) {
+        message.deletedBy.push(userId.toString());
+        await message.save();
+        updatedCount++;
+      }
     }
 
-    message.deletedBy.push(userId.toString());
-    await message.save();
-
-    res.status(200).json({ message: 'Message deleted for current user only' });
+    res.status(200).json({
+      message: 'Messages deleted for current user',
+      updatedCount
+    });
   } catch (error) {
-    console.error('Error in delete-for-me:', error.message);
-    res.status(500).json({ message: 'Internal server error', error: error.message });
+    console.error('Delete for me error:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 // Update messages by senderId
 exports.updateMessageById = async (req, res) => {
