@@ -75,8 +75,7 @@ const createTrainingModule = async (req, res) => {
 const getAllTrainingModules = async (req, res) => {
   try {
     const trainings = await TrainingModule.find()
-      .populate('createdBy', 'name email') // optional
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: 1 });
 
     return res.status(200).json({
       count: trainings.length,
