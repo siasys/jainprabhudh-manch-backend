@@ -832,11 +832,19 @@ exports.getMessageById = async (req, res) => {
 
 exports.deleteMessageById = async (req, res) => {
   try {
-    const { messageIds } = req.body;
     const userId = req.user._id;
 
-    if (!Array.isArray(messageIds) || messageIds.length === 0) {
-      return res.status(400).json({ message: 'messageIds array required' });
+    // ✅ SUPPORT BOTH
+    let messageIds = [];
+
+    if (req.body.messageIds && Array.isArray(req.body.messageIds)) {
+      messageIds = req.body.messageIds;
+    } else if (req.params.id) {
+      messageIds = [req.params.id];
+    }
+
+    if (!messageIds.length) {
+      return res.status(400).json({ message: 'messageIds or id required' });
     }
 
     const messages = await Message.find({ _id: { $in: messageIds } });
@@ -855,7 +863,7 @@ exports.deleteMessageById = async (req, res) => {
       });
     }
 
-    // ✅ Delete attachments from S3
+    // ✅ Delete attachments
     for (const message of deletableMessages) {
       if (message.attachments?.length) {
         for (const attachment of message.attachments) {
@@ -878,8 +886,9 @@ exports.deleteMessageById = async (req, res) => {
       }
     }
 
-    // ✅ Delete messages
-    await Message.deleteMany({ _id: { $in: deletableMessages.map(m => m._id) } });
+    await Message.deleteMany({
+      _id: { $in: deletableMessages.map(m => m._id) }
+    });
 
     const io = getIo();
     deletableMessages.forEach(msg => {
@@ -889,7 +898,7 @@ exports.deleteMessageById = async (req, res) => {
     });
 
     res.status(200).json({
-      message: 'Messages deleted successfully',
+      message: 'Message(s) deleted successfully',
       deletedCount: deletableMessages.length
     });
   } catch (error) {
@@ -900,11 +909,18 @@ exports.deleteMessageById = async (req, res) => {
 
 exports.deleteMessageOnlyForMe = async (req, res) => {
   try {
-    const { messageIds } = req.body;
     const userId = req.user._id;
 
-    if (!Array.isArray(messageIds) || messageIds.length === 0) {
-      return res.status(400).json({ message: 'messageIds array required' });
+    let messageIds = [];
+
+    if (req.body.messageIds && Array.isArray(req.body.messageIds)) {
+      messageIds = req.body.messageIds;
+    } else if (req.params.id) {
+      messageIds = [req.params.id];
+    }
+
+    if (!messageIds.length) {
+      return res.status(400).json({ message: 'messageIds or id required' });
     }
 
     const messages = await Message.find({ _id: { $in: messageIds } });
@@ -916,9 +932,7 @@ exports.deleteMessageOnlyForMe = async (req, res) => {
     let updatedCount = 0;
 
     for (const message of messages) {
-      if (!message.deletedBy) {
-        message.deletedBy = [];
-      }
+      if (!message.deletedBy) message.deletedBy = [];
 
       if (!message.deletedBy.includes(userId.toString())) {
         message.deletedBy.push(userId.toString());
@@ -928,7 +942,7 @@ exports.deleteMessageOnlyForMe = async (req, res) => {
     }
 
     res.status(200).json({
-      message: 'Messages deleted for current user',
+      message: 'Message(s) deleted for current user',
       updatedCount
     });
   } catch (error) {
@@ -936,8 +950,6 @@ exports.deleteMessageOnlyForMe = async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
-
-
 // Update messages by senderId
 exports.updateMessageById = async (req, res) => {
   try {
@@ -985,7 +997,7 @@ exports.updateMessageById = async (req, res) => {
     // Save updated message
     await message.save();
     // Response me decrypted message bhejna hai taaki UI me text dikhe
-    res.status(200).json({ 
+    res.status(200).json({
       message: 'Message updated successfully', 
       data: { ...message.toObject(), message: decrypt(message.message) } 
     });
