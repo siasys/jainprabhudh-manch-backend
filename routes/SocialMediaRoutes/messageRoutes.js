@@ -29,9 +29,9 @@ router.get('/conversations/:userId',
 router.get('/:messageId', getMessageById);
 router.get('/block-status/:userId/:targetUserId', getBlockStatus);
 
-router.delete('/delete', authenticate,deleteMessageById);
+router.delete('/delete', authenticate, deleteMessageById);
 // route
-router.delete('/delete-onlyme', deleteMessageOnlyForMe);
+router.delete('/delete-onlyme', authenticate, deleteMessageOnlyForMe);
 
 router.patch('/clear/:receiverId', clearAllMessagesBetweenUsers);
 
