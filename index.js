@@ -65,7 +65,8 @@ const projectRoutes = require('./routes/SanghRoutes/projectRoutes');
 const activityRoute = require('./routes/Activities/activityRoutes');
 const scholarshipRoute = require('./routes/Scholarship/scholarshipRoutes');
 const boostRoute = require('./routes/BoostPlan/boostRoutes');
-const trainingRoute = require('./routes/Training Model/trainingRoute')
+const trainingRoute = require('./routes/Training Model/trainingRoute');
+const donationRoute = require('./routes/Donation/donationRoutes');
 //const appVersionRoute = require('./routes/Update apk/appVersion');
 app.set('trust proxy',1);
 // connect to databse
@@ -152,6 +153,7 @@ app.use('/api/inqury', inquiryRoutes);
 app.use('/api', projectRoutes);
 // uplaod biolers
 app.use('/api/bailors', bailorRoutes);
+app.use('/api/donation', donationRoute);
 
 // Post boostup 
 app.use('/api/boost', boostRoute);

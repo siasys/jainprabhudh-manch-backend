@@ -237,6 +237,10 @@ module.exports.jobPostUpload = upload.fields([
   { name: 'jobPost', maxCount: 10 },
   { name: 'jobPdf', maxCount: 1 }
 ]);
+module.exports.donationUpload = upload.fields([
+  { name: 'paymentScreenshot', maxCount: 1 },
+  { name: 'donationPhoto', maxCount: 1 }
+]);
 
 module.exports.candidateResumeUpload = upload.fields([
   { name: 'candidateResume', maxCount: 1 }
