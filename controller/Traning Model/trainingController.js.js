@@ -99,7 +99,7 @@ const getTrainingModuleById = async (req, res) => {
       .populate('createdBy', 'name email')
       .populate({
         path: 'participants.userId',
-        select: 'fullName profilePicture gender location',
+        select: 'fullName profilePicture gender location phoneNumber',
       });
 
     if (!training) {
