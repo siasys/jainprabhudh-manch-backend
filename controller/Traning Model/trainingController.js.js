@@ -271,11 +271,56 @@ const uploadCertificateForParticipant = async (req, res) => {
     });
   }
 };
+const updateTraining = async (req, res) => {
+  try {
+    const { id } = req.params; // ✅ FIX
+
+    console.log('TRAINING ID =>', id);
+
+    const training = await TrainingModule.findById(id);
+    if (!training) {
+      return res.status(404).json({ message: 'Training not found' });
+    }
+
+    if (req.files?.trainingPdf) {
+      req.files.trainingPdf.forEach(file => {
+        training.materials.push({
+          type: 'pdf',
+          title: file.originalname,
+          url: convertS3UrlToCDN(file.location),
+        });
+      });
+    }
+
+    if (req.files?.trainingVideo) {
+      req.files.trainingVideo.forEach(file => {
+        training.materials.push({
+          type: 'video',
+          title: file.originalname,
+          url: convertS3UrlToCDN(file.location),
+        });
+      });
+    }
+
+    await training.save();
+
+    res.json({
+      message: 'Training updated successfully',
+      training,
+    });
+  } catch (error) {
+    console.error('Update Training Error:', error);
+    res.status(500).json({ message: 'Something went wrong' });
+  }
+};
+
+
 
 module.exports = {
   createTrainingModule,
   getAllTrainingModules,
   getTrainingModuleById,
   submitTrainingQuiz,
+  updateTraining,
   uploadCertificateForParticipant
 };
