@@ -275,7 +275,7 @@ const updateTraining = async (req, res) => {
   try {
     const { id } = req.params; // ✅ FIX
 
-    console.log('TRAINING ID =>', id);
+  //  console.log('TRAINING ID =>', id);
 
     const training = await TrainingModule.findById(id);
     if (!training) {

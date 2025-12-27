@@ -50,16 +50,15 @@ const generateBusinessCard = async (req, res) => {
     ctx.fillStyle = '#000';
     ctx.font = '26px Georgia';
 
-    // 🔥 Text Wrapping Helper Function
-    const wrapTextMultiLine = (text, x, startY, maxWidth, lineHeight) => {
+    // 🔥 Text Wrapping Helper Function (returns array of lines)
+    const wrapTextToLines = (text, maxWidth) => {
       if (!text || text === 'N/A') {
-        ctx.fillText(text || 'N/A', x, startY);
-        return startY + lineHeight;
+        return [text || 'N/A'];
       }
 
       const words = text.split(' ');
+      const lines = [];
       let line = '';
-      let y = startY;
 
       for (let i = 0; i < words.length; i++) {
         const testLine = line + words[i] + ' ';
@@ -67,45 +66,45 @@ const generateBusinessCard = async (req, res) => {
         const testWidth = metrics.width;
 
         if (testWidth > maxWidth && i > 0) {
-          ctx.fillText(line.trim(), x, y);
+          lines.push(line.trim());
           line = words[i] + ' ';
-          y += lineHeight;
         } else {
           line = testLine;
         }
       }
-      ctx.fillText(line.trim(), x, y);
-      return y + lineHeight;
+      lines.push(line.trim());
+      return lines;
     };
 
     // 🔥 Business Name with Wrapping (max 2 lines)
-    let currentY = 245;
-    currentY = wrapTextMultiLine(
+    const businessNameLines = wrapTextToLines(
       business.businessName || 'N/A',
-      720,
-      currentY,
-      280, // max width for business name
-      32   // line height
+      280 // max width for business name
     );
 
-    // Owner Name
-    ctx.fillText(business.ownerName || 'N/A', 720, currentY + 0);
-  
-    // City
-    ctx.fillText(business.location?.city || 'N/A', 720, currentY + 45);
+    // Business name ko render karo (max 2 lines)
+    const businessNameStartY = 245;
+    const businessNameLineHeight = 32;
     
-    // Contact Person
-    ctx.fillText(business.contactPerson || 'N/A', 720, currentY + 90);
+    businessNameLines.slice(0, 2).forEach((line, index) => {
+      ctx.fillText(line, 720, businessNameStartY + (index * businessNameLineHeight));
+    });
+
+    // 🔥 Fixed baseline for remaining fields (business name ke area ke baad)
+    // Business name maximum 2 lines le sakta hai, toh uske baad se fixed positions
+    const baselineY = businessNameStartY + (2 * businessNameLineHeight) - 5;
+
+    // Owner Name (fixed position)
+    ctx.fillText(business.ownerName || 'N/A', 720, baselineY);
+  
+    // City (fixed position)
+    ctx.fillText(business.location?.city || 'N/A', 720, baselineY + 50);
+    
+    // Contact Person (fixed position)
+    ctx.fillText(business.contactPerson || 'N/A', 720, baselineY + 95);
     
     // Email (at fixed position)
     ctx.fillText(business.email || 'N/A', 580, 580);
-
-    // ✅ VERIFIED BADGE (only if approved)
-    if (business.applicationStatus === 'approved' && business.status === 'active') {
-      ctx.fillStyle = '#2ECC71';
-      ctx.font = 'bold 28px Georgia';
-      ctx.fillText('✔ VERIFIED BUSINESS', 680, 190);
-    }
 
     // ================= BACK =================
     const backTemplate = await loadImage(
