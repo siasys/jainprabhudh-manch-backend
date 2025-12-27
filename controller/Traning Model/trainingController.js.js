@@ -75,7 +75,11 @@ const createTrainingModule = async (req, res) => {
 const getAllTrainingModules = async (req, res) => {
   try {
     const trainings = await TrainingModule.find()
-      .sort({ createdAt: 1 });
+      .sort({ createdAt: 1 })
+      .populate({
+        path: 'participants.userId',
+        select: 'fullName profilePicture gender location phoneNumber accountType',
+      });
 
     return res.status(200).json({
       count: trainings.length,
@@ -88,6 +92,7 @@ const getAllTrainingModules = async (req, res) => {
     });
   }
 };
+
 /* =========================================
    GET TRAINING MODULE BY ID
 ========================================= */
@@ -99,7 +104,7 @@ const getTrainingModuleById = async (req, res) => {
       .populate('createdBy', 'name email')
       .populate({
         path: 'participants.userId',
-        select: 'fullName profilePicture gender location phoneNumber',
+        select: 'fullName profilePicture gender location phoneNumber accountType',
       });
 
     if (!training) {
