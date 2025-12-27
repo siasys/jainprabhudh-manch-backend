@@ -96,13 +96,13 @@ const generateBusinessCard = async (req, res) => {
 
     // Owner Name (fixed position)
     ctx.fillText(business.ownerName || 'N/A', 720, baselineY);
-  
+
     // City (fixed position)
     ctx.fillText(business.location?.city || 'N/A', 720, baselineY + 50);
-    
+
     // Contact Person (fixed position)
     ctx.fillText(business.contactPerson || 'N/A', 720, baselineY + 95);
-    
+
     // Email (at fixed position)
     ctx.fillText(business.email || 'N/A', 580, 580);
 
