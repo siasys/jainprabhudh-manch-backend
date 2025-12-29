@@ -92,7 +92,8 @@ const createDonation = async (req, res) => {
 const getAllDonations = async (req, res) => {
   try {
     const donations = await Donation.find()
-      .populate('userId', 'fullName gender phoneNumber profilePicture')
+      .populate('userId', 'fullName gender phoneNumber profilePicture') // User details
+      .populate('sanghId', 'name sanghImage') // Sangh details: name & sanghImage
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
