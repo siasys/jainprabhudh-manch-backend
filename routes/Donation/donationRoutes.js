@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
-
 const { donationUpload } = require('../../middlewares/upload');
-const { createDonation, getAllDonations, getDonationById} = require('../../controller/Donation/donationController');
+const { createDonation, getAllDonations, getDonationById, updateDonation} = require('../../controller/Donation/donationController');
 
 router.post('/create', donationUpload, createDonation);
+router.put('/update/:donationId', donationUpload, updateDonation);
 
 router.get('/all', getAllDonations);
 

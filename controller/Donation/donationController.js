@@ -1,5 +1,6 @@
 const Donation = require('../../model/Donation/donation');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
+const Sangh = require('../../model/SanghModels/hierarchicalSanghModel');
 
 /**
  * CREATE DONATION
@@ -8,21 +9,38 @@ const createDonation = async (req, res) => {
   try {
     const {
       userId,
-      title,
+      title,              // Occasion title (Birthday, etc.)
       purpose,
-      description,
       amount,
-      inMemory
+      onBehalfOf,         // father / mother / daughter etc.
+      onBehalfOfName      // Person name
     } = req.body;
+
+    // 🔐 BASIC VALIDATION
+    if (!userId || !title || !amount || !onBehalfOf || !onBehalfOfName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Required fields are missing'
+      });
+    }
+
+    // 🔒 FETCH FOUNDATION SANGH (ALWAYS FIXED)
+    const foundationSangh = await Sangh.findOne({ level: 'foundation' });
+
+    if (!foundationSangh) {
+      return res.status(404).json({
+        success: false,
+        message: 'Foundation Sangh not found'
+      });
+    }
 
     let paymentScreenshotUrl = '';
     let donationPhotoUrl = '';
     let paymentStatus = 'pending';
 
-    // Payment Screenshot
+    // ✅ Payment Screenshot
     if (
-      req.files &&
-      req.files.paymentScreenshot &&
+      req.files?.paymentScreenshot &&
       req.files.paymentScreenshot.length > 0
     ) {
       const s3Url = req.files.paymentScreenshot[0].location;
@@ -30,23 +48,24 @@ const createDonation = async (req, res) => {
       paymentStatus = 'success';
     }
 
-    // Donation Photo
+    // ✅ Donation Photo
     if (
-      req.files &&
-      req.files.donationPhoto &&
+      req.files?.donationPhoto &&
       req.files.donationPhoto.length > 0
     ) {
       const s3Url = req.files.donationPhoto[0].location;
       donationPhotoUrl = convertS3UrlToCDN(s3Url);
     }
 
+    // ✅ CREATE DONATION
     const donation = await Donation.create({
       userId,
+      sanghId: foundationSangh._id,   // 🔒 ALWAYS FOUNDATION
       title,
       purpose,
-      description,
       amount,
-      inMemory,
+      onBehalfOf,
+      onBehalfOfName,
       paymentStatus,
       paymentScreenshot: paymentScreenshotUrl,
       donationPhoto: donationPhotoUrl
@@ -119,9 +138,76 @@ const getDonationById = async (req, res) => {
     });
   }
 };
+/**
+ * UPDATE DONATION
+ */
+const updateDonation = async (req, res) => {
+  try {
+    const { donationId } = req.params;
+
+    if (!donationId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Donation ID is required'
+      });
+    }
+
+    const donation = await Donation.findById(donationId);
+    if (!donation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Donation not found'
+      });
+    }
+
+    const {
+      title, 
+      purpose,
+      amount,
+      onBehalfOf,
+      onBehalfOfName
+    } = req.body;
+
+    // 🔐 Update fields only if provided
+    if (title) donation.title = title;
+    if (purpose) donation.purpose = purpose;
+    if (amount) donation.amount = amount;
+    if (onBehalfOf) donation.onBehalfOf = onBehalfOf;
+    if (onBehalfOfName) donation.onBehalfOfName = onBehalfOfName;
+
+    // ✅ Update donationPhoto if new file provided
+    if (req.files?.donationPhoto && req.files.donationPhoto.length > 0) {
+      const s3Url = req.files.donationPhoto[0].location;
+      donation.donationPhoto = convertS3UrlToCDN(s3Url);
+    }
+
+    // ✅ Update paymentScreenshot if new file provided
+    if (req.files?.paymentScreenshot && req.files.paymentScreenshot.length > 0) {
+      const s3Url = req.files.paymentScreenshot[0].location;
+      donation.paymentScreenshot = convertS3UrlToCDN(s3Url);
+      donation.paymentStatus = 'success'; // mark payment success if screenshot updated
+    }
+
+    await donation.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Donation updated successfully',
+      data: donation
+    });
+
+  } catch (error) {
+    console.error('UPDATE DONATION ERROR:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
 
 module.exports = {
   createDonation,
   getAllDonations,
-  getDonationById
+  getDonationById,
+  updateDonation
 };

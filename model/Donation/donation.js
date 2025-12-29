@@ -7,35 +7,48 @@ const donationSchema = new mongoose.Schema(
       ref: 'User',
       required: true
     },
+
+    sanghId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'HierarchicalSangh',
+      required: true
+    },
+
     type: {
       type: String,
       default: 'donation'
     },
+
+    // 🎉 Occasion title (Birthday / Anniversary / etc.)
     title: {
       type: String,
       required: true,
       trim: true
     },
 
+
+
     purpose: {
-      type: String,
+      type: String
     },
-    inMemory: {
+        onBehalfOf: {
       type: String,
     },
 
-    description: {
+    //  Name of the person
+    onBehalfOfName: {
       type: String,
-      trim: true
     },
 
     amount: {
       type: String,
       required: true
     },
-     donationPhoto: {
+
+    donationPhoto: {
       type: String
     },
+
     paymentStatus: {
       type: String,
       enum: ['pending', 'success', 'failed'],
@@ -43,7 +56,7 @@ const donationSchema = new mongoose.Schema(
     },
 
     paymentScreenshot: {
-      type: String // image URL (S3 / Cloudinary)
+      type: String
     }
   },
   { timestamps: true }
