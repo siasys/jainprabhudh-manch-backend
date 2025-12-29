@@ -17,12 +17,12 @@ const createDonation = async (req, res) => {
     } = req.body;
 
     // 🔐 BASIC VALIDATION
-    if (!userId || !title || !amount || !onBehalfOf || !onBehalfOfName) {
-      return res.status(400).json({
-        success: false,
-        message: 'Required fields are missing'
-      });
-    }
+    // if (!userId || !title || !amount || !onBehalfOf || !onBehalfOfName) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: 'Required fields are missing'
+    //   });
+    // }
 
     // 🔒 FETCH FOUNDATION SANGH (ALWAYS FIXED)
     const foundationSangh = await Sangh.findOne({ level: 'foundation' });
