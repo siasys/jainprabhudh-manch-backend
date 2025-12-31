@@ -51,6 +51,11 @@ const officeBearerSchema = new mongoose.Schema({
         default: Date.now,
         required: true
     },
+    amount: {
+        type: Number,
+        default: 0
+    },
+
     paymentStatus:{
          type: String,
         enum: ['pending', 'paid', 'overdue'],
@@ -60,9 +65,13 @@ const officeBearerSchema = new mongoose.Schema({
     type: String,
     },
     termEndDate: {
-        type: Date,
-        default: () => new Date(Date.now() + (2 * 365 * 24 * 60 * 60 * 1000)),
-        required: true
+    type: Date,
+    required: true,
+    default: function () {
+        const date = new Date(this.appointmentDate || Date.now());
+        date.setFullYear(date.getFullYear() + 1);
+        return date;
+    }
     },
     status: {
         type: String,
@@ -166,6 +175,24 @@ const memberSchema = new mongoose.Schema({
     },
     name: String
     },
+    amount: {
+    type: Number,
+    default: 0
+  },
+   paymentDate: {
+    type: Date,
+    default: null
+  },
+    membershipStartDate: {
+    type: Date,
+    default: Date.now
+  },
+
+  membershipEndDate: {
+    type: Date,
+    default: () => new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+  },
+
     status: {
         type: String,
         enum: ['active', 'inactive'],

@@ -1088,7 +1088,6 @@ const addSanghMember = asyncHandler(async (req, res) => {
           //   });
           //   continue;
           // }
-          const paymentStatus = member.paymentStatus || 'pending';
 
           const location = user?.jainAadharApplication?.location || {};
           const contact = user?.jainAadharApplication?.contactDetails || {};
@@ -1104,6 +1103,15 @@ const addSanghMember = asyncHandler(async (req, res) => {
               ? convertS3UrlToCDN(rawScreenshot)
               : '';
             const userImage = rawImage ? convertS3UrlToCDN(rawImage) : '';
+           const paymentStatus = member.paymentStatus || 'pending';
+          const isPaid = paymentStatus === 'paid';
+
+          const membershipStartDate = new Date();
+          const membershipEndDate = new Date(
+            Date.now() + 365 * 24 * 60 * 60 * 1000
+          );
+
+          const paymentDate = isPaid ? new Date() : null;
           const newMember = {
             userId: user._id,
             name: user?.jainAadharApplication?.name || 'Unknown',
@@ -1113,6 +1121,13 @@ const addSanghMember = asyncHandler(async (req, res) => {
             postMember: member.postMember || '',
             userImage,
              memberScreenshot,
+               amount,
+               paymentStatus,
+              paymentDate,
+           membershipStartDate,
+            membershipEndDate,
+            status: isPaid ? 'active' : 'inactive',
+
             address: {
               street: location.address || '',
               city: location.city || '',
@@ -1120,10 +1135,9 @@ const addSanghMember = asyncHandler(async (req, res) => {
               state: location.state || '',
               pincode: location.pinCode || ''
             },
-            paymentStatus,
+      
             addedBy: req.user._id,
             addedAt: new Date(),
-            status: 'inactive',
             localSangh: member.localSangh?.sanghId ? {
             state: member.localSangh.state || '',
             district: member.localSangh.district || '',
@@ -1166,7 +1180,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
     }
 
     // ======= SINGLE MEMBER ADDITION =======
-    const { jainAadharNumber, postMember,level, sanghType,paymentStatus  } = req.body;
+    const { jainAadharNumber, postMember,level, sanghType,paymentStatus,amount } = req.body;
 
     // ✅ Parse localSangh if needed
     if (req.body.localSangh && typeof req.body.localSangh === 'string') {
@@ -1205,6 +1219,12 @@ const addSanghMember = asyncHandler(async (req, res) => {
     const memberScreenshot = rawScreenshot
       ? convertS3UrlToCDN(rawScreenshot)
       : '';
+    const finalPaymentStatus = paymentStatus || 'pending';
+    const isPaid = finalPaymentStatus === 'paid';
+    const membershipStartDate = new Date();
+    const membershipEndDate = new Date(
+      Date.now() + 365 * 24 * 60 * 60 * 1000
+    );
 
     const newMember = {
       userId: user._id,
@@ -1217,6 +1237,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
       sanghType: sanghType || 'main',
       userImage,
        memberScreenshot,
+       amount: amount || 0,
       address: {
         street: location.address || '',
         city: location.city || '',
@@ -1224,7 +1245,14 @@ const addSanghMember = asyncHandler(async (req, res) => {
         state: location.state || '',
         pincode: location.pinCode || ''
       },
-      paymentStatus,
+       paymentStatus: finalPaymentStatus,
+
+      // ✅ PAYMENT & MEMBERSHIP DATE HANDLING
+      paymentDate: isPaid ? new Date() : null,
+       membershipStartDate,
+        membershipEndDate,
+
+      status: isPaid ? 'active' : 'inactive',
       localSangh: req.body.localSangh?.sanghId ? {
             state: req.body.localSangh.state || '',
             district: req.body.localSangh.district || '',
@@ -1233,7 +1261,6 @@ const addSanghMember = asyncHandler(async (req, res) => {
           } : undefined,
       addedBy: req.user._id,
       addedAt: new Date(),
-      status: 'inactive',
     };
 
     sangh.members.push(newMember);
@@ -1352,7 +1379,6 @@ const removeSanghMember = asyncHandler(async (req, res) => {
 // });
 
 // Update member details
-
 const updateMemberDetails = asyncHandler(async (req, res) => {
   try {
     const { sanghId, memberId } = req.params;
@@ -1387,7 +1413,6 @@ const updateMemberDetails = asyncHandler(async (req, res) => {
 
     /* =======================
        ✅ PAYMENT SCREENSHOT UPDATE
-       (when pending → paid)
     ======================= */
     if (req.files?.memberScreenshot) {
       if (member.memberScreenshot) {
@@ -1410,18 +1435,40 @@ const updateMemberDetails = asyncHandler(async (req, res) => {
     };
 
     /* =======================
-       ✅ MAIN FIELD UPDATE
-       paymentStatus frontend se
+       ✅ PAYMENT STATUS LOGIC
     ======================= */
-   if (Array.isArray(updates.paymentStatus)) {
-  updates.paymentStatus = updates.paymentStatus[updates.paymentStatus.length - 1];
-}
+    let newPaymentStatus = updates.paymentStatus;
 
-Object.assign(member, {
-  ...updates,
-  name: updates.name || member.name,
-  paymentStatus: updates.paymentStatus ?? member.paymentStatus,
-});
+    // frontend se array aa jaye to
+    if (Array.isArray(newPaymentStatus)) {
+      newPaymentStatus =
+        newPaymentStatus[newPaymentStatus.length - 1];
+    }
+
+    // ✅ pending/failed → paid hua to date set
+    if (
+      newPaymentStatus === 'paid' &&
+      member.paymentStatus !== 'paid'
+    ) {
+      member.paymentDate = new Date();
+    }
+
+    /* =======================
+       ✅ MAIN FIELD UPDATE
+    ======================= */
+    Object.assign(member, {
+      name: updates.name ?? member.name,
+      email: updates.email ?? member.email,
+      phoneNumber: updates.phoneNumber ?? member.phoneNumber,
+      postMember: updates.postMember ?? member.postMember,
+      level: updates.level ?? member.level,
+      sanghType: updates.sanghType ?? member.sanghType,
+      userImage: updates.userImage ?? member.userImage,
+      memberScreenshot:
+        updates.memberScreenshot ?? member.memberScreenshot,
+      paymentStatus:
+        newPaymentStatus ?? member.paymentStatus,
+    });
 
     await sangh.save();
 
