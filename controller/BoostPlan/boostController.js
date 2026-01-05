@@ -88,3 +88,48 @@ exports.createBoostPlan = asyncHandler(async (req, res) => {
     data: boost
   });
 });
+exports.getAllBoostPlans = asyncHandler(async (req, res) => {
+  try {
+    const boosts = await BoostPlan.find()
+      .populate({
+        path: "user",
+        select: "fullName profilePicture accountType businessName sadhuName tirthName",
+      })
+      .populate({
+        path: "post",
+        select: "caption media type",
+      })
+      .sort({ createdAt: -1 });
+
+    // ✅ CDN conversion (optional but recommended)
+    const formattedBoosts = boosts.map(boost => {
+      const boostObj = boost.toObject();
+
+      if (boostObj.user?.profilePicture) {
+        boostObj.user.profilePicture = convertS3UrlToCDN(
+          boostObj.user.profilePicture
+        );
+      }
+
+      if (boostObj.paymentScreenshot) {
+        boostObj.paymentScreenshot = convertS3UrlToCDN(
+          boostObj.paymentScreenshot
+        );
+      }
+
+      return boostObj;
+    });
+
+    res.status(200).json({
+      success: true,
+      count: formattedBoosts.length,
+      data: formattedBoosts,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching boost plans:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch boost plans",
+    });
+  }
+});

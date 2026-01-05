@@ -9,6 +9,7 @@ exports.createJob = async (req, res) => {
     const {
       user,
       jainAadhar,
+      companyName,
       jobName,
       jobType,
       jobDescription,
@@ -41,6 +42,7 @@ exports.createJob = async (req, res) => {
     const newJob = new Rojgar({
       user,
       jainAadhar,
+      companyName,
       jobName,
       jobType,
       jobDescription,

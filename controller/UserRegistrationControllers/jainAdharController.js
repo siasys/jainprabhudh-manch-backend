@@ -1192,37 +1192,102 @@ const editJainAadhar = asyncHandler(async (req, res) => {
   }
 });
 // Check Jain Aadhar application by mobile number
-const checkApplicationByNumber = asyncHandler(async (req, res) => {
+const checkApplicationDuplicate = asyncHandler(async (req, res) => {
   try {
-    const { number } = req.query;
+    const { name, fatherName, dob, number } = req.query;
 
-    if (!number) {
-      return errorResponse(res, "Mobile number is required", 400);
-    }
-
-    const application = await JainAadhar.findOne({
-      "contactDetails.number": number
-    }).select("jainAadharNumber contactDetails.number name");
-
-    if (!application) {
-      return successResponse(
+    if (!name || !dob || !number) {
+      return errorResponse(
         res,
-        null,
-        "No application found for this number",
-        200
+        "Name, DOB and mobile number are required",
+        400
       );
     }
 
+    // 🔹 Regex
+    const nameRegex = new RegExp(`^${name.trim()}$`, "i");
+    const fatherRegex = fatherName
+      ? new RegExp(`^${fatherName.trim()}$`, "i")
+      : null;
+
+    // 🔹 DOB as Date (IMPORTANT)
+    const dobDate = new Date(dob);
+
+    // 🔹 Build OR conditions safely
+    const orConditions = [
+      { name: nameRegex },
+      { dob: dobDate },
+      { "contactDetails.number": number },
+    ];
+
+    if (fatherRegex) {
+      orConditions.push({ fatherName: fatherRegex });
+    }
+
+    const applications = await JainAadhar.find({
+      $or: orConditions,
+    }).select("name fatherName dob contactDetails.number jainAadharNumber");
+
+    if (!applications.length) {
+      return successResponse(res, null, "No duplicate found", 200);
+    }
+
+    // 🔍 Match count logic
+    for (let app of applications) {
+      let matchedCount = 0;
+      let matchedFields = [];
+
+      if (nameRegex.test(app.name)) {
+        matchedCount++;
+        matchedFields.push("name");
+      }
+
+      if (
+        fatherRegex &&
+        app.fatherName &&
+        fatherRegex.test(app.fatherName)
+      ) {
+        matchedCount++;
+        matchedFields.push("fatherName");
+      }
+
+      if (
+        app.dob &&
+        new Date(app.dob).toISOString().slice(0, 10) === dob
+      ) {
+        matchedCount++;
+        matchedFields.push("dob");
+      }
+
+      if (app.contactDetails?.number === number) {
+        matchedCount++;
+        matchedFields.push("number");
+      }
+
+      // ✅ 4 me se 2 match
+    if (matchedCount >= 2) {
     return successResponse(
       res,
-      application,
-      "Application already exists",
+      {
+        application: {
+          jainAadharNumber: app.jainAadharNumber || null,
+          name: app.name || null,
+        },
+        matchedCount,
+        matchedFields,
+      },
+      "Duplicate application found",
       200
     );
+  }
+
+    }
+
+    return successResponse(res, null, "No duplicate found", 200);
   } catch (error) {
     return errorResponse(
       res,
-      "Error checking application by number",
+      "Error checking duplicate application",
       500,
       error.message
     );
@@ -1254,5 +1319,5 @@ module.exports = {
   sendSharavakOtp,
   verifySharavakOtp,
   resendSharavakOtp,
-  checkApplicationByNumber
+  checkApplicationDuplicate
 };

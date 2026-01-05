@@ -67,6 +67,8 @@ const scholarshipRoute = require('./routes/Scholarship/scholarshipRoutes');
 const boostRoute = require('./routes/BoostPlan/boostRoutes');
 const trainingRoute = require('./routes/Training Model/trainingRoute');
 const donationRoute = require('./routes/Donation/donationRoutes');
+const accountRoutes = require('./routes/Account Model/sanghClaimRoutes');
+
 //const appVersionRoute = require('./routes/Update apk/appVersion');
 app.set('trust proxy',1);
 // connect to databse
@@ -158,6 +160,10 @@ app.use('/api/donation', donationRoute);
 // Post boostup 
 app.use('/api/boost', boostRoute);
 app.use('/api/training', trainingRoute);
+
+// Sangh Account Model Routes
+app.use('/api/account', accountRoutes);
+
 // Activity Api
 app.use('/api/activity', activityRoute);
 // Scholarship Api

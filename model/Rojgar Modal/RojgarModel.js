@@ -13,6 +13,9 @@ const rojgarSchema = new mongoose.Schema(
     jainAadhar: {
       type: String,
     },
+    companyName: {
+      type: String,
+    },
     jobName: {
       type: String,
     },

@@ -25,7 +25,8 @@ const {
   verifySharavakOtp,
   resendSharavakOtp,
   getCheckShravk,
-  checkApplicationByNumber
+  checkApplicationByNumber,
+  checkApplicationDuplicate
 } = require('../../controller/UserRegistrationControllers/jainAdharController');
 const { authMiddleware, canReviewJainAadhar } = require('../../middlewares/authMiddlewares');
 const { canEditJainAadhar } = require('../../middlewares/jainAadharEditPermissions');
@@ -87,7 +88,7 @@ router.get(
   ],
   getAllApplications
 );
-router.get( "/check-by-number" ,checkApplicationByNumber);
+router.get( "/check-duplicate" ,checkApplicationDuplicate);
 router.get('/applications', getApplicationsReview);
 router.get('/generate-card/:id', generateJainAadharCard);
 router.get('/verify/jain-shravak/:jainAadharNumber', async (req, res) => {
