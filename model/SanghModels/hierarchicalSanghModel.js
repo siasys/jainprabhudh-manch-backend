@@ -183,6 +183,10 @@ const memberSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  paymentDistributed: {
+  type: Boolean,
+  default: false
+},
     membershipStartDate: {
     type: Date,
     default: Date.now
@@ -204,7 +208,96 @@ const memberSchema = new mongoose.Schema({
         default: 'pending'
     }
 });
-// 🔹 Sangh Team Schema
+const honoraryMemberSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  name: {
+    type: String,
+    required: true
+  },
+  jainAadharNumber: {
+    type: String,
+    required: true
+  },
+  level: {
+    type: String,
+  },
+  sanghType: {
+    type: String,
+  },
+  postMember: {
+    type: String,
+    default: 'honorary'
+  },
+  email: String,
+  phoneNumber: String,
+  document: String,
+  userImage: String,
+  memberScreenshot: String,
+
+  address: {
+    street: String,
+    city: String,
+    district: String,
+    state: String,
+    pincode: String
+  },
+
+  localSangh: {
+    state: String,
+    district: String,
+    sanghId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'HierarchicalSangh'
+    },
+    name: String
+  },
+
+  amount: {
+    type: Number,
+    default: 0   // mostly honorary me 0 hi hota hai
+  },
+
+  paymentDate: {
+    type: Date,
+    default: null
+  },
+
+  membershipStartDate: {
+    type: Date,
+    default: Date.now
+  },
+
+  membershipEndDate: {
+    type: Date,
+    default: null   // honorary lifetime bhi ho sakta hai
+  },
+paymentDistributed: {
+  type: Boolean,
+  default: false
+},
+  status: {
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'active'
+  },
+
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'paid', 'failed'],
+    default: 'pending'
+  },
+
+  isHonorary: {
+    type: Boolean,
+    default: true
+  }
+});
+
+// Sangh Team Schema
 const sanghTeamSchema = new mongoose.Schema({
   role: {
     type: String,
@@ -258,6 +351,64 @@ const sanghTeamSchema = new mongoose.Schema({
     default: '',
   },
 });
+const receivedPaymentSchema = new mongoose.Schema({
+  fromMemberId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+
+  memberName: String,
+  jainAadharNumber: String,
+
+  fromMemberLevel: {
+    type: String, // city / district / state / country
+    required: true
+  },
+
+  sourceSanghId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'HierarchicalSangh'
+  },
+
+  sourceSanghLevel: {
+    type: String
+  },
+
+  percentage: {
+    type: Number, // 10 / 20 / 50
+    required: true
+  },
+
+  amount: {
+    type: Number,
+    required: true
+  },
+
+  sanghType: {
+    type: String,
+    enum: ['main', 'women', 'youth'],
+    default: 'main'
+  },
+
+  location: {
+    country: String,
+    state: String,
+    district: String,
+    city: String
+  },
+
+  paymentDate: {
+    type: Date,
+    default: Date.now
+  },
+
+  status: {
+    type: String,
+    enum: ['unclaimed', 'claimed'],
+    default: 'unclaimed'
+  }
+}, { _id: true });
 
 const hierarchicalSanghSchema = new mongoose.Schema({
     name: {
@@ -338,10 +489,16 @@ const hierarchicalSanghSchema = new mongoose.Schema({
         type:String
     },
     members: [memberSchema],
+    honoraryMembers: [honoraryMemberSchema],
     panches: [panchSchema],
+    receivedPayments: [receivedPaymentSchema],
     establishedDate: {
         type: Date,
         default: Date.now
+    },
+    totalAvailableAmount: {
+      type: Number,
+      default: 0,
     },
     description: String,
     coverImage: String,

@@ -30,7 +30,8 @@ const {
     updateSanghDetails,
     updatePanchMembers,
     updateMemberStatus,
-    deleteSanghTeamMember
+    deleteSanghTeamMember,
+    addHonoraryMember
 } = require('../../controller/SanghControllers/hierarchicalSanghController');
 
 const upload = require('../../middlewares/upload');
@@ -83,6 +84,8 @@ router.put('/update/:id', upload.sangathanDocs, updateHierarchicalSangh);
 
 // Member management routes with updated permissions
 router.post('/:sanghId/members', upload.memberUploads, addSanghMember);
+router.post('/:sanghId/honorary-member', upload.memberUploads, addHonoraryMember);
+
 router.delete('/:sanghId/sangh-team/:memberId', deleteSanghTeamMember);
 router.delete('/:sanghId/members/:memberId', isOfficeBearer,
     //validateSanghAccess,

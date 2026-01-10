@@ -296,6 +296,7 @@ activityJudge: [
         'secretary',
         'treasurer',
         'member',
+        'honoraryMember',
         'panchMember',
         'sanghSarakshak',
         'sanghMargdarshak',
