@@ -1,5 +1,5 @@
 const express = require("express");
-const { applyScholarship, getScholarshipById, getAllScholarships, updateScholarship, deleteScholarship, createScholarshipSponsor, getAllScholarshipSponsors, updateScholarshipStatus, getScholarshipByUser } = require("../../controller/Scholarship/scholarshipController");
+const { applyScholarship, getScholarshipById, getAllScholarships, updateScholarship, deleteScholarship, createScholarshipSponsor, getAllScholarshipSponsors, updateScholarshipStatus, getScholarshipByUser, updateScholarshipSponsorImage } = require("../../controller/Scholarship/scholarshipController");
 const router = express.Router();
 const upload = require("../../middlewares/upload");
 
@@ -7,6 +7,8 @@ const upload = require("../../middlewares/upload");
 router.post("/apply", upload.scholarshipUpload, applyScholarship);
 router.post("/sponsor", upload.sponsorUpload, createScholarshipSponsor);
 router.get("/get/sponsor", getAllScholarshipSponsors);
+router.patch("/sponsor/:id/image", upload.sponsorUpload, updateScholarshipSponsorImage);
+
 
 // Get scholarship by ID
 router.get("/:id", getScholarshipById);

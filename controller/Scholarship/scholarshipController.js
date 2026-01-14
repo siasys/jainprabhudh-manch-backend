@@ -107,6 +107,45 @@ exports.getAllScholarshipSponsors = async (req, res) => {
     });
   }
 };
+
+exports.updateScholarshipSponsorImage = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 🔹 Find sponsor
+    const sponsor = await ScholarshipSponsor.findById(id);
+    if (!sponsor) {
+      return res.status(404).json({ message: "Sponsor not found" });
+    }
+
+    // 🔹 Check image
+    if (!req.files || !req.files.sponserImage || req.files.sponserImage.length === 0) {
+      return res.status(400).json({ message: "Sponsor image is required" });
+    }
+
+    // 🔹 Convert & update only image
+    const sponsorImageUrl = convertS3UrlToCDN(
+      req.files.sponserImage[0].location
+    );
+
+    sponsor.sponserImage = sponsorImageUrl;
+
+    await sponsor.save();
+
+    res.status(200).json({
+      message: "Sponsor image updated successfully",
+      sponsor,
+    });
+
+  } catch (error) {
+    console.error("Update sponsor image error:", error);
+    res.status(500).json({
+      message: "Error updating sponsor image",
+      error: error.message,
+    });
+  }
+};
+
 // ------------------------ GET ONE ------------------------
 exports.getScholarshipById = async (req, res) => {
   try {
