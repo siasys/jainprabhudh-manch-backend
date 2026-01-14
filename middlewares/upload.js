@@ -311,7 +311,9 @@ module.exports.sadhuDocs = upload.fields([
 module.exports.tirthDocs = upload.fields([
   { name: 'tirthPhoto', maxCount: 10 },
 ]);
-
+module.exports.expenseBillUpload = upload.fields([
+  { name: 'uploadBill', maxCount: 1 },
+]);
 // Add JainVyapar document upload configuration
 module.exports.vyaparDocs = upload.fields([
   { name: 'entityPhoto', maxCount: 5 },

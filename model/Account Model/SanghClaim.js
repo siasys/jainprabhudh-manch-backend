@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 
 const sanghClaimSchema = new mongoose.Schema(
@@ -6,49 +7,25 @@ const sanghClaimSchema = new mongoose.Schema(
     sanghId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'HierarchicalSangh',
+      required: true,
     },
 
     // 🔹 Claim karne wala user
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-    },
-
-    // 🔹 Foundation (always)
-    foundationId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'HierarchicalSangh',
-    },
-
-    // Location based receivers
-    countrySanghId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'HierarchicalSangh',
-    },
-
-    stateSanghId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'HierarchicalSangh',
-    },
-
-    districtSanghId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'HierarchicalSangh',
-    },
-
-    // 🔹 Honorary sangh (special 10%)
-    honorarySanghId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'HierarchicalSangh',
+      required: true,
     },
 
     // 🔹 Member counts
     totalMembers: {
       type: Number,
+      default: 0,
     },
 
     ownSanghMembers: {
       type: Number,
+      default: 0,
     },
 
     honoraryMembers: {
@@ -56,59 +33,64 @@ const sanghClaimSchema = new mongoose.Schema(
       default: 0,
     },
 
-    // 🔹 Amount breakup (CLEAR)
+    // 🔹 Amount breakdown
     ownSanghAmount: {
-      type: Number, // 50% + honorary base
-    },
-
-    honoraryMembersAmount: {
-      type: Number, // only honorary fee × count
-    },
-
-    foundationAmount: {
-      type: Number, // 20%
-    },
-
-    countryAmount: {
-      type: Number, // 10%
-    },
-
-    stateAmount: {
-      type: Number, // always 0 OR optional (not used)
+      type: Number,
       default: 0,
     },
 
-    districtAmount: {
-      type: Number, // 10%
+    honoraryMembersAmount: {
+      type: Number,
+      default: 0,
     },
 
-    honorarySanghAmount: {
-      type: Number, // 10%
+    receivedPaymentsAmount: {
+      type: Number,
+      default: 0,
     },
 
-    // 🔹 Total
     totalAmount: {
-      type: Number, // regular base + honorary base
+      type: Number,
+      required: true,
     },
 
-    // 🔹 Status
-    paymentStatus: {
-      type: String,
-      enum: ['pending', 'paid', 'rejected', 'under_review'],
-      default: 'pending',
-    },
+    // 🔹 Claimed Payments IDs (receivedPayments array se)
+    claimedPaymentIds: [{
+      type: mongoose.Schema.Types.ObjectId,
+    }],
 
+    // 🔹 Status tracking
     status: {
       type: String,
       enum: ['submitted', 'under_review', 'approved', 'rejected'],
       default: 'submitted',
     },
 
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'processing', 'paid', 'failed'],
+      default: 'pending',
+    },
+
+    // 🔹 Remark from sangh
     remark: {
       type: String,
       default: '',
+      maxlength: 500,
     },
 
+    // 🔹 Foundation/Admin response
+    adminResponse: {
+      reviewedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+      reviewedAt: Date,
+      approvalNote: String,
+      rejectionReason: String,
+    },
+
+    // 🔹 Payment details (filled by foundation after approval)
     paymentDetails: {
       transactionId: String,
       paidAt: Date,
@@ -116,9 +98,48 @@ const sanghClaimSchema = new mongoose.Schema(
         type: String,
         enum: ['bank_transfer', 'upi', 'cheque', 'cash', 'other'],
       },
+      bankReference: String,
+      screenshot: String, // payment proof URL
     },
+
+    // 🔹 Metadata
+    submittedAt: {
+      type: Date,
+      default: Date.now,
+    },
+
+    approvedAt: Date,
+    rejectedAt: Date,
+    paidAt: Date,
+
   },
-  { timestamps: true }
+  { 
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+  }
 );
+
+// 🔹 Indexes for faster queries
+sanghClaimSchema.index({ sanghId: 1, status: 1 });
+sanghClaimSchema.index({ userId: 1, status: 1 });
+sanghClaimSchema.index({ status: 1, paymentStatus: 1 });
+sanghClaimSchema.index({ createdAt: -1 });
+
+// 🔹 Virtual for sangh details
+sanghClaimSchema.virtual('sangh', {
+  ref: 'HierarchicalSangh',
+  localField: 'sanghId',
+  foreignField: '_id',
+  justOne: true,
+});
+
+// 🔹 Virtual for user details
+sanghClaimSchema.virtual('user', {
+  ref: 'User',
+  localField: 'userId',
+  foreignField: '_id',
+  justOne: true,
+});
 
 module.exports = mongoose.model('SanghClaim', sanghClaimSchema);

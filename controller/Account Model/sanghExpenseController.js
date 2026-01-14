@@ -1,4 +1,4 @@
-const SanghExpense = require('../../model/Account Model/SanghExpense');
+const Expense = require('../../model/Account Model/SanghExpense');
 const Sangh = require('../../model/SanghModels/hierarchicalSanghModel');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 
@@ -6,7 +6,7 @@ const { convertS3UrlToCDN } = require('../../utils/s3Utils');
    🔹 Expense ID Generator
 ================================ */
 const generateExpenseId = async () => {
-  const lastExpense = await SanghExpense.findOne()
+  const lastExpense = await Expense.findOne()
     .sort({ createdAt: -1 })
     .select('expensesId');
 
@@ -18,126 +18,145 @@ const generateExpenseId = async () => {
   return `EXP-${String(nextNumber).padStart(3, '0')}`;
 };
 
-/* ===============================
-   🔹 Create Sangh Expense
-================================ */
-exports.createSanghExpense = async (req, res) => {
+
+exports.createExpense = async (req, res) => {
   try {
     const {
-      expensesTitle,
       sanghId,
-      category,
+      expenseTitle,
+      expenseDate,
       amount,
+      paymentToName,
+      category,
+      projectName,
+      meetingLocation,
+      meetingPurpose,
+      otherCategory,
       paymentType,
-      billImage,
-      additionalInfo,
+      invoiceNumber,
+      additionalNote,
     } = req.body;
 
-    // 🔒 Basic validation
-    // if (!expensesTitle || !sanghId || !category || !amount || !paymentType) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: 'Required fields missing',
-    //   });
-    // }
+    const userId = req.user.id;
 
-    // ✅ Fetch sangh name from Sangh model
-    const sangh = await Sangh.findById(sanghId).select('name');
-
-    if (!sangh) {
-      return res.status(404).json({
-        success: false,
-        message: 'Sangh not found',
-      });
-    }
-
-    // ✅ Convert S3 URL to CDN
-    const convertedBillImage = billImage
-      ? convertS3UrlToCDN(billImage)
-      : null;
-
-    // ✅ Generate Expense ID
+    // 🔹 Generate Expense ID
     const expensesId = await generateExpenseId();
 
-    const expense = await SanghExpense.create({
+    let uploadBill = '';
+    if (req.files?.uploadBill?.[0]?.location) {
+      uploadBill = convertS3UrlToCDN(req.files.uploadBill[0].location);
+    }
+
+    const expense = await Expense.create({
       expensesId,
-      expensesTitle,
       sanghId,
-      sanghName: sangh.name, // ⬅️ auto from Sangh model
-      category,
+      userId,
+      expenseTitle,
+      expenseDate,
       amount,
+      paymentToName,
+      category,
+      projectName,
+      meetingLocation,
+      meetingPurpose,
+      otherCategory,
       paymentType,
-      billImage: convertedBillImage,
-      additionalInfo,
-      createdBy: req.user?._id,
+      uploadBill,
+      invoiceNumber,
+      additionalNote,
     });
 
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
-      message: 'Sangh expense created successfully',
+      message: 'Expense added successfully',
       data: expense,
     });
-  } catch (error) {
-    console.error('Create Sangh Expense Error:', error);
-    return res.status(500).json({
+
+  } catch (err) {
+    console.error('❌ Create Expense Error:', err);
+    res.status(500).json({
       success: false,
-      message: 'Server error',
+      message: err.message,
     });
   }
 };
-
-/* ===============================
-   🔹 Get All Sangh Expenses (GLOBAL)
-================================ */
-exports.getAllSanghExpenses = async (req, res) => {
+exports.getAllExpenses = async (req, res) => {
   try {
-    const expenses = await SanghExpense.find()
-      .populate({
-        path: 'sanghId',
-        select: 'name level',
-      })
-      .populate({
-        path: 'createdBy',
-        select: 'fullName profilePicture',
-      })
+    const {
+      sanghId,
+      status,
+      category,
+      paymentType,
+      page = 1,
+      limit = 20,
+    } = req.query;
+
+    const query = {};
+
+    // 🔹 Optional filters
+    if (sanghId) query.sanghId = sanghId;
+    if (status) query.status = status;
+    if (category) query.category = category;
+    if (paymentType) query.paymentType = paymentType;
+
+    const expenses = await Expense.find(query)
+      .populate('userId', 'name email')
+      .populate('sanghId', 'name level location')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    const total = await Expense.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      data: expenses,
+      pagination: {
+        total,
+        page: parseInt(page),
+        pages: Math.ceil(total / limit),
+      },
+    });
+
+  } catch (err) {
+    console.error('❌ Get All Expenses Error:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+// ✅ GET ALL EXPENSES (SANGH)
+exports.getSanghExpenses = async (req, res) => {
+  try {
+    const { sanghId } = req.params;
+
+    const expenses = await Expense.find({ sanghId })
+      .populate('userId', 'name email')
       .sort({ createdAt: -1 });
 
-    const formattedExpenses = expenses.map(exp => ({
-      ...exp.toObject(),
-      billImage: exp.billImage
-        ? convertS3UrlToCDN(exp.billImage)
-        : null,
-    }));
-
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
-      count: formattedExpenses.length,
-      data: formattedExpenses,
+      data: expenses,
     });
-  } catch (error) {
-    console.error('Get All Sangh Expenses Error:', error);
-    return res.status(500).json({
+
+  } catch (err) {
+    console.error('❌ Get Expenses Error:', err);
+    res.status(500).json({
       success: false,
-      message: 'Failed to fetch expenses',
+      message: err.message,
     });
   }
 };
-/* ===============================
-   🔹 Get Sangh Expense By ExpenseId
-================================ */
-exports.getSanghExpenseByExpenseId = async (req, res) => {
-  try {
-    const { expensesId } = req.params;
 
-    const expense = await SanghExpense.findOne({ expensesId })
-      .populate({
-        path: 'sanghId',
-        select: 'name level',
-      })
-      .populate({
-        path: 'createdBy',
-        select: 'fullName profilePicture',
-      });
+// ✅ GET SINGLE EXPENSE
+exports.getExpenseById = async (req, res) => {
+  try {
+    const { expenseId } = req.params;
+
+    const expense = await Expense.findById(expenseId)
+      .populate('userId', 'name email')
+      .populate('sanghId', 'name level');
 
     if (!expense) {
       return res.status(404).json({
@@ -146,22 +165,17 @@ exports.getSanghExpenseByExpenseId = async (req, res) => {
       });
     }
 
-    const formattedExpense = {
-      ...expense.toObject(),
-      billImage: expense.billImage
-        ? convertS3UrlToCDN(expense.billImage)
-        : null,
-    };
-
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
-      data: formattedExpense,
+      data: expense,
     });
-  } catch (error) {
-    console.error('Get Expense By ID Error:', error);
-    return res.status(500).json({
+
+  } catch (err) {
+    console.error('❌ Get Expense Error:', err);
+    res.status(500).json({
       success: false,
-      message: 'Failed to fetch expense',
+      message: err.message,
     });
   }
 };
+

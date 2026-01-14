@@ -1418,20 +1418,20 @@ const getUserById = asyncHandler(async (req, res) => {
   res.json(userResponse);
 });
 
-// New: Get User Activity by type
+// Get User Activity by type (including saved)
 const getUserActivityByType = asyncHandler(async (req, res) => {
   const { id, type } = req.params;
 
-  if (!["likes", "comments", "shares"].includes(type)) {
+  if (!["likes", "comments", "shares", "saved"].includes(type)) {
     return res.status(400).json({ error: "Invalid activity type" });
   }
 
   const user = await User.findById(id).populate({
     path: `activity.${type}.postId`,
-    select: "caption media createdAt user likes comments",
+    select: "caption media createdAt user likes comments postType",
     populate: {
       path: "user",
-      select: "fullName profilePicture",
+      select: "fullName profilePicture accountType sadhuName tirthName businessName",
     },
   });
 
@@ -1445,7 +1445,7 @@ const getUserActivityByType = asyncHandler(async (req, res) => {
       if (a.postId) {
         const post = a.postId.toObject ? a.postId.toObject() : a.postId;
 
-        // ✅ CDN URL conversion
+        // ✅ Convert media URLs to CDN
         if (post.media && Array.isArray(post.media)) {
           post.media = post.media.map((m) => ({
             ...m,
@@ -1457,21 +1457,24 @@ const getUserActivityByType = asyncHandler(async (req, res) => {
           _id: post._id,
           caption: post.caption || "",
           media: post.media || [],
+          postType: post.postType || "post",
           createdAt: post.createdAt,
           user: post.user,
           likes: post.likes || [],
           likeCount: post.likes ? post.likes.length : 0,
           comments: post.comments || [],
           commentCount: post.comments ? post.comments.length : 0,
-          activityCreatedAt: a.createdAt, // 👈 ye important hai
+          activityCreatedAt: a.createdAt, // 🔹 important: savedAt / likedAt / etc
         };
       }
       return null;
     })
     .filter((p) => p !== null);
 
-  // 👇 Sort recent activity first (newest first)
-  posts = posts.sort((a, b) => new Date(b.activityCreatedAt) - new Date(a.activityCreatedAt));
+  // 🔹 Sort recent first
+  posts = posts.sort(
+    (a, b) => new Date(b.activityCreatedAt) - new Date(a.activityCreatedAt)
+  );
 
   res.json({ posts });
 });

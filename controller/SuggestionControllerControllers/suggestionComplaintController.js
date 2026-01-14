@@ -150,11 +150,16 @@ exports.getAllSuggestionsComplaint = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
 
-    const complaints = await SuggestionComplaint.find({})
-      .populate("submittedBy", "firstName lastName fullName profilePicture")
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+  const complaints = await SuggestionComplaint.find({
+  submittedBy: { $ne: null }
+})
+.populate(
+  "submittedBy",
+  "firstName lastName fullName profilePicture phoneNumber email location jainAadharNumber"
+)
+.sort({ createdAt: -1 })
+.skip((page - 1) * limit)
+.limit(parseInt(limit));
 
     const total = await SuggestionComplaint.countDocuments();
 

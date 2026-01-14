@@ -987,7 +987,7 @@ const checkOfficeBearerTerms = asyncHandler(async (req, res) => {
         }
 
         const currentDate = new Date();
-        const expiredBearers = sangh.officeBearers.filter(bearer => 
+        const expiredBearers = sangh.officeBearers.filter(bearer =>
             bearer.status === 'active' && bearer.termEndDate < currentDate
         );
 
@@ -995,13 +995,13 @@ const checkOfficeBearerTerms = asyncHandler(async (req, res) => {
             // Mark expired bearers as inactive
             await HierarchicalSangh.updateOne(
                 { _id: sanghId },
-                { 
+                {
                     $set: {
                         'officeBearers.$[elem].status': 'inactive'
                     }
                 },
                 {
-                    arrayFilters: [{ 
+                    arrayFilters: [{
                         'elem.status': 'active',
                         'elem.termEndDate': { $lt: currentDate }
                     }]
@@ -1040,6 +1040,7 @@ const getUserByJainAadhar = asyncHandler(async (req, res) => {
   return res.status(200).json(user);
 });
 
+
 const distributeMemberPayment = async ({
   member,
   user,
@@ -1049,17 +1050,18 @@ const distributeMemberPayment = async ({
   const SOURCE_PERCENT = 50;
   const OTHER_PERCENT = 10;
 
-  const location = user?.jainAadharApplication?.location || {};
+  const userLocation = user?.jainAadharApplication?.location || {};
   const sanghType = member.sanghType || 'main';
 
-  // All possible levels
+  const resolvedMemberLevel =
+    member.level ||
+    (member.localSangh?.sanghId ? 'local' : null) ||
+    sourceSangh.level;
+
   const ALL_LEVELS = ['country', 'state', 'district', 'city'];
 
-  /* ---------------- FOUNDATION ---------------- */
-  const foundation = await HierarchicalSangh.findOne({
-    level: 'foundation',
-    sanghType
-  });
+  /* ---------------- FOUNDATION (20%) ---------------- */
+  const foundation = await HierarchicalSangh.findOne({ level: 'foundation' });
 
   if (foundation) {
     const amount = (member.amount * FOUNDATION_PERCENT) / 100;
@@ -1068,11 +1070,11 @@ const distributeMemberPayment = async ({
       fromMemberId: member.userId,
       memberName: member.name,
       jainAadharNumber: member.jainAadharNumber,
-       fromMemberLevel: member.level,
+      fromMemberLevel: resolvedMemberLevel,
       percentage: FOUNDATION_PERCENT,
       amount,
       sanghType,
-      location,
+      location: userLocation,
       sourceSanghId: sourceSangh._id,
       sourceSanghLevel: sourceSangh.level
     });
@@ -1088,11 +1090,11 @@ const distributeMemberPayment = async ({
     fromMemberId: member.userId,
     memberName: member.name,
     jainAadharNumber: member.jainAadharNumber,
-      fromMemberLevel: member.level,
+    fromMemberLevel: resolvedMemberLevel,
     percentage: SOURCE_PERCENT,
     amount: sourceAmount,
     sanghType,
-    location,
+    location: userLocation,
     sourceSanghId: sourceSangh._id,
     sourceSanghLevel: sourceSangh.level
   });
@@ -1102,40 +1104,71 @@ const distributeMemberPayment = async ({
 
   /* ---------------- OTHER SANGHS (10% EACH) ---------------- */
   for (const level of ALL_LEVELS) {
-    if (level === sourceSangh.level) continue;
+  if (level === sourceSangh.level) continue;
 
-    let query = { level, sanghType };
+  let targetSangh = null;
 
-    if (level === 'country') query['location.country'] = location.country;
-    if (level === 'state') query['location.state'] = location.state;
-    if (level === 'district') query['location.district'] = location.district;
-    if (level === 'city') query['location.city'] = location.city;
-
-    const targetSangh = await HierarchicalSangh.findOne(query);
-    if (!targetSangh) continue;
-
-    const amount = (member.amount * OTHER_PERCENT) / 100;
-
-    targetSangh.receivedPayments.push({
-      fromMemberId: member.userId,
-      memberName: member.name,
-      jainAadharNumber: member.jainAadharNumber,
-       fromMemberLevel: member.level,
-      percentage: OTHER_PERCENT,
-      amount,
+  /* ---------- CITY (honorary priority) ---------- */
+  if (level === 'city') {
+    targetSangh = await HierarchicalSangh.findOne({
+      level: 'city',
       sanghType,
-      location,
-      sourceSanghId: sourceSangh._id,
-      sourceSanghLevel: sourceSangh.level
+      'honoraryMembers.userId': member.userId
     });
 
-    targetSangh.totalAvailableAmount += amount;
-    await targetSangh.save();
+    if (!targetSangh) {
+      targetSangh = await HierarchicalSangh.findOne({
+        level: 'city',
+        sanghType,
+        'location.city': userLocation.city
+      });
+    }
+  } 
+  /* ---------- COUNTRY / STATE / DISTRICT (USER LOCATION BASED) ---------- */
+  else {
+    let query = { level, sanghType };
+
+    if (level === 'country')
+      query['location.country'] = userLocation.country;
+
+    if (level === 'state')
+      query['location.state'] = userLocation.state;
+
+    if (level === 'district')
+      query['location.district'] = userLocation.district;
+
+    targetSangh = await HierarchicalSangh.findOne(query);
   }
 
+  if (!targetSangh) continue;
+
+  const amount = (member.amount * OTHER_PERCENT) / 100;
+
+  targetSangh.receivedPayments.push({
+    fromMemberId: member.userId,
+    memberName: member.name,
+    jainAadharNumber: member.jainAadharNumber,
+    fromMemberLevel: resolvedMemberLevel,
+    percentage: OTHER_PERCENT,
+    amount,
+    sanghType,
+    location: userLocation,
+    sourceSanghId: sourceSangh._id,
+    sourceSanghLevel: sourceSangh.level,
+    via:
+      level === 'city' &&
+      targetSangh.honoraryMembers?.some(
+        h => String(h.userId) === String(member.userId)
+      )
+        ? 'honorary'
+        : 'location'
+  });
+
+  targetSangh.totalAvailableAmount += amount;
+  await targetSangh.save();
+}
   member.paymentDistributed = true;
 };
-
 
 // Add member(s) to Sangh
 const addSanghMember = asyncHandler(async (req, res) => {
@@ -1143,7 +1176,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
     const sanghId = req.params.sanghId;
     const MAX_BULK_MEMBERS = 50;
 
-     const sangh = await HierarchicalSangh.findById(sanghId);
+    const sangh = await HierarchicalSangh.findById(sanghId);
     if (!sangh) return errorResponse(res, 'Sangh not found', 404);
 
     const isBulk = req.body.members && Array.isArray(req.body.members);
@@ -1178,29 +1211,21 @@ const addSanghMember = asyncHandler(async (req, res) => {
             continue;
           }
 
-          // if (sangh.members.some(m => m.jainAadharNumber === member.jainAadharNumber)) {
-          //   results.failed.push({
-          //     jainAadharNumber: member.jainAadharNumber,
-          //     reason: 'Already a member'
-          //   });
-          //   continue;
-          // }
-
           const location = user?.jainAadharApplication?.location || {};
           const contact = user?.jainAadharApplication?.contactDetails || {};
-         const rawImage =
+          const rawImage =
             (req.file?.location || req.file?.path) ||
-            user?.jainAadharApplication?.userProfile  ||
+            user?.jainAadharApplication?.userProfile ||
             user?.profileImage || '';
           const rawScreenshot =
             req.files?.memberScreenshot?.[0]?.location ||
             req.files?.memberScreenshot?.[0]?.path ||
             '';
-            const memberScreenshot = rawScreenshot
-              ? convertS3UrlToCDN(rawScreenshot)
-              : '';
-            const userImage = rawImage ? convertS3UrlToCDN(rawImage) : '';
-           const paymentStatus = member.paymentStatus || 'pending';
+          const memberScreenshot = rawScreenshot
+            ? convertS3UrlToCDN(rawScreenshot)
+            : '';
+          const userImage = rawImage ? convertS3UrlToCDN(rawImage) : '';
+          const paymentStatus = member.paymentStatus || 'pending';
           const isPaid = paymentStatus === 'paid';
 
           const membershipStartDate = new Date();
@@ -1217,14 +1242,13 @@ const addSanghMember = asyncHandler(async (req, res) => {
             phoneNumber: contact.number || user.phoneNumber,
             postMember: member.postMember || '',
             userImage,
-             memberScreenshot,
-               amount,
-               paymentStatus,
-              paymentDate,
-           membershipStartDate,
+            memberScreenshot,
+            amount: member.amount || 0,
+            paymentStatus,
+            paymentDate,
+            membershipStartDate,
             membershipEndDate,
             status: isPaid ? 'active' : 'inactive',
-
             address: {
               street: location.address || '',
               city: location.city || '',
@@ -1235,16 +1259,17 @@ const addSanghMember = asyncHandler(async (req, res) => {
             addedBy: req.user._id,
             addedAt: new Date(),
             localSangh: member.localSangh?.sanghId ? {
-            state: member.localSangh.state || '',
-            district: member.localSangh.district || '',
-            sanghId: member.localSangh.sanghId,
-            name: member.localSangh.name || ''
-          } : undefined
+              state: member.localSangh.state || '',
+              district: member.localSangh.district || '',
+              sanghId: member.localSangh.sanghId,
+              name: member.localSangh.name || ''
+            } : undefined
           };
 
           sangh.members.push(newMember);
           results.success.push({ jainAadharNumber: member.jainAadharNumber, name: newMember.name });
 
+          // ✅ STEP 1: Add MEMBER role first (Index 0)
           await User.findByIdAndUpdate(user._id, {
             $push: {
               sanghRoles: {
@@ -1256,6 +1281,62 @@ const addSanghMember = asyncHandler(async (req, res) => {
               }
             }
           });
+
+          // ✅ STEP 2: Add HONORARY MEMBER role if applicable (Index 1)
+          if ((member.isHonorary === 'true' || member.isHonorary === true) && member.localSangh?.sanghId) {
+            const localSangh = await HierarchicalSangh.findById(member.localSangh.sanghId);
+
+            if (localSangh) {
+              const honoraryMember = {
+                userId: user._id,
+                name: newMember.name,
+                jainAadharNumber: newMember.jainAadharNumber,
+                email: newMember.email,
+                phoneNumber: newMember.phoneNumber,
+                postMember: member.postMember || 'Honorary Member',
+                level: 'city',
+                sanghType: member.sanghType || 'main',
+                userImage: newMember.userImage,
+                memberScreenshot: newMember.memberScreenshot,
+                amount: member.amount || 0,
+                paymentStatus: finalPaymentStatus,
+                paymentDate: isPaid ? new Date() : null, 
+                membershipStartDate,
+                membershipEndDate,
+                status: isPaid ? 'active' : 'inactive',
+                address: newMember.address,
+                isHonorary: true,
+                addedBy: req.user._id,
+                addedAt: new Date()
+              };
+
+              if (!localSangh.honoraryMembers) {
+                localSangh.honoraryMembers = [];
+              }
+
+              const exists = localSangh.honoraryMembers.some(
+                h => h.jainAadharNumber === member.jainAadharNumber
+              );
+
+              if (!exists) {
+                localSangh.honoraryMembers.push(honoraryMember);
+                await localSangh.save();
+              }
+
+              // Add honoraryMember role AFTER member role
+              await User.findByIdAndUpdate(user._id, {
+                $push: {
+                  sanghRoles: {
+                    sanghId: localSangh._id,
+                    role: 'honoraryMember',
+                    level: 'city',
+                    sanghType: localSangh.sanghType,
+                    addedAt: new Date()
+                  }
+                }
+              });
+            }
+          }
 
         } catch (error) {
           results.failed.push({ jainAadharNumber: member.jainAadharNumber, reason: error.message });
@@ -1276,7 +1357,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
     }
 
     // ======= SINGLE MEMBER ADDITION =======
-    const { jainAadharNumber, postMember,level, sanghType,paymentStatus,amount } = req.body;
+    const { jainAadharNumber, postMember, level, sanghType, paymentStatus, amount, isHonorary } = req.body;
 
     // ✅ Parse localSangh if needed
     if (req.body.localSangh && typeof req.body.localSangh === 'string') {
@@ -1297,15 +1378,12 @@ const addSanghMember = asyncHandler(async (req, res) => {
 
     if (!user) return errorResponse(res, 'Invalid or unverified Jain Aadhar number', 400);
 
-    // if (sangh.members.some(m => m.jainAadharNumber === jainAadharNumber))
-    //   return errorResponse(res, 'Already a member of this Sangh', 400);
-
     const location = user?.jainAadharApplication?.location || {};
     const contact = user?.jainAadharApplication?.contactDetails || {};
     const rawImage =
-    (req.file?.location || req.file?.path) ||
-    user?.jainAadharApplication?.userProfile  ||
-    user?.profileImage || '';
+      (req.file?.location || req.file?.path) ||
+      user?.jainAadharApplication?.userProfile ||
+      user?.profileImage || '';
     const userImage = rawImage ? convertS3UrlToCDN(rawImage) : '';
     const rawScreenshot =
       req.files?.memberScreenshot?.[0]?.location ||
@@ -1332,8 +1410,8 @@ const addSanghMember = asyncHandler(async (req, res) => {
       level: level || '',
       sanghType: sanghType || 'main',
       userImage,
-       memberScreenshot,
-       amount: amount || 0,
+      memberScreenshot,
+      amount: amount || 0,
       address: {
         street: location.address || '',
         city: location.city || '',
@@ -1341,27 +1419,26 @@ const addSanghMember = asyncHandler(async (req, res) => {
         state: location.state || '',
         pincode: location.pinCode || ''
       },
-       paymentStatus: finalPaymentStatus,
-
-      // ✅ PAYMENT & MEMBERSHIP DATE HANDLING
+      paymentStatus: finalPaymentStatus,
       paymentDate: isPaid ? new Date() : null,
-       membershipStartDate,
-        membershipEndDate,
-
+      membershipStartDate,
+      membershipEndDate,
       status: isPaid ? 'active' : 'inactive',
       paymentDistributed: false,
       localSangh: req.body.localSangh?.sanghId ? {
-            state: req.body.localSangh.state || '',
-            district: req.body.localSangh.district || '',
-            sanghId: req.body.localSangh.sanghId,
-            name: req.body.localSangh.name || ''
-          } : undefined,
+        state: req.body.localSangh.state || '',
+        district: req.body.localSangh.district || '',
+        sanghId: req.body.localSangh.sanghId,
+        name: req.body.localSangh.name || ''
+      } : undefined,
       addedBy: req.user._id,
       addedAt: new Date(),
     };
 
     sangh.members.push(newMember);
+    await sangh.save();
 
+    // ✅ STEP 1: UPDATE USER SANGH ROLES - MEMBER ROLE FIRST (Index 0)
     await User.findByIdAndUpdate(user._id, {
       $push: {
         sanghRoles: {
@@ -1374,21 +1451,77 @@ const addSanghMember = asyncHandler(async (req, res) => {
       }
     });
 
-    await sangh.save();
-      // =================================================
-      // ✅ PAYMENT DISTRIBUTION (ONLY IF PAID)
-      // =================================================
-      if (isPaid && !newMember.paymentDistributed) {
-        await distributeMemberPayment({
-          member: newMember,
-          user,
-          sourceSangh: sangh
-        });
+    // ✅ STEP 2: HONORARY MEMBER ROLE ADDITION (Index 1) - Only if isHonorary is true
+    if ((isHonorary === 'true' || isHonorary === true) && req.body.localSangh?.sanghId) {
+      const localSangh = await HierarchicalSangh.findById(req.body.localSangh.sanghId);
 
-        // flag update
-        newMember.paymentDistributed = true;
-        await sangh.save();
+      if (localSangh) {
+        const honoraryMember = {
+          userId: user._id,
+          name: newMember.name,
+          jainAadharNumber: newMember.jainAadharNumber,
+          email: newMember.email,
+          phoneNumber: newMember.phoneNumber,
+          postMember: postMember || 'Honorary Member',
+          level: 'city',
+          sanghType: sanghType || 'main',
+          userImage: newMember.userImage,
+          memberScreenshot: newMember.memberScreenshot,
+          amount: amount || 0,
+          paymentStatus: finalPaymentStatus,
+          paymentDate: isPaid ? new Date() : null,
+          membershipStartDate,
+          membershipEndDate,
+          status: 'inactive',
+          address: newMember.address,
+          isHonorary: true,
+          addedBy: req.user._id,
+          addedAt: new Date()
+        };
+
+        if (!localSangh.honoraryMembers) {
+          localSangh.honoraryMembers = [];
+        }
+
+        // prevent duplicate
+        const exists = localSangh.honoraryMembers.some(
+          h => h.jainAadharNumber === jainAadharNumber
+        );
+
+        if (!exists) {
+          localSangh.honoraryMembers.push(honoraryMember);
+          await localSangh.save();
+        }
+
+        // ✅ Add honoraryMember role AFTER member role (ensures proper order)
+        await User.findByIdAndUpdate(user._id, {
+          $push: {
+            sanghRoles: {
+              sanghId: localSangh._id,
+              role: 'honoraryMember',
+              level: 'city',
+              sanghType: localSangh.sanghType,
+              addedAt: new Date()
+            }
+          }
+        });
       }
+    }
+
+    // =================================================
+    // ✅ PAYMENT DISTRIBUTION (ONLY IF PAID)
+    // =================================================
+    if (isPaid && !newMember.paymentDistributed) {
+      await distributeMemberPayment({
+        member: newMember,
+        user,
+        sourceSangh: sangh
+      });
+
+      // flag update
+      newMember.paymentDistributed = true;
+      await sangh.save();
+    }
 
     return successResponse(res, {
       member: newMember,
@@ -1396,7 +1529,8 @@ const addSanghMember = asyncHandler(async (req, res) => {
         _id: sangh._id,
         name: sangh.name,
         level: sangh.level,
-        totalMembers: sangh.members.length
+        totalMembers: sangh.members.length,
+        totalHonoraryMembers: sangh.honoraryMembers?.length || 0
       }
     }, 'Member added successfully');
   } catch (error) {
@@ -1550,7 +1684,148 @@ const addHonoraryMember = asyncHandler(async (req, res) => {
   }
 });
 
+const updateMemberDetails = asyncHandler(async (req, res) => {
+  try {
+    const { sanghId, memberId } = req.params;
+    const updates = req.body;
 
+    const sangh = await HierarchicalSangh.findById(sanghId);
+    if (!sangh) {
+      return errorResponse(res, 'Sangh not found', 404);
+    }
+
+    const memberIndex = sangh.members.findIndex(
+      (member) => member._id.toString() === memberId
+    );
+
+    if (memberIndex === -1) {
+      return errorResponse(res, 'Member not found', 404);
+    }
+
+    const member = sangh.members[memberIndex];
+
+    /* =======================
+       ✅ MEMBER PHOTO UPDATE
+    ======================= */
+    if (req.files?.memberPhoto) {
+      if (member.userImage) {
+        await deleteS3File(member.userImage);
+      }
+
+      const s3Url = req.files.memberPhoto[0].location;
+      updates.userImage = convertS3UrlToCDN(s3Url);
+    }
+
+    /* =======================
+       ✅ PAYMENT SCREENSHOT UPDATE
+    ======================= */
+    if (req.files?.memberScreenshot) {
+      if (member.memberScreenshot) {
+        await deleteS3File(member.memberScreenshot);
+      }
+
+      const screenshotS3Url = req.files.memberScreenshot[0].location;
+      updates.memberScreenshot = convertS3UrlToCDN(screenshotS3Url);
+    }
+
+    /* =======================
+       ✅ ADDRESS UPDATE
+    ======================= */
+    member.address = {
+      ...member.address,
+      street: updates.street ?? member.address?.street,
+      district: updates.district ?? member.address?.district,
+      state: updates.state ?? member.address?.state,
+      pincode: updates.pincode ?? member.address?.pincode
+    };
+
+    /* =======================
+       ✅ PAYMENT STATUS LOGIC
+    ======================= */
+    let newPaymentStatus = updates.paymentStatus;
+
+    // frontend se array aa jaye to
+    if (Array.isArray(newPaymentStatus)) {
+      newPaymentStatus = newPaymentStatus[newPaymentStatus.length - 1];
+    }
+
+    const wasPaidBefore = member.paymentStatus === 'paid';
+    const isPaidNow = newPaymentStatus === 'paid';
+
+    // ✅ pehli baar paid hua
+    if (isPaidNow && !wasPaidBefore) {
+      member.paymentDate = new Date();
+      member.status = 'active';
+    }
+
+    /* =======================
+       ✅ MAIN FIELD UPDATE
+    ======================= */
+    Object.assign(member, {
+      name: updates.name ?? member.name,
+      email: updates.email ?? member.email,
+      phoneNumber: updates.phoneNumber ?? member.phoneNumber,
+      postMember: updates.postMember ?? member.postMember,
+      level: updates.level ?? member.level,
+      sanghType: updates.sanghType ?? member.sanghType,
+      userImage: updates.userImage ?? member.userImage,
+      memberScreenshot: updates.memberScreenshot ?? member.memberScreenshot,
+      paymentStatus: newPaymentStatus ?? member.paymentStatus
+    });
+
+    /* ==================================================
+       ✅ NEW: SYNC HONORARY MEMBER PAYMENT STATUS
+    ================================================== */
+    if (isPaidNow && !wasPaidBefore && member.localSangh?.sanghId) {
+      const localSangh = await HierarchicalSangh.findById(member.localSangh.sanghId);
+      
+      if (localSangh && localSangh.honoraryMembers) {
+        const honoraryIndex = localSangh.honoraryMembers.findIndex(
+          h => h.jainAadharNumber === member.jainAadharNumber
+        );
+
+        if (honoraryIndex !== -1) {
+          // ✅ Update honorary member payment status
+          localSangh.honoraryMembers[honoraryIndex].paymentStatus = 'paid';
+          localSangh.honoraryMembers[honoraryIndex].paymentDate = new Date();
+          localSangh.honoraryMembers[honoraryIndex].status = 'active';
+          
+          await localSangh.save();
+          console.log('✅ Honorary member payment status synced in city sangh');
+        }
+      }
+    }
+
+    /* ==================================================
+       ✅ PAYMENT DISTRIBUTION (pending → paid)
+    ================================================== */
+    if (isPaidNow && !wasPaidBefore && !member.paymentDistributed) {
+      const user = await User.findById(member.userId)
+        .populate('jainAadharApplication');
+
+      await distributeMemberPayment({
+        member,
+        user,
+        sourceSangh: sangh
+      });
+
+      member.paymentDistributed = true;
+    }
+
+    await sangh.save();
+
+    return successResponse(
+      res,
+      member,
+      'Member details updated successfully'
+    );
+  } catch (error) {
+    if (req.files) {
+      await deleteS3Files(req.files);
+    }
+    return errorResponse(res, error.message, 500);
+  }
+});
 // Remove member from Sangh
 const removeSanghMember = asyncHandler(async (req, res) => {
     try {
@@ -1637,135 +1912,7 @@ const removeSanghMember = asyncHandler(async (req, res) => {
 // });
 
 // Update member details
-// Update member details
-const updateMemberDetails = asyncHandler(async (req, res) => {
-  try {
-    const { sanghId, memberId } = req.params;
-    const updates = req.body;
 
-    const sangh = await HierarchicalSangh.findById(sanghId);
-    if (!sangh) {
-      return errorResponse(res, 'Sangh not found', 404);
-    }
-
-    const memberIndex = sangh.members.findIndex(
-      (member) => member._id.toString() === memberId
-    );
-
-    if (memberIndex === -1) {
-      return errorResponse(res, 'Member not found', 404);
-    }
-
-    const member = sangh.members[memberIndex];
-
-    /* =======================
-       ✅ MEMBER PHOTO UPDATE
-    ======================= */
-    if (req.files?.memberPhoto) {
-      if (member.userImage) {
-        await deleteS3File(member.userImage);
-      }
-
-      const s3Url = req.files.memberPhoto[0].location;
-      updates.userImage = convertS3UrlToCDN(s3Url);
-    }
-
-    /* =======================
-       ✅ PAYMENT SCREENSHOT UPDATE
-    ======================= */
-    if (req.files?.memberScreenshot) {
-      if (member.memberScreenshot) {
-        await deleteS3File(member.memberScreenshot);
-      }
-
-      const screenshotS3Url =
-        req.files.memberScreenshot[0].location;
-      updates.memberScreenshot =
-        convertS3UrlToCDN(screenshotS3Url);
-    }
-
-    /* =======================
-       ✅ ADDRESS UPDATE
-    ======================= */
-    member.address = {
-      ...member.address,
-      street: updates.street ?? member.address?.street,
-      district: updates.district ?? member.address?.district,
-      state: updates.state ?? member.address?.state,
-      pincode: updates.pincode ?? member.address?.pincode
-    };
-
-    /* =======================
-       ✅ PAYMENT STATUS LOGIC
-    ======================= */
-    let newPaymentStatus = updates.paymentStatus;
-
-    // frontend se array aa jaye to
-    if (Array.isArray(newPaymentStatus)) {
-      newPaymentStatus =
-        newPaymentStatus[newPaymentStatus.length - 1];
-    }
-
-    const wasPaidBefore = member.paymentStatus === 'paid';
-    const isPaidNow = newPaymentStatus === 'paid';
-
-    // ✅ pehli baar paid hua
-    if (isPaidNow && !wasPaidBefore) {
-      member.paymentDate = new Date();
-      member.status = 'active';
-    }
-
-    /* =======================
-       ✅ MAIN FIELD UPDATE
-    ======================= */
-    Object.assign(member, {
-      name: updates.name ?? member.name,
-      email: updates.email ?? member.email,
-      phoneNumber: updates.phoneNumber ?? member.phoneNumber,
-      postMember: updates.postMember ?? member.postMember,
-      level: updates.level ?? member.level,
-      sanghType: updates.sanghType ?? member.sanghType,
-      userImage: updates.userImage ?? member.userImage,
-      memberScreenshot:
-        updates.memberScreenshot ?? member.memberScreenshot,
-      paymentStatus:
-        newPaymentStatus ?? member.paymentStatus
-    });
-
-    /* ==================================================
-       ✅ PAYMENT DISTRIBUTION (pending → paid)
-    ================================================== */
-    if (
-      isPaidNow &&
-      !wasPaidBefore &&
-      !member.paymentDistributed
-    ) {
-      const user = await User.findById(member.userId)
-        .populate('jainAadharApplication');
-
-      await distributeMemberPayment({
-        member,
-        user,
-        sourceSangh: sangh
-      });
-
-      member.paymentDistributed = true;
-    }
-
-    await sangh.save();
-
-    return successResponse(
-      res,
-      member,
-      'Member details updated successfully'
-    );
-  } catch (error) {
-    if (req.files) {
-      await deleteS3Files(req.files);
-    }
-    return errorResponse(res, error.message, 500);
-  }
-});
 
 
 // Get Sangh members

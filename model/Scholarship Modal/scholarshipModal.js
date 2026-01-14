@@ -45,6 +45,7 @@ const ScholarshipSchema = new mongoose.Schema(
         fileType: String,
     }
     ],
+    scholarshipAmount : {type : String},
    scholarshipDetails: {
       type: {
         type: String,

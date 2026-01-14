@@ -97,7 +97,6 @@ const sadhuSchema = new mongoose.Schema({
   occupationType: {
     type: String,
     enum: ["student", "job", "retired", "business"],
-    required: true,
   },
 
   details: {

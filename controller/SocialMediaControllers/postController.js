@@ -1157,6 +1157,52 @@ const toggleLike = [
     });
   }),
 ];
+// Save post → add to activity.saved
+const toggleSavePost = asyncHandler(async (req, res) => {
+  const { postId } = req.params;
+  const userId = req.user.id;
+
+  if (!postId) {
+    return res.status(400).json({ message: "Post ID is required" });
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  const postExists = await Post.findById(postId);
+  if (!postExists) {
+    return res.status(404).json({ message: "Post not found" });
+  }
+
+  // Check if already saved in activity.saved
+  const alreadySaved = user.activity?.saved?.some(
+    (a) => a.postId.toString() === postId
+  );
+
+  if (alreadySaved) {
+    // ❌ Unsave: remove from activity.saved
+    user.activity.saved = (user.activity.saved || []).filter(
+      (a) => a.postId.toString() !== postId
+    );
+  } else {
+    // ✅ Save: push to activity.saved with timestamp
+    if (!user.activity) user.activity = {};
+    if (!user.activity.saved) user.activity.saved = [];
+    user.activity.saved.push({ postId, createdAt: new Date() });
+  }
+
+  await user.save();
+
+  res.json({
+    success: true,
+    message: alreadySaved ? "Post removed from saved" : "Post saved successfully",
+    saved: !alreadySaved,
+    savedCount: user.activity.saved.length,
+  });
+});
+
 const getLikedUsers = asyncHandler(async (req, res) => {
   const { postId } = req.params;
 
@@ -1962,5 +2008,6 @@ module.exports = {
   deleteComment,
   deleteReply,
   voteOnPoll,
-  getAllVideoPosts
+  getAllVideoPosts,
+  toggleSavePost
 };

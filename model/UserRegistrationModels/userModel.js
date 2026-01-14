@@ -215,6 +215,13 @@ const userSchema = new mongoose.Schema(
         ref: "BoostPlan"
       }
     ],
+    savedPosts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Post"
+      }
+    ],
+
     likedPosts: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -235,17 +242,21 @@ const userSchema = new mongoose.Schema(
         ref: 'Story',
       },
     ],
-    activity: {
-      likes: [
-        { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }
-      ],
-      comments: [
-        { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }
-      ],
-      shares: [
-        { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }
-      ]
-    },
+   activity: {
+  likes: [
+    { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }
+  ],
+  comments: [
+    { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }
+  ],
+  shares: [
+    { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }
+  ],
+  saved: [
+    { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }
+  ]
+},
+
     deletedAt: { type: Date },
     loginAttempts: {
       type: Number,

@@ -187,7 +187,7 @@ exports.deleteScholarship = async (req, res) => {
 exports.updateScholarshipStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, scholarshipAmount } = req.body;
 
     // allowed statuses
     const allowed = ["pending", "approved", "rejected"];
@@ -195,9 +195,17 @@ exports.updateScholarshipStatus = async (req, res) => {
       return res.status(400).json({ message: "Invalid status value" });
     }
 
+    // update object dynamically
+    const updateData = { status };
+
+    // agar scholarshipAmount aaya hai to hi add karo
+    if (scholarshipAmount !== undefined) {
+      updateData.scholarshipAmount = scholarshipAmount;
+    }
+
     const updated = await Scholarship.findByIdAndUpdate(
       id,
-      { status },
+      updateData,
       { new: true }
     );
 
@@ -217,6 +225,7 @@ exports.updateScholarshipStatus = async (req, res) => {
     });
   }
 };
+
 exports.getScholarshipByUser = async (req, res) => {
   try {
     const { userId } = req.params;

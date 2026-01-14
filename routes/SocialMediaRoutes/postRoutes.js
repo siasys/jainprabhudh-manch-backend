@@ -1,5 +1,5 @@
 const express = require('express');
-const { createPost, getAllPosts, likePost, unlikePost, deletePost, getPostsByUser, getPostById, addComment, addReply, toggleLike, getReplies, editPost, hidePost, unhidePost, getCombinedFeed, getCombinedFeedOptimized, getLikedUsers, searchHashtags, likeComment, likeReply, sharePost, deleteComment, deleteReply, voteOnPoll, getAllVideoPosts } = require('../../controller/SocialMediaControllers/postController');
+const { createPost, getAllPosts, likePost, unlikePost, deletePost, getPostsByUser, getPostById, addComment, addReply, toggleLike, getReplies, editPost, hidePost, unhidePost, getCombinedFeed, getCombinedFeedOptimized, getLikedUsers, searchHashtags, likeComment, likeReply, sharePost, deleteComment, deleteReply, voteOnPoll, getAllVideoPosts, toggleSavePost } = require('../../controller/SocialMediaControllers/postController');
 const { authMiddleware } = require('../../middlewares/authMiddlewares');
 const rateLimit = require('express-rate-limit');
 
@@ -20,6 +20,8 @@ const postCreationLimiter = rateLimit({
 
 router.post('/create', createPost, postCreationLimiter);
 router.post("/:postId/share", sharePost);
+router.post("/:postId/save", toggleSavePost);
+
 router.get('/', getAllPosts);
 router.get('/videos', getAllVideoPosts);
 router.get('/combined-feed', getCombinedFeed);

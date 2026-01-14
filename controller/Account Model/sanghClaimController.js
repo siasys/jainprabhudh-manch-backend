@@ -2,410 +2,371 @@ const SanghClaim = require('../../model/Account Model/SanghClaim');
 const Sangh = require('../../model/SanghModels/hierarchicalSanghModel');
 const User = require('../../model/UserRegistrationModels/userModel');
 
-
+// ✅ 1. CREATE CLAIM (NO DISTRIBUTION)
 exports.createClaim = async (req, res) => {
   try {
     const {
       sanghId,
       ownSanghMembers,
       honoraryMembers,
+      ownSanghAmount,
+      honoraryMembersAmount,
+      receivedPaymentsAmount,
+      totalAmount,
       remark,
-      ownSanghAmount: frontendOwnSanghAmount,
-      honoraryMembersAmount: frontendHonoraryAmount,
-      foundationAmount: frontendFoundationAmount,
-      countryAmount: frontendCountryAmount,
-      districtAmount: frontendDistrictAmount,
-      honorarySanghAmount: frontendHonorarySanghAmount,
-      totalAmount: frontendTotalAmount,
     } = req.body;
 
     const userId = req.user.id;
 
-    // 🔹 Fetch claiming sangh
-    const claimingSangh = await Sangh.findById(sanghId);
-    if (!claimingSangh) {
-      return res.status(400).json({ success: false, message: 'Sangh not found' });
-    }
-
-    const { foundationId, honorarySanghId } = claimingSangh;
-
-    // 🔹 SAFE COUNTS
-    const regularCount = Number(ownSanghMembers) || 0;
-    const honoraryCount = Number(honoraryMembers) || 0;
-    if (regularCount <= 0 && honoraryCount <= 0) {
-      return res.status(400).json({ success: false, message: 'Invalid members' });
-    }
-
-    // 🔹 FEES
-    const REGULAR_FEE = claimingSangh.membershipFee || 0;
-    const HONORARY_FEE = claimingSangh.honoraryFee || 110;
-
-    // 🔹 Calculated base amounts
-    const regularBase = regularCount * REGULAR_FEE;
-    const honoraryBase = honoraryCount * HONORARY_FEE;
-
-    // 🔹 Distribution percentages
-    const ownShare = regularBase * 0.50;          // 50% -> claiming sangh
-    const foundationShare = regularBase * 0.20;   // 20% -> foundation
-    const countryShare = regularBase * 0.10;      // 10% -> country
-    const districtShare = regularBase * 0.10;     // 10% -> district
-    const honoraryShare = regularBase * 0.10;     // 10% -> honorary sangh
-
-    // 🔹 Final amounts
-    const ownSanghAmount = frontendOwnSanghAmount ?? (ownShare + honoraryBase);
-    const honoraryMembersAmount = frontendHonoraryAmount ?? honoraryBase;
-    const foundationAmount = frontendFoundationAmount ?? foundationShare;
-    const countryAmount = frontendCountryAmount ?? countryShare;
-    const districtAmount = frontendDistrictAmount ?? districtShare;
-    const honorarySanghAmount = frontendHonorarySanghAmount ?? honoraryShare;
-    const totalAmount = frontendTotalAmount ?? (regularBase + honoraryBase);
-
-    // 🔹 SIRF PAID MEMBERS KI LOCATION SE COUNTRY AUR DISTRICT NIKALO
-    let countrySanghId = null;
-    let districtSanghId = null;
-
-    // Regular members + Honorary members dono mein se paid wale
-    const allMembers = [
-      ...(claimingSangh.members || []),
-      ...(claimingSangh.honoraryMembers || [])
-    ];
-
-    // Filter: sirf paid members
-    const paidMembers = allMembers.filter(member => 
-      member.paymentStatus === 'paid'
-    );
-
-    if (paidMembers.length > 0) {
-      // Sabhi paid members ke locations collect karo
-      const countries = new Set();
-      const districts = new Set();
-
-      paidMembers.forEach(member => {
-        if (member.address?.country) {
-          countries.add(member.address.country);
-        }
-        if (member.address?.district) {
-          districts.add(member.address.district);
-        }
+    // 🔹 Validate sangh exists
+    const sangh = await Sangh.findById(sanghId);
+    if (!sangh) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sangh not found'
       });
-
-      // 🔹 Country Sangh dhundho (pehla country use karo ya majority)
-      if (countries.size > 0) {
-        const primaryCountry = Array.from(countries)[0]; // pehla country
-        const countrySangh = await Sangh.findOne({
-          level: 'country',
-          'location.country': primaryCountry,
-        });
-        if (countrySangh) {
-          countrySanghId = countrySangh._id;
-        }
-      }
-
-      // 🔹 District Sangh dhundho (pehla district use karo ya majority)
-      if (districts.size > 0) {
-        const primaryDistrict = Array.from(districts)[0]; // pehla district
-        const districtSangh = await Sangh.findOne({
-          level: 'district',
-          'location.district': primaryDistrict,
-        });
-        if (districtSangh) {
-          districtSanghId = districtSangh._id;
-        }
-      }
     }
 
-    // 🔹 CREATE CLAIM
+    // 🔹 Validate amounts
+    if (!totalAmount || totalAmount <= 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid total amount' 
+      });
+    }
+
+    // 🔹 Get unclaimed receivedPayments IDs
+    const unclaimedPayments = sangh.receivedPayments
+      ?.filter(p => p.status === 'unclaimed')
+      .map(p => p._id) || [];
+
+    // 🔹 Create claim
     const claim = await SanghClaim.create({
       sanghId,
       userId,
-      foundationId,
-      countrySanghId,
-      stateSanghId: null,
-      districtSanghId,
-      honorarySanghId,
-      totalMembers: regularCount + honoraryCount,
-      ownSanghMembers: regularCount,
-      honoraryMembers: honoraryCount,
-      ownSanghAmount,
-      honoraryMembersAmount,
-      foundationAmount,
-      countryAmount,
-      districtAmount,
-      honorarySanghAmount,
+      totalMembers: (ownSanghMembers || 0) + (honoraryMembers || 0),
+      ownSanghMembers: ownSanghMembers || 0,
+      honoraryMembers: honoraryMembers || 0,
+      ownSanghAmount: ownSanghAmount || 0,
+      honoraryMembersAmount: honoraryMembersAmount || 0,
+      receivedPaymentsAmount: receivedPaymentsAmount || 0,
       totalAmount,
+      claimedPaymentIds: unclaimedPayments,
       remark: remark || '',
+      status: 'submitted',
+      paymentStatus: 'pending',
+      submittedAt: new Date(),
     });
 
-    // 🔹 UPDATE WALLETS
-    const updates = [];
-
-    updates.push(
-      Sangh.findByIdAndUpdate(sanghId, { $inc: { totalAvailableAmount: ownSanghAmount } })
-    );
-
-    if (foundationId) {
-      updates.push(
-        Sangh.findByIdAndUpdate(foundationId, { $inc: { totalAvailableAmount: foundationAmount } })
+    // 🔹 Mark receivedPayments as "claimed" in sangh
+    if (unclaimedPayments.length > 0) {
+      await Sangh.updateOne(
+        { _id: sanghId },
+        {
+          $set: {
+            'receivedPayments.$[elem].status': 'claimed',
+            'receivedPayments.$[elem].claimedAt': new Date(),
+            'receivedPayments.$[elem].claimId': claim._id,
+          }
+        },
+        {
+          arrayFilters: [{ 'elem.status': 'unclaimed' }]
+        }
       );
     }
-
-    if (countrySanghId) {
-      updates.push(
-        Sangh.findByIdAndUpdate(countrySanghId, { $inc: { totalAvailableAmount: countryAmount } })
-      );
-    }
-
-    if (districtSanghId) {
-      updates.push(
-        Sangh.findByIdAndUpdate(districtSanghId, { $inc: { totalAvailableAmount: districtAmount } })
-      );
-    }
-
-    if (honorarySanghId) {
-      updates.push(
-        Sangh.findByIdAndUpdate(honorarySanghId, { $inc: { totalAvailableAmount: honorarySanghAmount } })
-      );
-    }
-
-    await Promise.all(updates);
 
     res.status(201).json({
       success: true,
-      message: 'Claim created successfully',
+      message: 'Claim submitted successfully',
       data: claim,
-      calculation: {
-        regularBase,
-        honoraryBase,
-        ownSanghAmount,
-        foundationAmount,
-        countryAmount,
-        districtAmount,
-        honorarySanghAmount,
-        totalAmount,
-      },
-      distributedTo: {
-        foundationId,
-        countrySanghId,
-        districtSanghId,
-        honorarySanghId,
-      },
-      paidMembersCount: paidMembers.length,
     });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: err.message });
+    console.error('❌ Create Claim Error:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: err.message 
+    });
   }
 };
+
+// ✅ 2. GET ALL CLAIMS (FOUNDATION VIEW)
 exports.getAllClaims = async (req, res) => {
   try {
-    const claims = await SanghClaim.find({})
-      .populate('sanghId', 'name level')
-      .populate('userId', 'fullName profilePicture')
-      .populate('foundationId', 'name')
+    const { status, paymentStatus, page = 1, limit = 20 } = req.query;
+
+    const query = {};
+    if (status) query.status = status;
+    if (paymentStatus) query.paymentStatus = paymentStatus;
+
+    const claims = await SanghClaim.find(query)
+      .populate('sanghId', 'name level location')
+      .populate('userId', 'fullName email phoneNumber')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    const total = await SanghClaim.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      data: claims,
+      pagination: {
+        total,
+        page: parseInt(page),
+        pages: Math.ceil(total / limit),
+      },
+    });
+
+  } catch (err) {
+    console.error('❌ Get Claims Error:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: err.message 
+    });
+  }
+};
+
+// ✅ 3. GET SANGH'S OWN CLAIMS
+exports.getSanghClaims = async (req, res) => {
+  try {
+    const { sanghId } = req.params;
+    const { status, paymentStatus } = req.query;
+
+    const query = { sanghId };
+    if (status) query.status = status;
+    if (paymentStatus) query.paymentStatus = paymentStatus;
+
+    const claims = await SanghClaim.find(query)
+      .populate('userId', 'fullName email phoneNumber')
+      .populate('adminResponse.reviewedBy', 'name')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
-      count: claims.length,
       data: claims,
     });
-  } catch (error) {
-    console.error('Get All Claims Error:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Server error',
+
+  } catch (err) {
+    console.error('❌ Get Sangh Claims Error:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: err.message 
     });
   }
 };
-/**
- * ✅ GET – Claims by Sangh
- */
-exports.getClaimsBySangh = async (req, res) => {
-  try {
-    const { sanghId } = req.params;
 
-    const claims = await SanghClaim.find({ sanghId })
-      .populate('userId', 'fullName profilePicture')
-      .populate('foundationId', 'name')
-      .sort({ createdAt: -1 });
-
-    res.json({ success: true, data: claims });
-  } catch (error) {
-    console.error('Get Claims By Sangh Error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
-exports.getClaimSummary = async (req, res) => {
-  const { sanghId } = req.params;
-
-  const claims = await SanghClaim.find({
-    sanghId,
-    status: { $in: ['submitted', 'approved'] }
-  });
-
-  const claimedAmount = claims.reduce(
-    (sum, c) => sum + (Number(c.totalAmount) || 0),
-    0
-  );
-
-  const pendingClaimAmount = claims
-    .filter(c => c.paymentStatus === 'pending')
-    .reduce((s, c) => s + c.totalAmount, 0);
-
-  const approvedClaimAmount = claims
-    .filter(c => c.paymentStatus === 'paid')
-    .reduce((s, c) => s + c.totalAmount, 0);
-
-  res.json({
-    success: true,
-    claimedAmount,
-    pendingClaimAmount,
-    approvedClaimAmount,
-    claims
-  });
-};
-/**
- * ✅ GET ALL – Foundation side (all claims)
- */
-exports.getAllClaimsForFoundation = async (req, res) => {
-  try {
-    const { foundationId } = req.params;
-
-    const claims = await SanghClaim.find({ foundationId })
-      .populate('sanghId', 'name city level')
-      .populate('userId', 'fullName')
-      .sort({ createdAt: -1 });
-
-    // Calculate totals
-    const totals = claims.reduce((acc, claim) => {
-      acc.totalClaims += 1;
-      acc.totalAmount += claim.totalAmount || 0;
-      acc.foundationAmount += claim.foundationAmount || 0;
-      acc.sanghAmount += claim.sanghAmount || 0;
-      
-      if (claim.paymentStatus === 'paid') {
-        acc.paidClaims += 1;
-        acc.paidAmount += claim.sanghAmount || 0;
-      } else if (claim.paymentStatus === 'pending') {
-        acc.pendingClaims += 1;
-        acc.pendingAmount += claim.sanghAmount || 0;
-      }
-      
-      return acc;
-    }, {
-      totalClaims: 0,
-      totalAmount: 0,
-      foundationAmount: 0,
-      sanghAmount: 0,
-      paidClaims: 0,
-      paidAmount: 0,
-      pendingClaims: 0,
-      pendingAmount: 0,
-    });
-
-    res.json({ 
-      success: true, 
-      data: claims,
-      summary: totals,
-    });
-  } catch (error) {
-    console.error('Get Foundation Claims Error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
-
-/**
- * ✅ UPDATE – Foundation updates status / payment
- */
-// exports.updateClaimStatus = async (req, res) => {
-//   try {
-//     const { claimId } = req.params;
-//     const { status, paymentStatus, remark, transactionId, paymentMode } = req.body;
-
-//     const updateData = {
-//       ...(status && { status }),
-//       ...(paymentStatus && { paymentStatus }),
-//       ...(remark && { remark }),
-//     };
-
-//     // If payment is being marked as paid, update payment details
-//     if (paymentStatus === 'paid') {
-//       updateData['paymentDetails.paidAt'] = new Date();
-//       if (transactionId) {
-//         updateData['paymentDetails.transactionId'] = transactionId;
-//       }
-//       if (paymentMode) {
-//         updateData['paymentDetails.paymentMode'] = paymentMode;
-//       }
-//     }
-
-//     const claim = await SanghClaim.findByIdAndUpdate(
-//       claimId,
-//       updateData,
-//       { new: true }
-//     ).populate('sanghId', 'name')
-//      .populate('foundationId', 'name');
-
-//     if (!claim) {
-//       return res.status(404).json({ success: false, message: 'Claim not found' });
-//     }
-
-//     res.json({
-//       success: true,
-//       message: 'Claim updated successfully',
-//       data: claim,
-//     });
-//   } catch (error) {
-//     console.error('Update Claim Error:', error);
-//     res.status(500).json({ success: false, message: 'Server error' });
-//   }
-// };
-
-/**
- * ✅ GET – Single claim details
- */
+// ✅ 4. GET SINGLE CLAIM DETAILS
 exports.getClaimById = async (req, res) => {
   try {
     const { claimId } = req.params;
 
     const claim = await SanghClaim.findById(claimId)
-      .populate('sanghId', 'name city level')
-      .populate('foundationId', 'name')
-      .populate('userId', 'fullName email profilePicture');
+      .populate('sanghId', 'name level location members honoraryMembers receivedPayments')
+      .populate('userId', 'name email phoneNumber')
+      .populate('adminResponse.reviewedBy', 'name email');
 
     if (!claim) {
-      return res.status(404).json({
-        success: false,
-        message: 'Claim not found',
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Claim not found' 
       });
     }
 
-    res.json({
+    res.status(200).json({
       success: true,
       data: claim,
     });
-  } catch (error) {
-    console.error('Get Claim Error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
+
+  } catch (err) {
+    console.error('❌ Get Claim Error:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: err.message 
+    });
   }
 };
+
+// ✅ 5. APPROVE CLAIM (FOUNDATION ADMIN)
+exports.approveClaim = async (req, res) => {
+  try {
+    const { claimId } = req.params;
+    const { approvalNote } = req.body;
+    const adminId = req.user.id;
+
+    const claim = await SanghClaim.findById(claimId);
+    if (!claim) {
+      return res.status(404).json({
+        success: false, 
+        message: 'Claim not found'
+      });
+    }
+
+    if (claim.status !== 'submitted' && claim.status !== 'under_review') {
+      return res.status(400).json({
+        success: false,
+        message: 'Claim cannot be approved in current status'
+      });
+    }
+
+    // Update claim status
+    claim.status = 'approved';
+    claim.approvedAt = new Date();
+    claim.adminResponse = {
+      reviewedBy: adminId,
+      reviewedAt: new Date(),
+      approvalNote: approvalNote || '',
+    };
+
+    await claim.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Claim approved successfully',
+      data: claim,
+    });
+
+  } catch (err) {
+    console.error('❌ Approve Claim Error:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: err.message 
+    });
+  }
+};
+
+// ✅ 6. REJECT CLAIM (FOUNDATION ADMIN)
+exports.rejectClaim = async (req, res) => {
+  try {
+    const { claimId } = req.params;
+    const { rejectionReason } = req.body;
+    const adminId = req.user.id;
+
+    const claim = await SanghClaim.findById(claimId);
+    if (!claim) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Claim not found' 
+      });
+    }
+
+    if (claim.status === 'approved' || claim.status === 'rejected') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Claim already processed' 
+      });
+    }
+
+    // Update claim status
+    claim.status = 'rejected';
+    claim.paymentStatus = 'failed';
+    claim.rejectedAt = new Date();
+    claim.adminResponse = {
+      reviewedBy: adminId,
+      reviewedAt: new Date(),
+      rejectionReason: rejectionReason || 'Not specified',
+    };
+
+    await claim.save();
+
+    // 🔹 Revert receivedPayments status back to "unclaimed"
+    const sangh = await Sangh.findById(claim.sanghId);
+    if (sangh && claim.claimedPaymentIds.length > 0) {
+      await Sangh.updateOne(
+        { _id: claim.sanghId },
+        {
+          $set: {
+            'receivedPayments.$[elem].status': 'unclaimed',
+            'receivedPayments.$[elem].claimedAt': null,
+            'receivedPayments.$[elem].claimId': null,
+          }
+        },
+        {
+          arrayFilters: [{ 'elem._id': { $in: claim.claimedPaymentIds } }]
+        }
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Claim rejected successfully',
+      data: claim,
+    });
+
+  } catch (err) {
+    console.error('❌ Reject Claim Error:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: err.message 
+    });
+  }
+};
+
+// ✅ 7. MARK AS PAID (FOUNDATION ADMIN - After bank transfer)
+exports.markAsPaid = async (req, res) => {
+  try {
+    const { claimId } = req.params;
+    const { 
+      transactionId, 
+      paymentMode, 
+      bankReference, 
+      screenshot 
+    } = req.body;
+
+    const claim = await SanghClaim.findById(claimId);
+    if (!claim) {
+      return res.status(404).json({
+        success: false,
+        message: 'Claim not found'
+      });
+    }
+
+    if (claim.status !== 'approved') {
+      return res.status(400).json({
+        success: false,
+        message: 'Claim must be approved first'
+      });
+    }
+
+    // Update payment status
+    claim.paymentStatus = 'paid';
+    claim.paidAt = new Date();
+    claim.paymentDetails = {
+      transactionId,
+      paymentMode,
+      bankReference,
+      screenshot,
+      paidAt: new Date(),
+    };
+
+    await claim.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Payment marked as completed',
+      data: claim,
+    });
+
+  } catch (err) {
+    console.error('❌ Mark Paid Error:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};
+
+// ✅ 8. UPDATE CLAIM STATUS (GENERIC)
 exports.updateClaimStatus = async (req, res) => {
   try {
     const { claimId } = req.params;
     const { status } = req.body;
 
-    const allowedStatuses = [
-      'submitted',
-      'under_review',
-      'approved',
-      'rejected',
-    ];
-
-    if (!allowedStatuses.includes(status)) {
+    const validStatuses = ['submitted', 'under_review', 'approved', 'rejected'];
+    if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid claim status',
+        message: 'Invalid status'
       });
     }
 
@@ -413,51 +374,54 @@ exports.updateClaimStatus = async (req, res) => {
       claimId,
       { status },
       { new: true }
-    )
-      .populate('sanghId', 'name level')
-      .populate('userId', 'fullName profilePicture')
-      .populate('foundationId', 'name');
+    );
 
     if (!claim) {
       return res.status(404).json({
-        success: false,
-        message: 'Claim not found',
+        success: false, 
+        message: 'Claim not found'
       });
     }
 
     res.status(200).json({
       success: true,
-      message: 'Claim status updated successfully',
+      message: 'Claim status updated',
       data: claim,
     });
-  } catch (error) {
-    console.error('Update Claim Status Error:', error);
+
+  } catch (err) {
+    console.error('❌ Update Status Error:', err);
     res.status(500).json({
       success: false,
-      message: error.message || 'Server error',
+      message: err.message
     });
   }
 };
+// ✅ UPDATE PAYMENT STATUS (GENERIC)
 exports.updatePaymentStatus = async (req, res) => {
   try {
     const { claimId } = req.params;
     const { paymentStatus } = req.body;
 
-    const allowedPaymentStatuses = [
+    const validPaymentStatuses = [
       'pending',
+      'processing',
       'paid',
-      'rejected',
-      'under_review',
+      'failed',
     ];
 
-    if (!allowedPaymentStatuses.includes(paymentStatus)) {
+    if (!validPaymentStatuses.includes(paymentStatus)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid payment status',
       });
     }
 
-    const claim = await SanghClaim.findById(claimId);
+    const claim = await SanghClaim.findByIdAndUpdate(
+      claimId,
+      { paymentStatus },
+      { new: true }
+    );
 
     if (!claim) {
       return res.status(404).json({
@@ -466,41 +430,57 @@ exports.updatePaymentStatus = async (req, res) => {
       });
     }
 
-    // 🔒 already paid → no double deduction
-    if (claim.paymentStatus === 'paid' && paymentStatus === 'paid') {
-      return res.status(400).json({
-        success: false,
-        message: 'Claim already paid',
-      });
-    }
-
-    // ✅ IF payment approved → subtract from Sangh
-    if (paymentStatus === 'paid' && claim.paymentStatus !== 'paid') {
-      await Sangh.findByIdAndUpdate(
-        claim.sanghId,
-        {
-          $inc: {
-            totalAvailableAmount: -claim.ownSanghAmount, // 🔻 1760 minus
-          },
-        }
-      );
-    }
-
-    claim.paymentStatus = paymentStatus;
-    await claim.save();
-
     res.status(200).json({
       success: true,
       message: 'Payment status updated successfully',
       data: claim,
     });
-  } catch (error) {
-    console.error('Update Payment Status Error:', error);
+
+  } catch (err) {
+    console.error('❌ Update Payment Status Error:', err);
     res.status(500).json({
       success: false,
-      message: error.message || 'Server error',
+      message: err.message,
     });
   }
 };
 
-module.exports = exports;
+// ✅ 9. GET CLAIM STATISTICS (FOUNDATION DASHBOARD)
+exports.getClaimStatistics = async (req, res) => {
+  try {
+    const stats = await SanghClaim.aggregate([
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          totalAmount: { $sum: '$totalAmount' },
+        }
+      }
+    ]);
+
+    const paymentStats = await SanghClaim.aggregate([
+      {
+        $group: {
+          _id: '$paymentStatus',
+          count: { $sum: 1 },
+          totalAmount: { $sum: '$totalAmount' },
+        }
+      }
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        byStatus: stats,
+        byPaymentStatus: paymentStats,
+      },
+    });
+
+  } catch (err) {
+    console.error('❌ Get Statistics Error:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};

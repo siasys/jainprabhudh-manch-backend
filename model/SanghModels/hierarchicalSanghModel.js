@@ -175,6 +175,10 @@ const memberSchema = new mongoose.Schema({
     },
     name: String
     },
+    isHonorary: {
+  type: Boolean,
+  default: false
+},
     amount: {
     type: Number,
     default: 0
