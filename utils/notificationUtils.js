@@ -160,12 +160,27 @@ const createComplaintNotification = async (data) => {
     return null;
   }
 };
-
+const createRequestNotification = async (data) => {
+  try {
+    return await createNotification({
+      senderId: data.senderId,
+      receiverId: data.receiverId,
+      type: 'request',
+      message: `${data.senderName} has sent you a request: "${data.subject}"`,
+      entityId: data.entityId,
+      entityType: 'SuggestionComplaint'
+    });
+  } catch (error) {
+    console.error('Error creating request notification:', error);
+    return null;
+  }
+};
 module.exports = {
   createNotification,
   createLikeNotification,
   createCommentNotification,
   createReplyNotification,
   createSuggestionNotification,
-  createComplaintNotification
+  createComplaintNotification,
+  createRequestNotification
 };

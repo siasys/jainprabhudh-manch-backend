@@ -44,7 +44,10 @@ const donationSchema = new mongoose.Schema(
       type: String,
       required: true
     },
-
+    isGuptDan: {
+      type: Boolean,
+      default: false
+    },
     donationPhoto: {
       type: String
     },

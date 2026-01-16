@@ -9,11 +9,12 @@ const createDonation = async (req, res) => {
   try {
     const {
       userId,
-      title,              // Occasion title (Birthday, etc.)
+      title,
       purpose,
       amount,
-      onBehalfOf,         // father / mother / daughter etc.
-      onBehalfOfName      // Person name
+      onBehalfOf,
+      onBehalfOfName,
+      isGuptDaan
     } = req.body;
 
     // 🔐 BASIC VALIDATION
@@ -60,13 +61,14 @@ const createDonation = async (req, res) => {
     // ✅ CREATE DONATION
     const donation = await Donation.create({
       userId,
-      sanghId: foundationSangh._id,   // 🔒 ALWAYS FOUNDATION
+      sanghId: foundationSangh._id,
       title,
       purpose,
       amount,
       onBehalfOf,
       onBehalfOfName,
       paymentStatus,
+      isGuptDan: isGuptDaan === true || isGuptDaan === 'true',
       paymentScreenshot: paymentScreenshotUrl,
       donationPhoto: donationPhotoUrl
     });
@@ -91,9 +93,11 @@ const createDonation = async (req, res) => {
  */
 const getAllDonations = async (req, res) => {
   try {
-    const donations = await Donation.find()
-      .populate('userId', 'fullName gender phoneNumber profilePicture') // User details
-      .populate('sanghId', 'name sanghImage') // Sangh details: name & sanghImage
+    const donations = await Donation.find({
+      isGuptDan: { $ne: true } // ✅ Gupt Dan hide
+    })
+      .populate('userId', 'fullName gender phoneNumber profilePicture')
+      .populate('sanghId', 'name sanghImage')
       .sort({ createdAt: -1 });
 
     return res.status(200).json({

@@ -73,22 +73,36 @@ exports.createSuggestionComplaint = async (req, res) => {
     // Send notification to recipient if it's a user
     if (recipient.type === 'user') {
       if (type === 'suggestion') {
-        await createSuggestionNotification({
-          senderId: req.user._id,
-          receiverId: recipient.userId,
-          entityId: newSubmission._id,
-          subject,
-          senderName
-        });
-      } else if (type === 'complaint') {
-        await createComplaintNotification({
-          senderId: req.user._id,
-          receiverId: recipient.userId,
-          entityId: newSubmission._id,
-          subject,
-          senderName
-        });
-      }
+  await createSuggestionNotification({
+    senderId: req.user._id,
+    receiverId: presidentUserId,
+    entityId: newSubmission._id,
+    subject,
+    senderName,
+    additionalInfo: `${recipient.sanghLevel} Sangh: ${sangh.name}`
+  });
+}
+else if (type === 'complaint') {
+  await createComplaintNotification({
+    senderId: req.user._id,
+    receiverId: presidentUserId,
+    entityId: newSubmission._id,
+    subject,
+    senderName,
+    additionalInfo: `${recipient.sanghLevel} Sangh: ${sangh.name}`
+  });
+}
+else if (type === 'request') {
+  await createRequestNotification({
+    senderId: req.user._id,
+    receiverId: presidentUserId,
+    entityId: newSubmission._id,
+    subject,
+    senderName,
+    additionalInfo: `${recipient.sanghLevel} Sangh: ${sangh.name}`
+  });
+}
+
     }
     
     // For Sangh recipients, find the president and send notification

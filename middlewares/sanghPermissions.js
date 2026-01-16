@@ -13,7 +13,7 @@ const hasLevelAccess = (userLevel, targetLevel, isSuperAdmin = false) => {
         'state': ['district', 'city', 'area'],            // State president can create any level below
         'district': ['city', 'area'],                     // District president can create any level below
         'city': ['area'],                                 // City president can only create area
-        'area': []                                        // Area president cannot create any level
+        'area': []
     };
 
     // If user is at country level, they can create any level below country
