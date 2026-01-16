@@ -12,7 +12,7 @@ const expenseSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
-    expenseId: {
+    expensesId: {
       type: String,
     },
     expenseTitle: {

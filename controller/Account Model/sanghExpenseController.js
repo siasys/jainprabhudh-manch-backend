@@ -10,9 +10,15 @@ const generateExpenseId = async () => {
     .sort({ createdAt: -1 })
     .select('expensesId');
 
-  if (!lastExpense) return 'EXP-001';
+  if (!lastExpense || !lastExpense.expensesId) {
+    return 'EXP-001';
+  }
 
-  const lastNumber = parseInt(lastExpense.expensesId.split('-')[1], 10);
+  const lastNumber = parseInt(
+    lastExpense.expensesId.split('-')[1],
+    10
+  );
+
   const nextNumber = lastNumber + 1;
 
   return `EXP-${String(nextNumber).padStart(3, '0')}`;
