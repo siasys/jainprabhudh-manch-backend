@@ -106,7 +106,7 @@ exports.getAllExpenses = async (req, res) => {
     if (paymentType) query.paymentType = paymentType;
 
     const expenses = await Expense.find(query)
-      .populate('userId', 'fullName email')
+      .populate('userId', 'fullName')
       .populate('sanghId', 'name level location')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)

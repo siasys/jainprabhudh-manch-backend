@@ -101,7 +101,7 @@ exports.getAllClaims = async (req, res) => {
 
     const claims = await SanghClaim.find(query)
       .populate('sanghId', 'name level location')
-      .populate('userId', 'fullName email phoneNumber')
+      .populate('userId', 'fullName phoneNumber')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);

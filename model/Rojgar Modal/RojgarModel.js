@@ -67,6 +67,15 @@ const rojgarSchema = new mongoose.Schema(
         },
       },
     ],
+      expireDate: {
+      type: Date,
+      default: () => {
+        const now = new Date();
+        now.setDate(now.getDate() + 30);
+        return now;
+      },
+       index: { expires: 0 },
+    },
   },
   { timestamps: true }
 );
