@@ -635,7 +635,7 @@ const getPostById = asyncHandler(async (req, res) => {
 // };
 const getAllPosts = async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 5;
+    const limit = parseInt(req.query.limit) || 10;
     const cursor = req.query.cursor;
     const userId = req.query.userId;
 

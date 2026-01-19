@@ -215,12 +215,6 @@ const userSchema = new mongoose.Schema(
         ref: "BoostPlan"
       }
     ],
-    savedPosts: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Post"
-      }
-    ],
 
     likedPosts: [
       {
