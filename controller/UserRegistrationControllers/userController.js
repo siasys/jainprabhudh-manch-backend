@@ -1223,6 +1223,7 @@ const resetPassword = asyncHandler(async (req, res) => {
 // ];
 
 // login with number and email
+// login with number and email
 const loginUser = [
   userValidation.login,
   asyncHandler(async (req, res) => {
@@ -1233,32 +1234,47 @@ const loginUser = [
     }
 
     let query = {};
+
+    // ================= PHONE LOGIN =================
     if (phoneNumber) {
-      // Normalize number (sirf digits rakho)
       phoneNumber = phoneNumber.replace(/\D/g, "");
       const last10Digits = phoneNumber.slice(-10);
 
-      const plainNumber = last10Digits;
-      const withPrefix = "+91" + last10Digits;
+      query.phoneNumber = {
+        $in: [last10Digits, `+91${last10Digits}`],
+      };
+    }
 
-      query.phoneNumber = { $in: [plainNumber, withPrefix] };
-    } else if (email) {
-      query.email = email.toLowerCase(); // case-insensitive email
+    // ================= EMAIL LOGIN =================
+    if (email) {
+      query.email = email.toLowerCase();
     }
 
     try {
-      const user = await User.findOne(query);
+      // 🔴 CHANGE #1: findOne ❌ → find ✅
+      const users = await User.find(query);
 
-      if (!user) {
+      if (!users || users.length === 0) {
         return errorResponse(res, "User not found", 401);
       }
 
-      const isMatch = await user.isPasswordMatched(password);
-      if (!isMatch) {
+      // 🔴 CHANGE #2: check password for ALL matched users
+      let matchedUser = null;
+
+      for (const user of users) {
+        const isMatch = await user.isPasswordMatched(password);
+        if (isMatch) {
+          matchedUser = user;
+          break;
+        }
+      }
+
+      if (!matchedUser) {
         return errorResponse(res, "Incorrect password", 401);
       }
 
-      if (!user.isEmailVerified && !user.isPhoneVerified) {
+      // ================= VERIFICATION CHECK =================
+      if (!matchedUser.isEmailVerified && !matchedUser.isPhoneVerified) {
         return errorResponse(
           res,
           "Please verify your email or phone number before logging in",
@@ -1267,31 +1283,32 @@ const loginUser = [
         );
       }
 
-      // Generate token
-      const token = generateToken(user);
-      user.token = token;
-      user.lastLogin = new Date();
-      await user.save();
+      // ================= TOKEN =================
+      const token = generateToken(matchedUser);
+      matchedUser.token = token;
+      matchedUser.lastLogin = new Date();
+      await matchedUser.save();
 
-      const userResponse = user.toObject();
+      const userResponse = matchedUser.toObject();
       delete userResponse.password;
       delete userResponse.__v;
 
-      // ✅ Add token directly into user object
       userResponse.token = token;
 
-      // ✅ Send entire user object as data (roles info is inside user if needed)
       return successResponse(
         res,
         userResponse,
         "Login successful",
         200
       );
+
     } catch (error) {
+      console.error("Login Error:", error);
       return errorResponse(res, "Login failed", 500, error.message);
     }
   }),
 ];
+
 
 const getAllUsers = asyncHandler(async (req, res) => {
   const {
@@ -1447,14 +1464,21 @@ const getUserActivityByType = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Invalid activity type" });
   }
 
-  const user = await User.findById(id).populate({
-    path: `activity.${type}.postId`,
-    select: "caption media createdAt user likes comments postType",
-    populate: {
+const user = await User.findById(id).populate({
+  path: `activity.${type}.postId`,
+  select: "caption media createdAt user likes comments postType type sanghId",
+  populate: [
+    {
       path: "user",
       select: "fullName profilePicture accountType sadhuName tirthName businessName",
     },
-  });
+    {
+      path: "sanghId",
+      select: "name sanghImage",
+    },
+  ],
+});
+
 
   if (!user) {
     return res.status(404).json({ error: "User not found" });
@@ -1475,18 +1499,24 @@ const getUserActivityByType = asyncHandler(async (req, res) => {
         }
 
         return {
-          _id: post._id,
-          caption: post.caption || "",
-          media: post.media || [],
-          postType: post.postType || "post",
-          createdAt: post.createdAt,
-          user: post.user,
-          likes: post.likes || [],
-          likeCount: post.likes ? post.likes.length : 0,
-          comments: post.comments || [],
-          commentCount: post.comments ? post.comments.length : 0,
-          activityCreatedAt: a.createdAt, // 🔹 important: savedAt / likedAt / etc
-        };
+  _id: post._id,
+  caption: post.caption || "",
+  media: post.media || [],
+  postType: post.postType || "post",
+
+  type: post.type,
+  sanghId: post.sanghId,
+
+  createdAt: post.createdAt,
+  user: post.user,
+
+  likes: post.likes || [],
+  likeCount: post.likes?.length || 0,
+  comments: post.comments || [],
+  commentCount: post.comments?.length || 0,
+
+  activityCreatedAt: a.createdAt,
+};
       }
       return null;
     })
