@@ -347,59 +347,67 @@ const searchHashtags = async (req, res) => {
   }
 };
 
-// controller
 const getPostsByUser = asyncHandler(async (req, res) => {
-  const { userId, page = 1, limit = 10 } = req.query;
+  // ✅ FIX 1: userId URL params se lena hai, not query
+  const { userId } = req.params; // Changed from req.query
+  
+  // ✅ FIX 2: Skip aur limit query params se lenge
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = parseInt(req.query.skip) || 0;
 
   if (!userId) {
     return res.status(400).json({ error: "User ID is required" });
   }
 
-  const skip = (page - 1) * limit;
-
-  // Total count for pagination
-  const totalPosts = await Post.countDocuments({ user: userId });
-
-  // Get complete posts with all populated data
-  const posts = await Post.find({ user: userId })
-    .populate("user", "firstName lastName fullName profilePicture accountType accountStatus sadhuName tirthName")
-    .populate("sanghId", "name sanghImage")
-    .populate({
-      path: "comments.user",
-      select: "firstName lastName fullName profilePicture accountType accountStatus sadhuName tirthName"
-    })
-    .populate({
-      path: "comments.replies.user", 
-      select: "firstName lastName fullName profilePicture accountType accountStatus sadhuName tirthName"
-    })
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(Number(limit));
-
-  if (!posts || posts.length === 0) {
-    return res.status(404).json({ 
-      success: false,
-      message: "No posts found for this user",
-      currentPage: Number(page),
-      totalPosts: 0,
-      totalPages: 0,
-      data: {
-        posts: []
-      }
-    });
+  // ✅ Validate ObjectId
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(400).json({ error: "Invalid User ID format" });
   }
 
-  // Direct posts return kar rahe hain, no mapping
-  res.json({
-    success: true,
-    currentPage: Number(page),
-    totalPosts: totalPosts,
-    postsOnCurrentPage: posts.length,
-    totalPages: Math.ceil(totalPosts / limit),
-    data: {
-      posts: posts // Complete post objects
-    }
-  });
+  try {
+    // Total count for pagination
+    const totalPosts = await Post.countDocuments({ user: userId });
+
+    // Get complete posts with all populated data
+    const posts = await Post.find({ user: userId })
+      .populate("user", "fullName profilePicture accountType accountStatus sadhuName tirthName businessName")
+      .populate("sanghId", "name sanghImage")
+      .populate({
+        path: "comments.user",
+        select: "fullName profilePicture accountType accountStatus sadhuName tirthName businessName"
+      })
+      .populate({
+        path: "comments.replies.user", 
+        select: "fullName profilePicture accountType accountStatus sadhuName tirthName businessName"
+      })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(); // ✅ Performance improvement
+
+    // ✅ Calculate current page from skip
+    const currentPage = Math.floor(skip / limit) + 1;
+
+    res.json({
+      success: true,
+      currentPage: currentPage,
+      totalPosts: totalPosts,
+      postsOnCurrentPage: posts.length,
+      totalPages: Math.ceil(totalPosts / limit),
+      hasMore: skip + limit < totalPosts, // ✅ Frontend ke liye useful
+      data: {
+        posts: posts
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching user posts:', error);
+    res.status(500).json({ 
+      success: false,
+      error: "Failed to fetch posts",
+      message: error.message 
+    });
+  }
 });
 
 const getPostById = asyncHandler(async (req, res) => {

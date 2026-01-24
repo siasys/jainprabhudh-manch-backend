@@ -31,7 +31,8 @@ router.get('/combined-feed-optimized', getCombinedFeedOptimized);
 
 router.put('/:postId/unlike', unlikePost); // Unlike a post
 router.delete('/:postId', deletePost); // Delete a post
-router.get('/user', getPostsByUser);
+router.get('/user/:userId/posts', getPostsByUser);
+
 router.get('/:postId', getPostById);
 router.get('/:postId/likes', getLikedUsers);
 // routes/postRoutes.js
