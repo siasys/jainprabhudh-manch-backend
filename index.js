@@ -7,7 +7,7 @@ const path = require('path')
 const dotenv = require("dotenv");
 const helmet = require('helmet');
 dotenv.config();
-console.log("Loaded JWT_SECRET:", process.env.JWT_SECRET);
+//console.log("Loaded JWT_SECRET:", process.env.JWT_SECRET);
 const PORT = 4000;
 const { initializeWebSocket } = require('./websocket/socket'); 
 const session = require('express-session');

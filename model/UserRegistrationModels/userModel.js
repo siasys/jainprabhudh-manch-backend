@@ -411,7 +411,7 @@ userSchema.index({ jainAadharStatus: 1, createdAt: -1 });
 userSchema.methods.incrementLoginAttempts = async function() {
     this.loginAttempts += 1;
     if (this.loginAttempts >= 5) {
-        this.lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes lock
+        this.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
     }
     await this.save();
 };

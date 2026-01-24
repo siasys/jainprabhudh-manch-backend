@@ -757,7 +757,7 @@ const verifyEmail = asyncHandler(async (req, res) => {
     user.registrationStep = 'initial';
 
     const token = generateToken(user);
-    console.log(token)
+   // console.log(token)
     user.token = token;
     await user.save();
 
@@ -1632,7 +1632,7 @@ const updateUserById = asyncHandler(async (req, res) => {
     const params = { Bucket: process.env.AWS_S3_BUCKET_NAME, Key: oldImageKey };
     try {
       await s3.deleteObject(params).promise();
-      console.log('✅ Old profile picture deleted from S3:', oldImageKey);
+     // console.log('✅ Old profile picture deleted from S3:', oldImageKey);
     } catch (error) {
       console.error('❌ Error deleting old profile picture:', error);
     }

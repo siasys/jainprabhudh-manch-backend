@@ -58,7 +58,7 @@ io.use(async (socket, next) => {
 
 
   io.on('connection', (socket) => {
-    console.log('User connected:', socket.userId);
+   // console.log('User connected:', socket.userId);
 
     userSockets.set(socket.userId, socket.id);
     socket.join(socket.userId.toString());
@@ -211,7 +211,7 @@ socket.on('markMessagesRead', async ({ senderId }) => {
     socket.on('disconnect', () => {
       userSockets.delete(socket.userId);
       updateUserStatus(socket.userId, 'offline');
-      console.log('User disconnected:', socket.userId);
+      //console.log('User disconnected:', socket.userId);
     });
   });
   io.on('reconnect_attempt', () => {
