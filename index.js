@@ -69,6 +69,7 @@ const trainingRoute = require('./routes/Training Model/trainingRoute');
 const donationRoute = require('./routes/Donation/donationRoutes');
 const accountRoutes = require('./routes/Account Model/sanghClaimRoutes');
 const expenseRoutes = require('./routes/Account Model/sanghExpenseRoutes');
+const panchApplicationRoutes = require('./routes/SanghRoutes/applicationRoutes');
 //const appVersionRoute = require('./routes/Update apk/appVersion');
 app.set('trust proxy',1);
 // connect to databse
@@ -149,6 +150,7 @@ app.use('/api/hierarchical-sangh', authMiddleware, hierarchicalSanghRoutes);
 app.use('/api/sangh-access', authMiddleware, sanghAccessRoutes);
 app.use('/api/sangh-posts', authMiddleware, sanghPostRoutes);
 app.use('/api/panch', authMiddleware, panchayatRoutes);
+app.use('/api/applications', authMiddleware, panchApplicationRoutes);
 app.use('/api/panch-posts', authMiddleware, panchPostRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/inqury', inquiryRoutes);

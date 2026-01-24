@@ -167,22 +167,20 @@ const upload = multer({
     bucket: process.env.AWS_BUCKET_NAME,
     contentType: multerS3.AUTO_CONTENT_TYPE,
     key: function (req, file, cb) {
-      // Get folder based on file field name
       const folder = getS3Folder(file.fieldname, req);
-      // Create unique filename with timestamp and random string
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
       const filename = uniqueSuffix + path.extname(file.originalname);
-      // Full S3 key with folder path
       const fullPath = folder + filename;
       cb(null, fullPath);
     }
   }),
   limits: {
-    fileSize: 750 * 1024 * 1024, // 10MB file size limit
-    files: 10 // Maximum 10 files per upload
+    fileSize: 40 * 1024 * 1024, // ✅ 40 MB
+    files: 10
   },
   fileFilter: fileFilter
 });
+
 
 // Error handling middleware
 const handleMulterError = (err, req, res, next) => {

@@ -4,22 +4,34 @@ const Bailor = require('../../model/Bailor/Bailor');
 const createBailor = async (req, res) => {
   try {
     const imageFiles = req.files?.bailorImage || [];
+    const { title } = req.body;
 
-    // ✅ Convert S3 URLs to CDN URLs
-    const imageUrls = imageFiles.map(file => convertS3UrlToCDN(file.location));
+    const imageUrls = imageFiles.map(file =>
+      convertS3UrlToCDN(file.location)
+    );
 
     const bailor = new Bailor({
+      title: title || '',
       images: imageUrls,
     });
 
     await bailor.save();
 
-    res.status(201).json({ message: 'Bailor created successfully', bailor });
+    res.status(201).json({
+      success: true,
+      message: 'Bailor created successfully',
+      bailor
+    });
   } catch (error) {
     console.error('Error in creating bailor:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
   }
 };
+
 const getAllBailors = async (req, res) => {
   try {
     const bailors = await Bailor.find().sort({ createdAt: -1 }); // latest first

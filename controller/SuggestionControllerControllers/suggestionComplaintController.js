@@ -8,180 +8,114 @@ const { createSuggestionNotification, createComplaintNotification, createNotific
 exports.createSuggestionComplaint = async (req, res) => {
   try {
     const { type, subject, description, recipient } = req.body;
+
     // Basic validation
-    if (!type || !subject || !description || !recipient || !recipient.type) {
+    if (!type || !subject || !description) {
       return errorResponse(res, 'All required fields must be provided', 400);
     }
-    if (recipient.type === 'superadmin') {
-      const superadmin = await User.findOne({ role: 'superadmin' }).select('_id');
-      if (!superadmin) {
-        return errorResponse(res, 'Superadmin user not found', 404);
-      }
-      recipient.userId = superadmin._id;
+
+    // ❌ Allow only superadmin
+    if (!recipient || recipient.type !== 'superadmin') {
+      return errorResponse(
+        res,
+        'Suggestion / Complaint can only be sent to Superadmin',
+        403
+      );
     }
-    // Validate recipient based on type
-    if (recipient.type === 'sangh' && (!recipient.sanghLevel || !recipient.sanghId)) {
-      return errorResponse(res, 'Sangh level and ID are required for sangh recipients', 400);
+
+    // Find superadmin
+    const superadmin = await User.findOne({ role: 'superadmin' }).select('_id');
+    if (!superadmin) {
+      return errorResponse(res, 'Superadmin user not found', 404);
     }
-    
-    if (recipient.type === 'user' && !recipient.userId) {
-      return errorResponse(res, 'User ID is required for user recipients', 400);
-    }
-    
-    // Verify sangh exists if sending to a sangh
-    if (recipient.type === 'sangh') {
-      const sangh = await HierarchicalSangh.findById(recipient.sanghId)
-        .populate({
-          path: 'officeBearers',
-          match: { role: 'president', status: 'active' },
-          select: 'userId'
-        });
-      
-      if (!sangh) {
-        return errorResponse(res, 'Selected Sangh does not exist', 404);
-      }
-      
-      // Check if the Sangh has an active president
-      if (!sangh.officeBearers || sangh.officeBearers.length === 0) {
-        return errorResponse(res, `The selected ${recipient.sanghLevel} Sangh does not have an active president to receive your ${type}`, 400);
-      }
-    }
-    
-    // Verify user exists if sending to a specific user
-    if (recipient.type === 'user') {
-      const userExists = await User.exists({ _id: recipient.userId });
-      if (!userExists) {
-        return errorResponse(res, 'Selected user does not exist', 404);
-      }
-    }
-    
-    // Create new suggestion/complaint
+
+    // Force recipient to superadmin
+    const finalRecipient = {
+      type: 'superadmin',
+      userId: superadmin._id
+    };
+
+    // Save submission
     const newSubmission = new SuggestionComplaint({
       type,
       subject,
       description,
-      recipient,
+      recipient: finalRecipient,
       submittedBy: req.user._id
     });
-    
-    await newSubmission.save();
-    
-    // Get sender's name for notification
-    const sender = await User.findById(req.user._id, 'firstName lastName');
-    const senderName = sender ? `${sender.firstName} ${sender.lastName}` : 'A user';
-    
-    // Send notification to recipient if it's a user
-    if (recipient.type === 'user') {
-      if (type === 'suggestion') {
-  await createSuggestionNotification({
-    senderId: req.user._id,
-    receiverId: presidentUserId,
-    entityId: newSubmission._id,
-    subject,
-    senderName,
-    additionalInfo: `${recipient.sanghLevel} Sangh: ${sangh.name}`
-  });
-}
-else if (type === 'complaint') {
-  await createComplaintNotification({
-    senderId: req.user._id,
-    receiverId: presidentUserId,
-    entityId: newSubmission._id,
-    subject,
-    senderName,
-    additionalInfo: `${recipient.sanghLevel} Sangh: ${sangh.name}`
-  });
-}
-else if (type === 'request') {
-  await createRequestNotification({
-    senderId: req.user._id,
-    receiverId: presidentUserId,
-    entityId: newSubmission._id,
-    subject,
-    senderName,
-    additionalInfo: `${recipient.sanghLevel} Sangh: ${sangh.name}`
-  });
-}
 
+    await newSubmission.save();
+
+    // Sender name
+    const sender = await User.findById(req.user._id, 'firstName lastName');
+    const senderName = sender
+      ? `${sender.firstName} ${sender.lastName}`
+      : 'A user';
+
+    // 🔔 Notification only to superadmin
+    if (type === 'suggestion') {
+      await createSuggestionNotification({
+        senderId: req.user._id,
+        receiverId: superadmin._id,
+        entityId: newSubmission._id,
+        subject,
+        senderName
+      });
+    } 
+    else if (type === 'complaint') {
+      await createComplaintNotification({
+        senderId: req.user._id,
+        receiverId: superadmin._id,
+        entityId: newSubmission._id,
+        subject,
+        senderName
+      });
+    } 
+    else if (type === 'request') {
+      await createNotification({
+        senderId: req.user._id,
+        receiverId: superadmin._id,
+        entityId: newSubmission._id,
+        subject,
+        senderName,
+        type: 'request'
+      });
     }
-    
-    // For Sangh recipients, find the president and send notification
-    if (recipient.type === 'sangh') {
-      try {
-        // Find the Sangh and its president
-        const sangh = await HierarchicalSangh.findById(recipient.sanghId)
-          .populate({
-            path: 'officeBearers',
-            match: { role: 'president', status: 'active' },
-            select: 'userId'
-          });
-        
-        if (sangh && sangh.officeBearers && sangh.officeBearers.length > 0) {
-          const presidentUserId = sangh.officeBearers[0].userId;
-          
-          // Create notification for the president
-          if (type === 'suggestion') {
-            await createSuggestionNotification({
-              senderId: req.user._id,
-              receiverId: presidentUserId,
-              entityId: newSubmission._id,
-              subject,
-              senderName,
-              additionalInfo: `${recipient.sanghLevel} Sangh: ${sangh.name}`
-            });
-          } else if (type === 'complaint') {
-            await createComplaintNotification({
-              senderId: req.user._id,
-              receiverId: presidentUserId,
-              entityId: newSubmission._id,
-              subject,
-              senderName,
-              additionalInfo: `${recipient.sanghLevel} Sangh: ${sangh.name}`
-            });
-          }
-          
-          console.log(`Notification sent to ${recipient.sanghLevel} Sangh president for ${type}`);
-        }
-      } catch (notificationError) {
-        console.error('Error sending notification to Sangh president:', notificationError);
-        // Continue execution - don't fail the submission if notification fails
-      }
-    }
-    
+
     return successResponse(
-      res, 
-      'Your ' + type + ' has been submitted successfully', 
+      res,
+      `Your ${type} has been submitted to Superadmin successfully`,
       { reference: newSubmission._id },
       201
     );
+
   } catch (error) {
     console.error('Error creating suggestion/complaint:', error);
     return errorResponse(res, 'Internal Server Error', 500);
   }
 };
+
 // Get All Suggestions & Complaints (Superadmin View)
 exports.getAllSuggestionsComplaint = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
 
-  const complaints = await SuggestionComplaint.find({
-  submittedBy: { $ne: null }
-})
-.populate(
-  "submittedBy",
-  "firstName lastName fullName profilePicture phoneNumber email location jainAadharNumber"
-)
-.sort({ createdAt: -1 })
-.skip((page - 1) * limit)
-.limit(parseInt(limit));
+    const submissions = await SuggestionComplaint.find()
+      .populate(
+        'submittedBy',
+        'firstName lastName fullName profilePicture phoneNumber location jainAadharNumber'
+      )
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
 
     const total = await SuggestionComplaint.countDocuments();
 
     return res.status(200).json({
       success: true,
-      message: "All suggestions/complaints retrieved successfully",
+      message: 'All suggestions/complaints retrieved successfully',
       data: {
-        submissions: complaints,
+        submissions,
         pagination: {
           total,
           page: parseInt(page),
@@ -190,69 +124,38 @@ exports.getAllSuggestionsComplaint = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching complaints:", error);
-    return res.status(500).json({ success: false, message: "Internal Server Error" });
+    console.error('Error fetching complaints:', error);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Internal Server Error' });
   }
 };
 
 // Get All Suggestions / Complaints (Admin or recipient view)
 exports.getAllSuggestionsComplaints = async (req, res) => {
   try {
-    const { type, status, startDate, endDate, view } = req.query;
+    const { type, status, view } = req.query;
     const userId = req.user._id;
     const isSuperAdmin = req.user.role === 'superadmin';
 
     let query = {};
 
-    // Optional filters
     if (type) query.type = type;
     if (status) query.status = status;
-    if (startDate && endDate) {
-      query.createdAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
-    }
 
-    // 🔐 Access control by role and view
-    if (view === 'received') {
-      if (isSuperAdmin) {
-        query = {}; // clear all filters to show everything
-      } else {
-        const sanghRoles = req.user.sanghRoles || [];
-        const presidentSanghIds = sanghRoles
-          .filter(r => r.role === 'president')
-          .map(r => r.sanghId.toString());
-
-        if (presidentSanghIds.length > 0) {
-          query.$or = [
-            { 'recipient.type': 'user', 'recipient.userId': userId },
-            { 'recipient.type': 'sangh', 'recipient.sanghId': { $in: presidentSanghIds } }
-          ];
-        } else {
-          query['recipient.type'] = 'user';
-          query['recipient.userId'] = userId;
-        }
-      }
-    } else if (view === 'sent') {
-      query.submittedBy = userId;
-    } else {
-      // Default behavior (like sent)
+    if (!isSuperAdmin) {
       query.submittedBy = userId;
     }
 
-    // 🔁 Pagination
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
     const submissions = await SuggestionComplaint.find(query)
+      .populate('submittedBy', 'firstName lastName fullName')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit)
-      .populate('submittedBy', 'firstName lastName fullName')
-      .populate('recipient.sanghId', 'name level')
-      .populate('recipient.userId', 'firstName lastName fullName');
+      .limit(limit);
 
     const total = await SuggestionComplaint.countDocuments(query);
 
@@ -261,8 +164,8 @@ exports.getAllSuggestionsComplaints = async (req, res) => {
       pagination: {
         total,
         page,
-        pages: Math.ceil(total / limit)
-      }
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
     console.error('Error retrieving suggestions/complaints:', error);
@@ -271,29 +174,33 @@ exports.getAllSuggestionsComplaints = async (req, res) => {
 };
 
 
+
 // Get Single Suggestion / Complaint by ID
 exports.getSuggestionComplaintById = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user._id;
     const isSuperAdmin = req.user.role === 'superadmin';
+
     const submission = await SuggestionComplaint.findById(id)
-      .populate('submittedBy', 'firstName lastName fullName')
-      .populate('recipient.sanghId', 'name level')
-      .populate('recipient.userId', 'firstName lastName fullName');
+      .populate('submittedBy', 'firstName lastName fullName');
+
     if (!submission) {
       return errorResponse(res, 'Suggestion/complaint not found', 404);
     }
-    // Check if user has permission to view this submission
-    const isSubmitter = submission.submittedBy._id.toString() === userId.toString();
-    const isRecipient =
-      (submission.recipient.type === 'user' && submission.recipient.userId?._id.toString() === userId.toString()) ||
-      (submission.recipient.type === 'superadmin' && isSuperAdmin);
-    // Add sangh permission check here based on your sangh permission system
-    // if (!isSubmitter && !isRecipient && !isSuperAdmin) {
-    //   return errorResponse(res, 'You do not have permission to view this submission', 403);
-    // }
-    return successResponse(res, 'Suggestion/complaint retrieved successfully', submission);
+
+    const isSubmitter =
+      submission.submittedBy._id.toString() === userId.toString();
+
+    if (!isSubmitter && !isSuperAdmin) {
+      return errorResponse(res, 'Unauthorized', 403);
+    }
+
+    return successResponse(
+      res,
+      'Suggestion/complaint retrieved successfully',
+      submission
+    );
   } catch (error) {
     console.error('Error retrieving suggestion/complaint:', error);
     return errorResponse(res, 'Internal Server Error', 500);
@@ -306,57 +213,43 @@ exports.updateSuggestionComplaint = async (req, res) => {
     const { id } = req.params;
     const { status, response } = req.body;
     const userId = req.user._id;
-    const isSuperAdmin = req.user.role === 'superadmin';
-    const submission = await SuggestionComplaint.findById(id)
-      .populate('submittedBy', 'firstName lastName fullName');
+
+    if (req.user.role !== 'superadmin') {
+      return errorResponse(res, 'Only superadmin can update', 403);
+    }
+
+    const submission = await SuggestionComplaint.findById(id).populate(
+      'submittedBy',
+      'firstName lastName fullName'
+    );
+
     if (!submission) {
       return errorResponse(res, 'Suggestion/complaint not found', 404);
     }
 
-    // Check if user is president of the sangh the suggestion was sent to
-const isSanghPresidentRecipient =
-submission.recipient.type === 'sangh' &&
-req.user.sanghRoles?.some(role =>
-  role.role === 'president' &&
-  role.sanghId.toString() === submission.recipient.sanghId.toString() &&
-  role.level === submission.recipient.sanghLevel
-);
-
-const isRecipient =
-(submission.recipient.type === 'user' && submission.recipient.userId.toString() === userId.toString()) ||
-(submission.recipient.type === 'superadmin' && isSuperAdmin) ||
-isSanghPresidentRecipient;
-
-    // Add sangh permission check here based on your sangh permission system
-    // if (!isRecipient && !isSuperAdmin) {
-    //   return errorResponse(res, 'You do not have permission to update this submission', 403);
-    // }
-    // Store old status for notification
     const oldStatus = submission.status;
-    // Update fields
-    if (status) {
-      submission.status = status;
-    }
-    if (response) {
-      submission.response = response;
-    }
+
+    if (status) submission.status = status;
+    if (response) submission.response = response;
+
     await submission.save();
-    // Send notification to submitter about status change
+
     if (status && status !== oldStatus) {
-      // Get responder's name
-      const responder = await User.findById(userId, 'firstName lastName fullName');
-      const responderName = responder ? `${responder.firstName} ${responder.lastName}` : 'A user';
-      // Create notification for status update
       await createNotification({
         senderId: userId,
         receiverId: submission.submittedBy._id,
-        type: submission.type === 'suggestion' ? 'suggestion' : 'complaint',
-        message: `Your ${submission.type} "${submission.subject}" status has been updated to: ${status}`,
+        type: submission.type,
+        message: `Your ${submission.type} "${submission.subject}" status updated to ${status}`,
         entityId: submission._id,
-        entityType: 'SuggestionComplaint'
+        entityType: 'SuggestionComplaint',
       });
     }
-    return successResponse(res, 'Suggestion/complaint updated successfully', submission);
+
+    return successResponse(
+      res,
+      'Suggestion/complaint updated successfully',
+      submission
+    );
   } catch (error) {
     console.error('Error updating suggestion/complaint:', error);
     return errorResponse(res, 'Internal Server Error', 500);
