@@ -171,7 +171,7 @@ const getS3Folder = (fieldname, req) => {
 const upload = multer({
   storage: multer.memoryStorage(), // Changed to memory storage for compression
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50 MB maximum
+    fileSize: 250 * 1024 * 1024, // 50 MB maximum
     files: 10
   },
   fileFilter: fileFilter
@@ -188,15 +188,15 @@ const compressImage = async (buffer, quality = 80) => {
       })
       .jpeg({ quality, mozjpeg: true })
       .toBuffer();
-    
+
     const compressedSize = compressed.length;
     const savedSize = originalSize - compressedSize;
     const compressionRatio = ((savedSize / originalSize) * 100).toFixed(2);
-    
-    // console.log('📸 IMAGE COMPRESSION:');
-    // console.log(`   Original Size: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
-    // console.log(`   Compressed Size: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
-    // console.log(`   Saved: ${(savedSize / 1024 / 1024).toFixed(2)} MB (${compressionRatio}% reduction)`);
+
+    console.log('📸 IMAGE COMPRESSION:');
+    console.log(`   Original Size: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`   Compressed Size: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`   Saved: ${(savedSize / 1024 / 1024).toFixed(2)} MB (${compressionRatio}% reduction)`);
 
     return compressed;
   } catch (error) {
@@ -214,7 +214,6 @@ const compressVideo = async (inputBuffer) => {
     const originalSize = inputBuffer.length;
     console.log('🎥 VIDEO COMPRESSION STARTED:');
     console.log(`   Original Size: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
-    
     // Write buffer to temp file
     await fs.writeFile(tempInput, inputBuffer);
 
@@ -240,7 +239,7 @@ const compressVideo = async (inputBuffer) => {
             console.log('✅ VIDEO COMPRESSION COMPLETED:');
             console.log(`   Compressed Size: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
             console.log(`   Saved: ${(savedSize / 1024 / 1024).toFixed(2)} MB (${compressionRatio}% reduction)`);
-            
+
             // Cleanup
             await fs.unlink(tempInput).catch(() => {});
             await fs.unlink(tempOutput).catch(() => {});
@@ -260,8 +259,8 @@ const compressVideo = async (inputBuffer) => {
     });
   } catch (error) {
     console.error('⚠️ VIDEO COMPRESSION ERROR:', error.message);
-    console.log('⚠️ FFmpeg not found! Uploading original video without compression.');
-    console.log('⚠️ Please install FFmpeg to enable video compression.');
+    // console.log('⚠️ FFmpeg not found! Uploading original video without compression.');
+    // console.log('⚠️ Please install FFmpeg to enable video compression.');
     // Cleanup on error
     await fs.unlink(tempInput).catch(() => {});
     await fs.unlink(tempOutput).catch(() => {});
@@ -275,9 +274,8 @@ const compressPDF = async (buffer) => {
     const originalSize = buffer.length;
     console.log('📄 PDF COMPRESSION STARTED:');
     console.log(`   Original Size: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
-    
+
     const pdfDoc = await PDFDocument.load(buffer);
-    
     // Remove metadata to reduce size
     pdfDoc.setTitle('');
     pdfDoc.setAuthor('');
@@ -297,11 +295,9 @@ const compressPDF = async (buffer) => {
     const compressedSize = compressedBuffer.length;
     const savedSize = originalSize - compressedSize;
     const compressionRatio = ((savedSize / originalSize) * 100).toFixed(2);
-    
     console.log('✅ PDF COMPRESSION COMPLETED:');
     console.log(`   Compressed Size: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
     console.log(`   Saved: ${(savedSize / 1024 / 1024).toFixed(2)} MB (${compressionRatio}% reduction)`);
-    
     return compressedBuffer;
   } catch (error) {
     console.error('❌ PDF COMPRESSION FAILED:', error.message);
@@ -312,13 +308,13 @@ const compressPDF = async (buffer) => {
 // Universal compression middleware
 const compressFiles = async (req, res, next) => {
   try {
-    console.log('\n🔄 ========== FILE COMPRESSION STARTED ==========');
-    
+    // console.log('\n🔄 ========== FILE COMPRESSION STARTED ==========');
+
     // Handle single file
     if (req.file) {
       const mimetype = req.file.mimetype;
       console.log(`📁 Processing single file: ${req.file.originalname} (${req.file.fieldname})`);
-      
+
       if (mimetype.startsWith('image/')) {
         req.file.buffer = await compressImage(req.file.buffer);
       } else if (mimetype.startsWith('video/')) {
@@ -331,12 +327,11 @@ const compressFiles = async (req, res, next) => {
     // Handle multiple files (req.files as array)
     if (req.files && Array.isArray(req.files)) {
       console.log(`📁 Processing ${req.files.length} files (array)`);
-      
+
       for (let i = 0; i < req.files.length; i++) {
         const file = req.files[i];
         const mimetype = file.mimetype;
         console.log(`\n   File ${i + 1}/${req.files.length}: ${file.originalname}`);
-        
         if (mimetype.startsWith('image/')) {
           file.buffer = await compressImage(file.buffer);
         } else if (mimetype.startsWith('video/')) {
@@ -351,16 +346,16 @@ const compressFiles = async (req, res, next) => {
     if (req.files && typeof req.files === 'object' && !Array.isArray(req.files)) {
       const totalFiles = Object.values(req.files).reduce((sum, arr) => sum + arr.length, 0);
       console.log(`📁 Processing ${totalFiles} files (fields)`);
-      
+
       let fileCounter = 0;
       for (let fieldname in req.files) {
         const filesArray = req.files[fieldname];
-        
+
         for (let file of filesArray) {
           fileCounter++;
           const mimetype = file.mimetype;
           console.log(`\n   File ${fileCounter}/${totalFiles}: ${file.originalname} (${fieldname})`);
-          
+
           if (mimetype.startsWith('image/')) {
             file.buffer = await compressImage(file.buffer);
           } else if (mimetype.startsWith('video/')) {
@@ -372,7 +367,7 @@ const compressFiles = async (req, res, next) => {
       }
     }
 
-    console.log('✅ ========== FILE COMPRESSION COMPLETED ==========\n');
+    // console.log('✅ ========== FILE COMPRESSION COMPLETED ==========\n');
     next();
   } catch (error) {
     console.error('❌ COMPRESSION MIDDLEWARE ERROR:', error);
@@ -383,7 +378,7 @@ const compressFiles = async (req, res, next) => {
 // Upload to S3 after compression
 const uploadToS3 = async (req, res, next) => {
   const { PutObjectCommand } = require('../config/s3Config');
-  
+
   try {
     // Handle single file
     if (req.file) {
@@ -400,7 +395,7 @@ const uploadToS3 = async (req, res, next) => {
       };
 
       await s3Client.send(new PutObjectCommand(uploadParams));
-      
+
       req.file.location = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
       req.file.key = key;
     }
@@ -421,7 +416,7 @@ const uploadToS3 = async (req, res, next) => {
         };
 
         await s3Client.send(new PutObjectCommand(uploadParams));
-        
+
         file.location = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
         file.key = key;
       }
@@ -431,7 +426,7 @@ const uploadToS3 = async (req, res, next) => {
     if (req.files && typeof req.files === 'object' && !Array.isArray(req.files)) {
       for (let fieldname in req.files) {
         const filesArray = req.files[fieldname];
-        
+
         for (let file of filesArray) {
           const folder = getS3Folder(file.fieldname, req);
           const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -446,7 +441,6 @@ const uploadToS3 = async (req, res, next) => {
           };
 
           await s3Client.send(new PutObjectCommand(uploadParams));
-          
           file.location = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
           file.key = key;
         }
@@ -533,6 +527,7 @@ module.exports.memberUploads = [upload.fields([
 module.exports.boostUploads = [upload.fields([
   { name: 'paymentScreenshot', maxCount: 1 }
 ]), compressFiles, uploadToS3];
+
 module.exports.panchGroupDocs = [upload.fields([
   { name: 'members[0].jainAadharPhoto', maxCount: 1 },
   { name: 'members[0].profilePhoto', maxCount: 1 },
@@ -580,3 +575,6 @@ module.exports.sponsorUpload = [upload.fields([
   { name: 'sponserImage', maxCount: 1 }
 ]), compressFiles, uploadToS3];
 module.exports.entityPostUpload = [upload.array('media', 10), compressFiles, uploadToS3];
+module.exports.compressImage = compressImage;
+module.exports.compressVideo = compressVideo;
+module.exports.compressPDF = compressPDF;
