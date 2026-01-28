@@ -273,16 +273,21 @@ const uploadCertificateForParticipant = async (req, res) => {
 };
 const updateTraining = async (req, res) => {
   try {
-    const { id } = req.params; // ✅ FIX
-
-  //  console.log('TRAINING ID =>', id);
+    const { id } = req.params;
 
     const training = await TrainingModule.findById(id);
     if (!training) {
       return res.status(404).json({ message: 'Training not found' });
     }
 
+    /* ================= REPLACE PDF ================= */
     if (req.files?.trainingPdf) {
+      // ❌ old pdf remove
+      training.materials = training.materials.filter(
+        m => m.type !== 'pdf'
+      );
+
+      // ✅ new pdf add
       req.files.trainingPdf.forEach(file => {
         training.materials.push({
           type: 'pdf',
@@ -292,7 +297,14 @@ const updateTraining = async (req, res) => {
       });
     }
 
+    /* ================= REPLACE VIDEO ================= */
     if (req.files?.trainingVideo) {
+      // ❌ old video remove
+      training.materials = training.materials.filter(
+        m => m.type !== 'video'
+      );
+
+      // ✅ new video add
       req.files.trainingVideo.forEach(file => {
         training.materials.push({
           type: 'video',
@@ -305,7 +317,7 @@ const updateTraining = async (req, res) => {
     await training.save();
 
     res.json({
-      message: 'Training updated successfully',
+      message: 'Training updated successfully (old files replaced)',
       training,
     });
   } catch (error) {
