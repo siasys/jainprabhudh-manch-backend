@@ -193,10 +193,10 @@ const compressImage = async (buffer, quality = 80) => {
     const savedSize = originalSize - compressedSize;
     const compressionRatio = ((savedSize / originalSize) * 100).toFixed(2);
 
-    // console.log('📸 IMAGE COMPRESSION:');
-    // console.log(`   Original Size: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
-    // console.log(`   Compressed Size: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
-    // console.log(`   Saved: ${(savedSize / 1024 / 1024).toFixed(2)} MB (${compressionRatio}% reduction)`);
+    console.log('📸 IMAGE COMPRESSION:');
+    console.log(`   Original Size: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`   Compressed Size: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`   Saved: ${(savedSize / 1024 / 1024).toFixed(2)} MB (${compressionRatio}% reduction)`);
 
     return compressed;
   } catch (error) {
@@ -212,8 +212,8 @@ const compressVideo = async (inputBuffer) => {
 
   try {
     const originalSize = inputBuffer.length;
-    // console.log('🎥 VIDEO COMPRESSION STARTED:');
-    // console.log(`   Original Size: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log('🎥 VIDEO COMPRESSION STARTED:');
+    console.log(`   Original Size: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
     // Write buffer to temp file
     await fs.writeFile(tempInput, inputBuffer);
 
@@ -236,9 +236,9 @@ const compressVideo = async (inputBuffer) => {
             const savedSize = originalSize - compressedSize;
             const compressionRatio = ((savedSize / originalSize) * 100).toFixed(2);
             
-            // console.log('✅ VIDEO COMPRESSION COMPLETED:');
-            // console.log(`   Compressed Size: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
-            // console.log(`   Saved: ${(savedSize / 1024 / 1024).toFixed(2)} MB (${compressionRatio}% reduction)`);
+            console.log('✅ VIDEO COMPRESSION COMPLETED:');
+            console.log(`   Compressed Size: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
+            console.log(`   Saved: ${(savedSize / 1024 / 1024).toFixed(2)} MB (${compressionRatio}% reduction)`);
 
             // Cleanup
             await fs.unlink(tempInput).catch(() => {});
@@ -272,8 +272,8 @@ const compressVideo = async (inputBuffer) => {
 const compressPDF = async (buffer) => {
   try {
     const originalSize = buffer.length;
-    // console.log('📄 PDF COMPRESSION STARTED:');
-    // console.log(`   Original Size: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log('📄 PDF COMPRESSION STARTED:');
+    console.log(`   Original Size: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
 
     const pdfDoc = await PDFDocument.load(buffer);
     // Remove metadata to reduce size
@@ -295,9 +295,9 @@ const compressPDF = async (buffer) => {
     const compressedSize = compressedBuffer.length;
     const savedSize = originalSize - compressedSize;
     const compressionRatio = ((savedSize / originalSize) * 100).toFixed(2);
-    // console.log('✅ PDF COMPRESSION COMPLETED:');
-    // console.log(`   Compressed Size: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
-    // console.log(`   Saved: ${(savedSize / 1024 / 1024).toFixed(2)} MB (${compressionRatio}% reduction)`);
+    console.log('✅ PDF COMPRESSION COMPLETED:');
+    console.log(`   Compressed Size: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`   Saved: ${(savedSize / 1024 / 1024).toFixed(2)} MB (${compressionRatio}% reduction)`);
     return compressedBuffer;
   } catch (error) {
     console.error('❌ PDF COMPRESSION FAILED:', error.message);
@@ -308,12 +308,12 @@ const compressPDF = async (buffer) => {
 // Universal compression middleware
 const compressFiles = async (req, res, next) => {
   try {
-    // console.log('\n🔄 ========== FILE COMPRESSION STARTED ==========');
+    console.log('\n🔄 ========== FILE COMPRESSION STARTED ==========');
 
     // Handle single file
     if (req.file) {
       const mimetype = req.file.mimetype;
-      // console.log(`📁 Processing single file: ${req.file.originalname} (${req.file.fieldname})`);
+      console.log(`📁 Processing single file: ${req.file.originalname} (${req.file.fieldname})`);
 
       if (mimetype.startsWith('image/')) {
         req.file.buffer = await compressImage(req.file.buffer);
@@ -326,7 +326,7 @@ const compressFiles = async (req, res, next) => {
 
     // Handle multiple files (req.files as array)
     if (req.files && Array.isArray(req.files)) {
-      // console.log(`📁 Processing ${req.files.length} files (array)`);
+      console.log(`📁 Processing ${req.files.length} files (array)`);
 
       for (let i = 0; i < req.files.length; i++) {
         const file = req.files[i];
@@ -345,7 +345,7 @@ const compressFiles = async (req, res, next) => {
     // Handle multiple files (req.files as object with fieldnames)
     if (req.files && typeof req.files === 'object' && !Array.isArray(req.files)) {
       const totalFiles = Object.values(req.files).reduce((sum, arr) => sum + arr.length, 0);
-      // console.log(`📁 Processing ${totalFiles} files (fields)`);
+      console.log(`📁 Processing ${totalFiles} files (fields)`);
 
       let fileCounter = 0;
       for (let fieldname in req.files) {

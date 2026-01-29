@@ -1223,7 +1223,6 @@ const resetPassword = asyncHandler(async (req, res) => {
 // ];
 
 // login with number and email
-// login with number and email
 const loginUser = [
   userValidation.login,
   asyncHandler(async (req, res) => {
@@ -1490,7 +1489,7 @@ const user = await User.findById(id).populate({
       if (a.postId) {
         const post = a.postId.toObject ? a.postId.toObject() : a.postId;
 
-        // ✅ Convert media URLs to CDN
+        //Convert media URLs to CDN
         if (post.media && Array.isArray(post.media)) {
           post.media = post.media.map((m) => ({
             ...m,
@@ -1600,7 +1599,7 @@ const updateUserById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const updates = req.body;
 
-  const files = req.files || {}; // ✅ Fix added here
+  const files = req.files || {};
 
   const newProfilePicture = files.profilePicture?.[0]
     ? convertS3UrlToCDN(files.profilePicture[0].location)
