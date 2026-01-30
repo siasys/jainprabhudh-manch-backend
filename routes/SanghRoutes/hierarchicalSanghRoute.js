@@ -31,7 +31,8 @@ const {
     updatePanchMembers,
     updateMemberStatus,
     deleteSanghTeamMember,
-    addHonoraryMember
+    addHonoraryMember,
+    createAdminSangh
 } = require('../../controller/SanghControllers/hierarchicalSanghController');
 
 const upload = require('../../middlewares/upload');
@@ -53,6 +54,7 @@ router.post('/create', upload.sangathanDocs, checkSanghCreationPermission,
     },
     createHierarchicalSangh
 );
+router.post('/create/admin', upload.sangathanDocs, createAdminSangh);
 router.post('/:sanghId/follow', followSangh);
 router.post('/:sanghId/unfollow', unfollowSangh);
     // Get all Sangh

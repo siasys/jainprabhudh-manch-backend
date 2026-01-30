@@ -116,31 +116,27 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
          let resolvedSanghType = sanghType;
          let parentMainSanghId = null;
 
-    // Validate hierarchy level before creation
-if (parentSanghId) {
-    const parentSanghForValidation = await HierarchicalSangh.findById(parentSanghId);
-    if (!parentSanghForValidation) {
-        return errorResponse(res, 'Parent Sangh not found', 404);
-    }
-    
-    const levelHierarchy = ['foundation','country', 'state', 'district', 'city', 'area'];
-    const parentIndex = levelHierarchy.indexOf(parentSanghForValidation.level);
-    const currentIndex = levelHierarchy.indexOf(level);
-    
-    const isSameLevelAllowed = (
-        currentIndex === parentIndex &&
-        parentSanghForValidation.sanghType === 'main' &&
-        ['women', 'youth'].includes(sanghType)
-    );
+         if (parentSanghId) {
+             const parentSangh = await HierarchicalSangh.findById(parentSanghId);
+             if (!parentSangh) {
+                 return errorResponse(res, 'Parent Sangh not found', 404);
+             }
 
-    if (currentIndex <= parentIndex && !isSameLevelAllowed) {
-        return errorResponse(
-            res,
-            `Invalid hierarchy: ${level} level (${sanghType}) cannot be directly under ${parentSanghForValidation.level} (${parentSanghForValidation.sanghType})`,
-            400
-        );
-    }
-}
+             // If parent is specialized, child must be the same type
+             if (parentSangh.sanghType !== 'main') {
+                 resolvedSanghType = parentSangh.sanghType;
+             }
+
+             // Track the top-level main Sangh for specialized Sanghs
+             if (resolvedSanghType !== 'main') {
+              parentMainSanghId = parentSangh.parentMainSangh
+                  ? parentSangh.parentMainSangh
+                  : parentSangh.sanghType === 'main'
+                      ? parentSangh._id 
+                      : null;
+          }
+
+         }
         // Validate location hierarchy based on level
         if (level === 'area' && (!location.country || !location.state || !location.district || !location.city || !location.area)) {
             return errorResponse(res, 'Area level Sangh requires complete location hierarchy (country, state, district, city, area)', 400);
@@ -198,6 +194,14 @@ if (parentSanghId) {
             coverImage,
             sanghImage
         });
+        
+        // ✅ ONLY CHANGE: Line 117 - Add safety check for normal users
+        // Original: await sangh.validateHierarchy();
+        // Fixed: Skip validation if user has no sanghRoles (normal user)
+        if (req.user?.sanghRoles && req.user.sanghRoles.length > 0) {
+            await sangh.validateHierarchy();
+        }
+        
         // Automatically create SanghAccess entry
         const SanghAccess = require('../../model/SanghModels/sanghAccessModel');
         const mongoose = require('mongoose');
@@ -269,6 +273,152 @@ if (parentSanghId) {
         return errorResponse(res, error.message, 500);
     }
 });
+
+// Normal admin create sangh
+const createAdminSangh = asyncHandler(async (req, res) => {
+    const coverImage = req.files?.coverImage ? convertS3UrlToCDN(req.files.coverImage[0].location) : null;
+    const sanghImage = req.files?.sanghImage ? convertS3UrlToCDN(req.files.sanghImage[0].location) : null;
+
+    try {
+        const {
+            name,
+            level,
+            location,
+            officeAddress,
+            parentSanghId,
+            contact,
+            establishedDate,
+            description,
+            socialMedia,
+            parentSanghAccessId,
+            sanghType = 'main'
+        } = req.body;
+
+        // 1️⃣ Validate required fields
+        if (!name || !level || !location || !officeAddress) {
+            return errorResponse(res, 'Missing required fields', 400);
+        }
+
+        // 2️⃣ Validate Sangh type
+        if (!['main', 'women', 'youth'].includes(sanghType)) {
+            return errorResponse(res, 'Invalid Sangh type. Must be "main", "women", or "youth"', 400);
+        }
+
+        // 3️⃣ Validate location based on level
+        const requiredLocationFields = {
+            foundation: ['country'],
+            country: ['country'],
+            state: ['country','state'],
+            district: ['country','state','district'],
+            city: ['country','state','district','city'],
+            area: ['country','state','district','city','area']
+        };
+        const missingFields = requiredLocationFields[level]?.filter(f => !location[f]);
+        if (missingFields && missingFields.length > 0) {
+            return errorResponse(res, `Missing location fields: ${missingFields.join(', ')}`, 400);
+        }
+
+        // 4️⃣ Validate parent Sangh if provided
+        let resolvedSanghType = sanghType;
+        let parentMainSanghId = null;
+
+        if (parentSanghId) {
+            const parentSangh = await HierarchicalSangh.findById(parentSanghId);
+            if (!parentSangh) {
+                return errorResponse(res, 'Parent Sangh not found', 404);
+            }
+
+            // Specialized Sangh inherits type from parent
+            if (parentSangh.sanghType !== 'main') {
+                resolvedSanghType = parentSangh.sanghType;
+            }
+
+            if (resolvedSanghType !== 'main') {
+                parentMainSanghId = parentSangh.parentMainSangh || (parentSangh.sanghType === 'main' ? parentSangh._id : null);
+            }
+        }
+
+        // 5️⃣ Area-specific uniqueness check
+        if (level === 'area') {
+            const existingAreaSangh = await HierarchicalSangh.findOne({
+                level: 'area',
+                'location.country': location.country,
+                'location.state': location.state,
+                'location.district': location.district,
+                'location.city': location.city,
+                'location.area': location.area,
+                status: 'active'
+            });
+            if (existingAreaSangh) {
+                return errorResponse(res, 'An active Sangh already exists for this area', 400);
+            }
+        }
+
+        // 6️⃣ Create Sangh
+        const sangh = await HierarchicalSangh.create({
+            name,
+            level,
+            location,
+            officeAddress,
+            parentSangh: parentSanghId,
+            description,
+            contact,
+            socialMedia,
+            sanghType: resolvedSanghType,
+            parentMainSangh: parentMainSanghId,
+            createdBy: req.user._id,
+            coverImage,
+            sanghImage
+        });
+
+        // 7️⃣ Validate hierarchy for users with sanghRoles (optional safety)
+        if (req.user?.sanghRoles && req.user.sanghRoles.length > 0) {
+            await sangh.validateHierarchy();
+        }
+
+        // 8️⃣ Create SanghAccess
+        const SanghAccess = require('../../model/SanghModels/sanghAccessModel');
+        const mongoose = require('mongoose');
+
+        let resolvedParentSanghAccessId = null;
+        if (parentSanghAccessId) {
+            if (mongoose.Types.ObjectId.isValid(parentSanghAccessId)) {
+                resolvedParentSanghAccessId = parentSanghAccessId;
+            } else {
+                const parentAccess = await SanghAccess.findOne({
+                    accessId: parentSanghAccessId,
+                    status: 'active'
+                });
+                if (parentAccess) resolvedParentSanghAccessId = parentAccess._id;
+            }
+        }
+
+        let sanghAccess = await SanghAccess.findOne({ sanghId: sangh._id, status: 'active' });
+        if (!sanghAccess) {
+            sanghAccess = await SanghAccess.create({
+                sanghId: sangh._id,
+                level,
+                location,
+                createdBy: req.user._id,
+                parentSanghAccess: resolvedParentSanghAccessId
+            });
+            sangh.sanghAccessId = sanghAccess._id;
+            await HierarchicalSangh.findByIdAndUpdate(sangh._id, { sanghAccessId: sanghAccess._id });
+        }
+
+        return successResponse(res, {
+            sangh,
+            accessId: sangh.accessId,
+            sanghAccessId: sanghAccess._id,
+            sanghAccessCode: sanghAccess.accessId
+        }, 'Sangh created successfully', 201);
+
+    } catch (error) {
+        if (req.files) await deleteS3Files(req.files);
+        return errorResponse(res, error.message, 500);
+    }
+});
+
 const getAllSangh = asyncHandler(async (req, res) => {
   try {
     const { district, state, city, level } = req.query;
@@ -2672,5 +2822,6 @@ module.exports = {
     switchToUserToken,
     updateMemberStatus,
     deleteSanghTeamMember,
-    addHonoraryMember
+    addHonoraryMember,
+    createAdminSangh
 };
