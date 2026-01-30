@@ -100,8 +100,8 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             parentSanghAccessId,
             sanghType = 'main'
         } = req.body;
-        console.log("parentSanghId in request:", req.body);
-        console.log("Received parentSanghId:", req.body.parentSanghId);
+        // console.log("parentSanghId in request:", req.body);
+        // console.log("Received parentSanghId:", req.body.parentSanghId);
 
          // Validate required fields
         // if (!name || !level || !location || !officeBearers) {
