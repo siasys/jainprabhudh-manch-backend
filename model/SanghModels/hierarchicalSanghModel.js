@@ -586,45 +586,57 @@ hierarchicalSanghSchema.pre('save', async function(next) {
     next();
 });
 
-hierarchicalSanghSchema.methods.validateHierarchy = async function () {
-  if (!this.level) {
-    throw new Error('Level is missing');
-  }
-
-  // foundation
-  if (this.level === 'foundation') {
-    if (this.parentSangh) {
-      throw new Error('Foundation level Sangh cannot have a parent');
+hierarchicalSanghSchema.methods.validateHierarchy = async function() {
+    if (this.level === 'foundation') {
+        if (this.parentSangh) {
+            throw new Error('foundation level Sangh cannot have a parent Sangh');
+        }
+        return;
     }
-    return;
-  }
-
-  if (!this.parentSangh) {
-    throw new Error('Parent Sangh is required');
-  }
-
+     if (this.level === 'country') {
   const parentSangh = await this.constructor.findById(this.parentSangh);
 
   if (!parentSangh) {
     throw new Error('Parent Sangh not found');
   }
 
-  const levelHierarchy = ['foundation', 'country', 'state', 'district', 'city', 'area'];
-
-  const parentIndex = levelHierarchy.indexOf(parentSangh.level);
-  const currentIndex = levelHierarchy.indexOf(this.level);
-
-  const isSameLevelSpecialized =
-    parentSangh.level === this.level &&
-    parentSangh.sanghType === 'main' &&
-    ['women', 'youth'].includes(this.sanghType);
-
-  if (currentIndex <= parentIndex && !isSameLevelSpecialized) {
-    throw new Error(
-      `Invalid hierarchy: ${this.level} cannot be under ${parentSangh.level}`
-    );
+  // Allow foundation as parent
+  if (parentSangh.level === 'foundation') {
+    return;
   }
+
+  // Allow specialized Sanghs (women/youth) under country level main Sangh
+  const isSameLevelSpecialized = (
+    parentSangh.level === 'country' &&
+    parentSangh.sanghType === 'main' &&
+    ['women', 'youth'].includes(this.sanghType)
+  );
+
+  if (!isSameLevelSpecialized) {
+    throw new Error('Country level Sangh must have a foundation as parent or be a specialized Sangh under country main Sangh');
+  }
+
+  return;
+}
+
+    // if (!this.parentSangh) {
+    //     throw new Error('Non-country level Sangh must have a parent Sangh');
+    // }
+
+    const parentSangh = await this.constructor.findById(this.parentSangh);
+    // if (!parentSangh) {
+    //     throw new Error('Parent Sangh not found');
+    // }
+
+    const levelHierarchy = ['foundation', 'country', 'state', 'district', 'city', 'area'];
+    const parentIndex = levelHierarchy.indexOf(parentSangh.level);
+    const currentIndex = levelHierarchy.indexOf(this.level);
+       if ((currentIndex <= parentIndex) && !isSameLevelSpecialized) {
+    throw new Error(`Invalid hierarchy: ${this.level} level cannot be directly under ${parentSangh.level} level`);
+}
+
 };
+
 // Add pre-save middleware to ensure validation
 hierarchicalSanghSchema.pre('save', async function(next) {
     if (this.isNew) {

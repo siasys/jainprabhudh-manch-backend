@@ -116,27 +116,31 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
          let resolvedSanghType = sanghType;
          let parentMainSanghId = null;
 
-         if (parentSanghId) {
-             const parentSangh = await HierarchicalSangh.findById(parentSanghId);
-             if (!parentSangh) {
-                 return errorResponse(res, 'Parent Sangh not found', 404);
-             }
+    // Validate hierarchy level before creation
+if (parentSanghId) {
+    const parentSanghForValidation = await HierarchicalSangh.findById(parentSanghId);
+    if (!parentSanghForValidation) {
+        return errorResponse(res, 'Parent Sangh not found', 404);
+    }
+    
+    const levelHierarchy = ['foundation','country', 'state', 'district', 'city', 'area'];
+    const parentIndex = levelHierarchy.indexOf(parentSanghForValidation.level);
+    const currentIndex = levelHierarchy.indexOf(level);
+    
+    const isSameLevelAllowed = (
+        currentIndex === parentIndex &&
+        parentSanghForValidation.sanghType === 'main' &&
+        ['women', 'youth'].includes(sanghType)
+    );
 
-             // If parent is specialized, child must be the same type
-             if (parentSangh.sanghType !== 'main') {
-                 resolvedSanghType = parentSangh.sanghType;
-             }
-
-             // Track the top-level main Sangh for specialized Sanghs
-             if (resolvedSanghType !== 'main') {
-              parentMainSanghId = parentSangh.parentMainSangh
-                  ? parentSangh.parentMainSangh
-                  : parentSangh.sanghType === 'main'
-                      ? parentSangh._id 
-                      : null;
-          }
-
-         }
+    if (currentIndex <= parentIndex && !isSameLevelAllowed) {
+        return errorResponse(
+            res,
+            `Invalid hierarchy: ${level} level (${sanghType}) cannot be directly under ${parentSanghForValidation.level} (${parentSanghForValidation.sanghType})`,
+            400
+        );
+    }
+}
         // Validate location hierarchy based on level
         if (level === 'area' && (!location.country || !location.state || !location.district || !location.city || !location.area)) {
             return errorResponse(res, 'Area level Sangh requires complete location hierarchy (country, state, district, city, area)', 400);
@@ -194,14 +198,6 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             coverImage,
             sanghImage
         });
-        
-        // ✅ ONLY CHANGE: Line 117 - Add safety check for normal users
-        // Original: await sangh.validateHierarchy();
-        // Fixed: Skip validation if user has no sanghRoles (normal user)
-        if (req.user?.sanghRoles && req.user.sanghRoles.length > 0) {
-            await sangh.validateHierarchy();
-        }
-        
         // Automatically create SanghAccess entry
         const SanghAccess = require('../../model/SanghModels/sanghAccessModel');
         const mongoose = require('mongoose');
