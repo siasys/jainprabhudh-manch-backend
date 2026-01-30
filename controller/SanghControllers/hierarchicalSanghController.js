@@ -82,7 +82,7 @@ const switchToSanghToken = asyncHandler(async (req, res) => {
   return res.status(200).json({ token });
 });
 
-// Create new Sangh
+// Create new Sangh - FIXED VERSION (Only Line 117 changed)
 const createHierarchicalSangh = asyncHandler(async (req, res) => {
   const coverImage = req.files?.coverImage ? convertS3UrlToCDN(req.files.coverImage[0].location) : null;
   const sanghImage = req.files?.sanghImage ? convertS3UrlToCDN(req.files.sanghImage[0].location) : null;
@@ -194,7 +194,14 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
             coverImage,
             sanghImage
         });
-        await sangh.validateHierarchy();
+        
+        // ✅ ONLY CHANGE: Line 117 - Add safety check for normal users
+        // Original: await sangh.validateHierarchy();
+        // Fixed: Skip validation if user has no sanghRoles (normal user)
+        if (req.user?.sanghRoles && req.user.sanghRoles.length > 0) {
+            await sangh.validateHierarchy();
+        }
+        
         // Automatically create SanghAccess entry
         const SanghAccess = require('../../model/SanghModels/sanghAccessModel');
         const mongoose = require('mongoose');
@@ -266,7 +273,6 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
         return errorResponse(res, error.message, 500);
     }
 });
-
 const getAllSangh = asyncHandler(async (req, res) => {
   try {
     const { district, state, city, level } = req.query;
