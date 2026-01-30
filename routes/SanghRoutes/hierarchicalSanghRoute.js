@@ -93,7 +93,7 @@ router.delete('/:sanghId/members/:memberId', isOfficeBearer,
 
 router.put('/:sanghId/members/:memberId', upload.memberUploads, updateMemberDetails);
 
-router.get('/:sanghId/members', 
+router.get('/:sanghId/members',
     validateSanghAccess,
     getSanghMembers
 );

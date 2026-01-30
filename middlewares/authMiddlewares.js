@@ -70,7 +70,7 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
 
     let user = await User.findById(userId).select("-password -__v");
     if (!user) {
-      console.log("❌ User not found in DB for ID:", userId);
+    //  console.log("❌ User not found in DB for ID:", userId);
       return res.status(401).json({ message: "User not found" });
     }
 

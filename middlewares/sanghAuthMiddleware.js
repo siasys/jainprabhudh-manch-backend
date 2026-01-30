@@ -322,9 +322,9 @@ const checkSanghCreationPermission = asyncHandler(async (req, res, next) => {
             role.sanghType === 'main'
         );
 
-        if (!presidentRole) {
-            return errorResponse(res, 'You must be a Sangh president to create sub-Sanghs', 403);
-        }
+        // if (!presidentRole) {
+        //     return errorResponse(res, 'You must be a Sangh president to create sub-Sanghs', 403);
+        // }
 
         // Foundation level president can create anything
         if (presidentRole.level === 'foundation') {

@@ -78,7 +78,7 @@ module.exports = {
   "Kargil", "Leh"
 ],
 
-"Madhya Pradesh": ["Ashok Nagar","Alirajpur","Anuppur","Agar malwa","Balaghat", "Barwani", "Betul", "Bharhut", "Bhind", "Bhojpur", "Bhopal", "Burhanpur", "Chhatarpur", "Chhindwara", "Damoh", "Datia","Dindori","Dewas", "Dhar", "Dr. Ambedkar Nagar (Mhow)", "Guna", "Gwalior",
+"Madhya Pradesh": ["Ashok Nagar", "Alirajpur","Anuppur","Agar malwa","Balaghat", "Barwani", "Betul", "Bharhut", "Bhind", "Bhojpur", "Bhopal", "Burhanpur", "Chhatarpur", "Chhindwara", "Damoh", "Datia","Dindori","Dewas", "Dhar", "Dr. Ambedkar Nagar (Mhow)", "Guna", "Gwalior",
     "Harda","Narmdapuram(Hoshangabad)", "Indore", "Itarsi", "Jabalpur","Katni","Jhabua", "Khajuraho", "Khandwa", "Khargone",
     "Mandla", "Mandsaur", "Morena","Mauganj","Maihar","Murwara", "Narsinghpur", "Narsinghgarh","Niwari","Narwar", "Neemuch", "Nowgong",
     "Orchha", "Panna","Pandhurna","Raisen", "Rajgarh", "Ratlam", "Rewa", "Sagar", "Sarangpur", "Satna","Sidhi","Singrauli", "Sehore", "Seoni",
