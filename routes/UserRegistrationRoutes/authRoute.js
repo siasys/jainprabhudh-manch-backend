@@ -118,6 +118,7 @@ upload.single('profilePicture'),uploadProfilePicture);
 router.post('/skip-profile-picture', authMiddleware, skipProfilePicture);
 router.put('/update-privacy/:id', updatePrivacy);
 router.put('/:id', upload.fields([
+    authMiddleware,
     { name: 'profilePicture', maxCount: 1 },
     { name: 'coverPicture', maxCount: 1 }
   ]),
