@@ -16,6 +16,7 @@ const { isPasswordMatched, validatePassword, getPasswordErrors } = require('../.
 const stateCityData = require("./stateCityData");
 const EmailVerification = require("../../model/UserRegistrationModels/EmailVerification");
 const { sendVerificationSms } = require("../../services/smsHelper");
+const { s3Client, DeleteObjectCommand } = require("../../config/s3Config");
 
 // const authLimiter = rateLimit({
 //     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -1594,21 +1595,12 @@ const changePassword = asyncHandler(async (req, res) => {
 });
 
 
-// Enhanced user update with validation
 const updateUserById = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const updates = req.body;
-
+  const updates = req.body || {};
   const files = req.files || {};
 
-  const newProfilePicture = files.profilePicture?.[0]
-    ? convertS3UrlToCDN(files.profilePicture[0].location)
-    : null;
-
-  const newCoverPicture = files.coverPicture?.[0]
-    ? convertS3UrlToCDN(files.coverPicture[0].location)
-    : null;
-
+  // Auth checks
   if (!req.user || !req.user._id) {
     return res.status(401).json({ error: 'Unauthorized: No valid token' });
   }
@@ -1617,47 +1609,95 @@ const updateUserById = asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'Forbidden: You can only update your own profile' });
   }
 
+  // ✅ Get uploaded images
+  const newProfilePicture = files.profilePicture?.[0]
+    ? convertS3UrlToCDN(files.profilePicture[0].location)
+    : null;
+
+  const newCoverPicture = files.coverPicture?.[0]
+    ? convertS3UrlToCDN(files.coverPicture[0].location)
+    : null;
+
+
+  // Never allow these
   delete updates.password;
   delete updates.token;
+  delete updates.profilePicture;
+  delete updates.coverPicture;
 
   const user = await User.findById(id);
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
 
-  // Delete Old Profile Picture from S3 If New One is Uploaded
-  if (newProfilePicture && user.profilePicture?.startsWith("https")) {
-    const oldImageKey = user.profilePicture.split('/').pop(); 
-    const params = { Bucket: process.env.AWS_S3_BUCKET_NAME, Key: oldImageKey };
+  // ✅ Delete old profile picture from S3
+  if (newProfilePicture && user.profilePicture) {
     try {
-      await s3.deleteObject(params).promise();
-     // console.log('✅ Old profile picture deleted from S3:', oldImageKey);
-    } catch (error) {
-      console.error('❌ Error deleting old profile picture:', error);
+      // Extract key from CloudFront or S3 URL
+      let oldKey;
+      
+      if (user.profilePicture.includes('cloudfront.net')) {
+        oldKey = user.profilePicture.split('.net/')[1];
+      } else if (user.profilePicture.includes('.s3.')) {
+        oldKey = user.profilePicture.split('.com/')[1];
+      }
+
+      if (oldKey) {
+        await s3Client.send(new DeleteObjectCommand({
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: oldKey,
+        }));
+      }
+    } catch (err) {
+      console.error("❌ Profile image delete failed:", err);
     }
   }
 
-  // Update User Document with New Data
+  // ✅ Delete old cover picture from S3
+  if (newCoverPicture && user.coverPicture) {
+    try {
+      let oldKey;
+      if (user.coverPicture.includes('cloudfront.net')) {
+        oldKey = user.coverPicture.split('.net/')[1];
+      } else if (user.coverPicture.includes('.s3.')) {
+        oldKey = user.coverPicture.split('.com/')[1];
+      }
+
+      if (oldKey) {
+        await s3Client.send(new DeleteObjectCommand({
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: oldKey,
+        }));
+      }
+    } catch (err) {
+      console.error("❌ Cover image delete failed:", err);
+    }
+  }
+
+  // ✅ Build update object
+  const updateData = { ...updates };
+
+  if (newProfilePicture) {
+    updateData.profilePicture = newProfilePicture;
+  }
+
+  if (newCoverPicture) {
+    updateData.coverPicture = newCoverPicture;
+  }
+
   const updatedUser = await User.findByIdAndUpdate(
     id,
-    {
-      $set: {
-        ...updates,
-        ...(newProfilePicture && { profilePicture: newProfilePicture }),
-        ...(newCoverPicture && { coverPicture: newCoverPicture }), // ✅ working now
-      },
-    },
+    { $set: updateData },
     { new: true, runValidators: true }
   ).select('-password -__v');
+
 
   res.json({
     success: true,
     message: 'Profile updated successfully',
-    data: updatedUser
+    data: updatedUser,
   });
 });
-
-
 // Enhanced privacy settings
 const updatePrivacy = asyncHandler(async (req, res) => {
   const { id } = req.params;

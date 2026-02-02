@@ -117,11 +117,15 @@ router.post('/upload-profile-picture', authMiddleware,
 upload.single('profilePicture'),uploadProfilePicture);
 router.post('/skip-profile-picture', authMiddleware, skipProfilePicture);
 router.put('/update-privacy/:id', updatePrivacy);
-router.put('/:id', upload.fields([
-    authMiddleware,
+router.put('/:id', 
+  authMiddleware,
+  upload.fields([
     { name: 'profilePicture', maxCount: 1 },
     { name: 'coverPicture', maxCount: 1 }
   ]),
-  updateUserById);
+  upload.compressFiles,  // ✅ ADD THIS - compress karne ke liye
+  upload.uploadToS3,     // ✅ ADD THIS - S3 mein upload karne ke liye
+  updateUserById
+);
 router.get('/:id', getUserById);
 module.exports = router;
