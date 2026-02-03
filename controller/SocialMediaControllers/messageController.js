@@ -286,7 +286,6 @@ if (req.file) {
           sender: senderInfo
         });
       }
- 
     // 9. Success response
     return successResponse(res, {
       ...newMessage.toObject(),
