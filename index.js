@@ -1,12 +1,14 @@
+const dotenv = require("dotenv");
+dotenv.config();
+
+require('newrelic');
 const express = require("express");
 const http = require("http");
 const dbConnect = require("./config/dbConnect");
 const app = express();
 require('./services/boostExpiry'); 
 const path = require('path')
-const dotenv = require("dotenv");
 const helmet = require('helmet');
-dotenv.config();
 //console.log("Loaded JWT_SECRET:", process.env.JWT_SECRET);
 const PORT = 4000;
 const { initializeWebSocket } = require('./websocket/socket'); 

@@ -166,7 +166,7 @@ const updateDonation = async (req, res) => {
     }
 
     const {
-      title, 
+      title,
       purpose,
       amount,
       onBehalfOf,

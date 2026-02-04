@@ -117,7 +117,7 @@ exports.createRecruitee = async (req, res) => {
 exports.getAllRecruitees = async (req, res) => {
   try {
     let recruitees = await RojgarRecruitee.find({ jobType: "recruitee" })
-      .populate("user", "fullName profilePicture mobile email")
+      .populate("user", "fullName profilePicture")
       .sort({ createdAt: -1 });
 
     // Convert resume URLs to CDN

@@ -138,7 +138,7 @@ exports.getSanghClaims = async (req, res) => {
     if (paymentStatus) query.paymentStatus = paymentStatus;
 
     const claims = await SanghClaim.find(query)
-      .populate('userId', 'fullName email phoneNumber')
+      .populate('userId', 'fullName phoneNumber')
       .populate('adminResponse.reviewedBy', 'name')
       .sort({ createdAt: -1 });
 
@@ -163,8 +163,8 @@ exports.getClaimById = async (req, res) => {
 
     const claim = await SanghClaim.findById(claimId)
       .populate('sanghId', 'name level location members honoraryMembers receivedPayments')
-      .populate('userId', 'name email phoneNumber')
-      .populate('adminResponse.reviewedBy', 'name email');
+      .populate('userId', 'name phoneNumber')
+      .populate('adminResponse.reviewedBy', 'name');
 
     if (!claim) {
       return res.status(404).json({ 

@@ -6,17 +6,17 @@ const { convertS3UrlToCDN } = require("../../utils/s3Utils");
 
 exports.createBoostPlan = asyncHandler(async (req, res) => {
 
-  console.log("🔵 RAW REQ BODY:", req.body);
-  console.log("🔵 RAW REQ FILES:", req.files);
+  // console.log("🔵 RAW REQ BODY:", req.body);
+  // console.log("🔵 RAW REQ FILES:", req.files);
 
   const userId = req.user?._id;
   const { postId, states, districts, cities, duration, amount } = req.body;
 
   let parsedDuration = duration;
   if (typeof duration === "string") {
-    try { parsedDuration = JSON.parse(duration); } 
-    catch (err) { 
-      return res.status(400).json({ error: "Invalid duration format" }); 
+    try { parsedDuration = JSON.parse(duration); }
+    catch (err) {
+      return res.status(400).json({ error: "Invalid duration format" });
     }
   }
 
@@ -80,7 +80,7 @@ exports.createBoostPlan = asyncHandler(async (req, res) => {
 
   await user.save();
 
-  console.log("✅ BOOST CREATED SUCCESSFULLY:", boost._id);
+  // console.log("✅ BOOST CREATED SUCCESSFULLY:", boost._id);
 
   res.status(201).json({
     success: true,
@@ -101,7 +101,7 @@ exports.getAllBoostPlans = asyncHandler(async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
-    // ✅ CDN conversion (optional but recommended)
+    //CDN conversion (optional but recommended)
     const formattedBoosts = boosts.map(boost => {
       const boostObj = boost.toObject();
 

@@ -90,11 +90,11 @@ exports.getAllActivities = async (req, res) => {
     const filter = sanghId ? { sanghId } : {};
 
     const activities = await Activity.find(filter)
-      .populate("createdBy", "name email fullName phoneNumber")
+      .populate("createdBy", "fullName phoneNumber")
       .populate("sanghId", "name level")
       .populate("organizedBy", "name level")
        .populate("sponsors")
-      .populate("judges", "name email fullName phoneNumber");
+      .populate("judges", "fullName phoneNumber");
 
     res.status(200).json({
       success: true,
@@ -114,12 +114,12 @@ exports.getActivityById = async (req, res) => {
 
     // Step 1️⃣: Find activity and populate related fields
     const activity = await Activity.findById(id)
-      .populate("createdBy", "name email fullName phoneNumber")
+      .populate("createdBy", "fullName phoneNumber")
       .populate("sanghId", "name level")
       .populate("organizedBy", "name level")
       .populate("participants.userId", "fullName profilePicture phoneNumber")
-      .populate("judges.userId", "fullName email phoneNumber profilePicture")
-      
+      .populate("judges.userId", "fullName phoneNumber profilePicture")
+
 
     if (!activity) {
       return res
@@ -401,12 +401,12 @@ exports.calculateWinners = async (req, res) => {
     const { activityId } = req.params;
     const { firstWinner, secondWinner, thirdWinner } = req.body;
 
-    console.log("🔍 Received activityId:", activityId);
-    console.log("🔍 Request body:", req.body);
+    // console.log("🔍 Received activityId:", activityId);
+    // console.log("🔍 Request body:", req.body);
 
     const activity = await Activity.findById(activityId);
     if (!activity) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false, 
         message: "Activity not found"
       });
@@ -447,7 +447,7 @@ exports.calculateWinners = async (req, res) => {
             : { userId: null, marks: 0 })
     };
 
-    console.log("✅ Complete winners object:", JSON.stringify(completeWinners, null, 2));
+    // console.log("✅ Complete winners object:", JSON.stringify(completeWinners, null, 2));
 
     // ✅ Use $set to replace entire winners object
     await Activity.updateOne(

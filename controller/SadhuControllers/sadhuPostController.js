@@ -421,7 +421,6 @@ const addSadhuReply = async (req, res) => {
 
         // Populate user info for the reply
         await post.populate('comments.replies.user', 'firstName lastName profilePicture');
-        
         // Get the updated comment with the new reply
         const updatedComment = post.comments.id(commentId);
         const newReply = updatedComment.replies[updatedComment.replies.length - 1];

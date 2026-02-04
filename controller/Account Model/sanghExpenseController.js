@@ -138,7 +138,7 @@ exports.getSanghExpenses = async (req, res) => {
     const { sanghId } = req.params;
 
     const expenses = await Expense.find({ sanghId })
-      .populate('userId', 'name email')
+      .populate('userId', 'name')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -161,7 +161,7 @@ exports.getExpenseById = async (req, res) => {
     const { expenseId } = req.params;
 
     const expense = await Expense.findById(expenseId)
-      .populate('userId', 'name email')
+      .populate('userId', 'name')
       .populate('sanghId', 'name level');
 
     if (!expense) {
