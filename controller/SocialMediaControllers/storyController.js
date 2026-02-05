@@ -230,16 +230,20 @@ const getStoriesByUser = asyncHandler(async (req, res) => {
       createdAt: { $gte: twentyFourHoursAgo },
       _id: { $nin: hideStoryIds }
     })
-    .populate("userId", "profilePicture firstName lastName fullName accountType accountStatus sadhuName tirthName")
+    .populate("userId", "profilePicture firstName lastName fullName accountType accountStatus sadhuName tirthName businessName")
     .populate("sanghId", "name sanghImage");
 
     if (!stories.length) {
       return errorResponse(res, 'No active stories found for this user', 404);
     }
 
+    // ✅ FIX: media ab array of objects hai
     const cdnStories = stories.map(story => ({
       ...story.toObject(),
-      media: story.media.map(url => convertS3UrlToCDN(url))
+      media: story.media.map(mediaItem => ({
+        ...mediaItem.toObject ? mediaItem.toObject() : mediaItem,
+        url: convertS3UrlToCDN(mediaItem.url), // 👈 Sirf URL convert karo
+      }))
     }));
 
     return successResponse(res, cdnStories, "Stories fetched successfully", 200);
@@ -249,7 +253,6 @@ const getStoriesByUser = asyncHandler(async (req, res) => {
     return errorResponse(res, 'Error fetching user stories', 500, error.message);
   }
 });
-
 // Delete Story
 const deleteStory = asyncHandler(async (req, res) => {
     try {
@@ -288,15 +291,12 @@ const deleteStory = asyncHandler(async (req, res) => {
         });
     }
 });
-// delete story on media
+// delete story media by mediaId
 const deleteStoryMedia = asyncHandler(async (req, res) => {
   try {
-    const { storyId } = req.params;
+    const { storyId, mediaId } = req.params;
     const userId = req.user._id;
     const userRole = req.user.role;
-    const { mediaUrl } = req.body;
-
-    const normalizedMediaUrl = decodeURIComponent(mediaUrl).trim();
 
     const story = await Story.findById(storyId);
     if (!story) {
@@ -313,10 +313,20 @@ const deleteStoryMedia = asyncHandler(async (req, res) => {
       });
     }
 
-const updatedMedia = story.media.filter(mediaItem => mediaItem.url !== normalizedMediaUrl);
+    // ✅ Find media by _id
+    const mediaExists = story.media.id(mediaId);
+    if (!mediaExists) {
+      return res.status(404).json({
+        success: false,
+        message: "Media not found in this story"
+      });
+    }
 
-    if (updatedMedia.length === 0) {
-      // Delete entire story
+    // ✅ Remove specific media by _id
+    story.media.pull(mediaId);
+
+    // If no media left, delete entire story
+    if (story.media.length === 0) {
       await Story.findByIdAndDelete(storyId);
 
       // Remove story reference from User
@@ -329,18 +339,19 @@ const updatedMedia = story.media.filter(mediaItem => mediaItem.url !== normalize
 
       return res.json({
         success: true,
-        message: "Story and related reports deleted successfully"
+        message: "Story and related reports deleted successfully",
+        storyDeleted: true
       });
     }
 
-    story.media = updatedMedia;
-    story.markModified('media');
+    // Save updated story
     await story.save();
 
     res.json({
       success: true,
       message: "Media deleted successfully",
-      data: story
+      data: story,
+      storyDeleted: false
     });
 
   } catch (error) {
@@ -366,9 +377,9 @@ const adminDeleteStory = asyncHandler(async (req, res) => {
 
     const story = await Story.findById(storyId);
     if (!story) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Story not found" 
+      return res.status(404).json({
+        success: false,
+        message: "Story not found"
       });
     }
 
@@ -376,8 +387,8 @@ const adminDeleteStory = asyncHandler(async (req, res) => {
     await Story.findByIdAndDelete(storyId);
 
     // Remove from user
-    await User.findByIdAndUpdate(story.userId, { 
-      $pull: { story: storyId } 
+    await User.findByIdAndUpdate(story.userId, {
+      $pull: { story: storyId }
     });
 
     // Delete reports
@@ -389,20 +400,228 @@ const adminDeleteStory = asyncHandler(async (req, res) => {
     });
 
   } catch (error) {
-    return res.status(500).json({ 
-      success: false, 
-      message: "Error deleting story", 
-      error: error.message 
+    return res.status(500).json({
+      success: false,
+      message: "Error deleting story",
+      error: error.message
     });
   }
 });
+
+// ✅ View specific media in a story
+const viewStory = asyncHandler(async (req, res) => {
+  const { storyId } = req.params;
+  const { mediaId } = req.body; // 👈 mediaId body se aayegi
+  const viewerId = req.user._id;
+
+  const story = await Story.findById(storyId);
+  if (!story) {
+    return res.status(404).json({
+      success: false,
+      message: "Story not found",
+    });
+  }
+
+  // ❌ apni khud ki story view count me mat jodo
+  if (story.userId.toString() === viewerId.toString()) {
+    return res.json({ success: true });
+  }
+
+  // 🔍 Find the specific media
+  const media = story.media.id(mediaId);
+  if (!media) {
+    return res.status(404).json({
+      success: false,
+      message: "Media not found in story",
+    });
+  }
+
+  // ❌ already viewed hai to dubara mat add karo
+  const alreadyViewed = media.views?.some(
+    v => v.userId.toString() === viewerId.toString()
+  );
+
+  if (!alreadyViewed) {
+    media.views.push({
+      userId: viewerId,
+      viewedAt: new Date(),
+    });
+    await story.save();
+  }
+
+  res.json({
+    success: true,
+    totalViews: media.views.length,
+  });
+});
+
+// ✅ Get views for specific media
+const getStoryViews = asyncHandler(async (req, res) => {
+  const { storyId, mediaId } = req.params; // 👈 mediaId param se aayegi
+  const userId = req.user._id;
+
+  const story = await Story.findById(storyId);
+
+  if (!story) {
+    return res.status(404).json({
+      success: false,
+      message: "Story not found",
+    });
+  }
+
+  // 🔒 sirf story owner hi viewers dekh sakta hai
+  if (story.userId.toString() !== userId.toString()) {
+    return res.status(403).json({
+      success: false,
+      message: "Not authorized to view story insights",
+    });
+  }
+
+  // 🔍 Find the specific media
+  const media = story.media.id(mediaId);
+  if (!media) {
+    return res.status(404).json({
+      success: false,
+      message: "Media not found in story",
+    });
+  }
+
+  // Populate user details
+  await story.populate({
+    path: 'media.views.userId',
+    select: 'fullName profilePicture accountType accountStatus sadhuName tirthName businessName'
+  });
+
+  // Get the populated media again
+  const populatedMedia = story.media.id(mediaId);
+
+  res.json({
+    success: true,
+    totalViews: populatedMedia.views.length,
+    viewers: populatedMedia.views.map(v => {
+      let displayName = 'User';
+      
+      if (v.userId.accountType === 'business' && v.userId.businessName) {
+        displayName = v.userId.businessName;
+      } else if (v.userId.accountType === 'sadhu' && v.userId.sadhuName) {
+        displayName = v.userId.sadhuName;
+      } else if (v.userId.accountType === 'tirth' && v.userId.tirthName) {
+        displayName = v.userId.tirthName;
+      } else if (v.userId.fullName) {
+        displayName = v.userId.fullName;
+      }
+
+      return {
+        _id: v.userId._id,
+        name: displayName,
+        accountType: v.userId.accountType,
+        profilePicture: v.userId.profilePicture,
+        viewedAt: v.viewedAt,
+      };
+    }),
+  });
+});
+// ❤️ Like / Unlike specific story media
+const toggleStoryMediaLike = asyncHandler(async (req, res) => {
+  const { storyId, mediaId } = req.params;
+  const userId = req.user._id;
+
+  const story = await Story.findById(storyId);
+  if (!story) {
+    return res.status(404).json({
+      success: false,
+      message: "Story not found",
+    });
+  }
+
+  const media = story.media.id(mediaId);
+  if (!media) {
+    return res.status(404).json({
+      success: false,
+      message: "Media not found in story",
+    });
+  }
+
+  const alreadyLikedIndex = media.likes.findIndex(
+    like => like.userId.toString() === userId.toString()
+  );
+
+  let isLiked;
+
+  if (alreadyLikedIndex !== -1) {
+    // ❌ UNLIKE
+    media.likes.splice(alreadyLikedIndex, 1);
+    isLiked = false;
+  } else {
+    // ❤️ LIKE
+    media.likes.push({ userId });
+    isLiked = true;
+  }
+
+  await story.save();
+
+  res.json({
+    success: true,
+    isLiked,
+    totalLikes: media.likes.length,
+  });
+});
+const getStoryMediaLikes = asyncHandler(async (req, res) => {
+  const { storyId, mediaId } = req.params;
+
+  const story = await Story.findById(storyId).populate({
+    path: 'media.likes.userId',
+    select: 'fullName profilePicture accountType businessName sadhuName tirthName',
+  });
+
+  if (!story) {
+    return res.status(404).json({
+      success: false,
+      message: "Story not found",
+    });
+  }
+
+  const media = story.media.id(mediaId);
+  if (!media) {
+    return res.status(404).json({
+      success: false,
+      message: "Media not found",
+    });
+  }
+
+  res.json({
+    success: true,
+    totalLikes: media.likes.length,
+    likes: media.likes.map(like => {
+      const u = like.userId;
+      return {
+        _id: u._id,
+        name:
+          u.accountType === 'business'
+            ? u.businessName
+            : u.accountType === 'sadhu'
+            ? u.sadhuName
+            : u.accountType === 'tirth'
+            ? u.tirthName
+            : u.fullName,
+        profilePicture: u.profilePicture,
+        likedAt: like.likedAt,
+      };
+    }),
+  });
+});
+
 module.exports = {
     createStory,
     getAllStories,
     getStoriesByUser,
     deleteStory,
     deleteStoryMedia,
-    adminDeleteStory
+    adminDeleteStory,
+    viewStory,
+    getStoryViews,
+    toggleStoryMediaLike,
+    getStoryMediaLikes
 };
 
 // exports.createStory = async (req, res) => {

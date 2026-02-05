@@ -15,7 +15,7 @@ const storySchema = new mongoose.Schema({
     default: false,
   },
 
-  // ✅ Each media has its own text, style, and mentions
+  // ✅ Each media has its own text, style, mentions AND VIEWS
   media: [
     {
       url: { type: String, required: true },
@@ -34,6 +34,32 @@ const storySchema = new mongoose.Schema({
           ref: 'User',
         },
       ],
+      // ✅ HAR MEDIA KA APNA VIEW TRACKING
+      views: [
+        {
+          userId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+          },
+          viewedAt: {
+            type: Date,
+            default: Date.now,
+          },
+        },
+      ],
+      likes: [
+        {
+          userId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+          },
+          likedAt: {
+            type: Date,
+            default: Date.now,
+          },
+        },
+      ],
+
     },
   ],
 

@@ -1,5 +1,5 @@
 const express = require('express');
-const { createStory, getAllStories, getStoriesByUser, deleteStory, deleteStoryMedia, adminDeleteStory } = require('../../controller/SocialMediaControllers/storyController');
+const { createStory, getAllStories, getStoriesByUser, deleteStory, deleteStoryMedia, adminDeleteStory, viewStory, getStoryViews, toggleStoryMediaLike, getStoryMediaLikes } = require('../../controller/SocialMediaControllers/storyController');
 const upload = require('../../middlewares/upload');
 const { authMiddleware } = require('../../middlewares/authMiddlewares');
 const router = express.Router();
@@ -34,14 +34,19 @@ const validateRequest = (req, res, next) => {
 
 // Story routes
 router.post("/", upload.storyUpload, createStory);
-router.get('/get', getAllStories); 
-router.get('/:userId', getStoriesByUser);
-router.delete('/delete/:userId/:storyId', deleteStory);
+router.get('/get', getAllStories);
+router.post('/:storyId/view', viewStory);
+router.get('/:storyId/:mediaId/views', getStoryViews);
+router.post('/:storyId/media/:mediaId/like', toggleStoryMediaLike);
+router.get('/:storyId/media/:mediaId/likes', getStoryMediaLikes);
 router.delete('/admin/delete/:storyId', adminDeleteStory);
-router.delete('/delete/:storyId', deleteStoryMedia);
+router.delete('/delete/:storyId/:mediaId', deleteStoryMedia);
+router.delete('/delete/:userId/:storyId', deleteStory);
+
+router.get('/:userId', getStoriesByUser);
 
 // router.post("/", upload.array("media"), createStory);
-// router.get('/get', getAllStories); 
+// router.get('/get', getAllStories);
 // router.get('/:userId', getStoriesByUser);
 // router.delete('/delete/:userId/:storyId', deleteStory);
 
