@@ -1,6 +1,6 @@
 const multer = require('multer');
 const multerS3 = require('multer-s3');
-const { s3Client } = require('../config/s3Config');
+const { s3Client,PutObjectCommand} = require('../config/s3Config');
 const path = require('path');
 const sharp = require('sharp');
 const ffmpeg = require('fluent-ffmpeg');
@@ -8,6 +8,7 @@ const { PDFDocument } = require('pdf-lib');
 const fs = require('fs').promises;
 const os = require('os');
 
+sharp.cache(false);
 // Set FFmpeg path from npm package
 try {
   const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
@@ -171,299 +172,158 @@ const getS3Folder = (fieldname, req) => {
 const upload = multer({
   storage: multer.memoryStorage(), // Changed to memory storage for compression
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50 MB maximum
+    fileSize: 20 * 1024 * 1024, // 50 MB maximum
     files: 10
   },
   fileFilter: fileFilter
 });
 
-// Image Compression
-const compressImage = async (buffer, quality = 80) => {
+// Image Compression Optimized
+const compressImage = async (buffer) => {
   try {
-    const originalSize = buffer.length;
-    const compressed = await sharp(buffer)
-      .resize(1920, 1920, {
-        fit: 'inside',
-        withoutEnlargement: true
-      })
-      .jpeg({ quality, mozjpeg: true })
+    return await sharp(buffer)
+      .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 70, mozjpeg: true }) // Quality slightly reduced to save major RAM
       .toBuffer();
-
-    const compressedSize = compressed.length;
-    const savedSize = originalSize - compressedSize;
-    const compressionRatio = ((savedSize / originalSize) * 100).toFixed(2);
-
-    // console.log('📸 IMAGE COMPRESSION:');
-    // console.log(`   Original Size: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
-    // console.log(`   Compressed Size: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
-    // console.log(`   Saved: ${(savedSize / 1024 / 1024).toFixed(2)} MB (${compressionRatio}% reduction)`);
-
-    return compressed;
   } catch (error) {
     console.error('Image compression error:', error);
-    return buffer; // Return original if compression fails
+    return buffer;
   }
 };
 
-// Video Compression
 const compressVideo = async (inputBuffer) => {
-  const tempInput = path.join(os.tmpdir(), `input-${Date.now()}.mp4`);
-  const tempOutput = path.join(os.tmpdir(), `output-${Date.now()}.mp4`);
+  const tempInput = path.join(os.tmpdir(), `temp-in-${Date.now()}.mp4`);
+  const tempOutput = path.join(os.tmpdir(), `temp-out-${Date.now()}.mp4`);
 
   try {
-    const originalSize = inputBuffer.length;
-    // console.log('🎥 VIDEO COMPRESSION STARTED:');
-    // console.log(`   Original Size: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
-    // Write buffer to temp file
+    // 1. Buffer ko disk par write karein (RAM bachane ke liye)
     await fs.writeFile(tempInput, inputBuffer);
 
     return new Promise((resolve, reject) => {
       ffmpeg(tempInput)
         .outputOptions([
-          '-c:v libx264',       // H.264 codec
-          '-preset fast',       // Faster encoding
-          '-crf 28',           // Higher CRF = more compression (23-28 is good)
-          '-c:a aac',          // Audio codec
-          '-b:a 128k',         // Audio bitrate
-          '-movflags +faststart', // Web optimization
-          '-vf scale=1280:-2'  // Scale to 720p, maintain aspect ratio
+          '-vcodec libx264',
+          '-crf 28',            // Higher = smaller size (23-28 is sweet spot)
+          '-preset superfast',  // Render ke slow CPU ke liye fast preset zaroori hai
+          '-movflags +faststart',
+          '-vf scale=w=720:h=-2', // Max 720p height, aspect ratio maintain
+          '-maxrate 1M',        // Bitrate control
+          '-bufsize 2M'
         ])
         .output(tempOutput)
         .on('end', async () => {
           try {
-            const compressedBuffer = await fs.readFile(tempOutput);
-            const compressedSize = compressedBuffer.length;
-            const savedSize = originalSize - compressedSize;
-            const compressionRatio = ((savedSize / originalSize) * 100).toFixed(2);
-            
-            // console.log('✅ VIDEO COMPRESSION COMPLETED:');
-            // console.log(`   Compressed Size: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
-            // console.log(`   Saved: ${(savedSize / 1024 / 1024).toFixed(2)} MB (${compressionRatio}% reduction)`);
-
-            // Cleanup
-            await fs.unlink(tempInput).catch(() => {});
-            await fs.unlink(tempOutput).catch(() => {});
-            resolve(compressedBuffer);
-          } catch (error) {
-            reject(error);
-          }
+            const result = await fs.readFile(tempOutput);
+            // Cleanup files immediately
+            await Promise.all([fs.unlink(tempInput), fs.unlink(tempOutput)]);
+            resolve(result);
+          } catch (e) { reject(e); }
         })
-        .on('error', async (error) => {
-          console.error('❌ VIDEO COMPRESSION FAILED:', error.message);
-          // Cleanup on error
+        .on('error', async (err) => {
+          console.error('FFmpeg Error:', err.message);
           await fs.unlink(tempInput).catch(() => {});
-          await fs.unlink(tempOutput).catch(() => {});
-          reject(error);
+          resolve(inputBuffer); // Error par original upload hone dein
         })
         .run();
     });
   } catch (error) {
-    console.error('⚠️ VIDEO COMPRESSION ERROR:', error.message);
-    // console.log('⚠️ FFmpeg not found! Uploading original video without compression.');
-    // console.log('⚠️ Please install FFmpeg to enable video compression.');
-    // Cleanup on error
-    await fs.unlink(tempInput).catch(() => {});
-    await fs.unlink(tempOutput).catch(() => {});
-    return inputBuffer; // Return original if compression fails
+    console.error('Video Compression Catch:', error);
+    return inputBuffer;
   }
 };
-
-// PDF Compression
+// PDF Compression Optimized
 const compressPDF = async (buffer) => {
   try {
-    const originalSize = buffer.length;
-    // console.log('📄 PDF COMPRESSION STARTED:');
-    // console.log(`   Original Size: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
-
     const pdfDoc = await PDFDocument.load(buffer);
-    // Remove metadata to reduce size
-    pdfDoc.setTitle('');
-    pdfDoc.setAuthor('');
-    pdfDoc.setSubject('');
-    pdfDoc.setKeywords([]);
-    pdfDoc.setProducer('');
-    pdfDoc.setCreator('');
-
-    // Save with compression
     const compressedPdf = await pdfDoc.save({
       useObjectStreams: true,
-      addDefaultPage: false,
-      objectsPerTick: 50
+      addDefaultPage: false
     });
-
-    const compressedBuffer = Buffer.from(compressedPdf);
-    const compressedSize = compressedBuffer.length;
-    const savedSize = originalSize - compressedSize;
-    const compressionRatio = ((savedSize / originalSize) * 100).toFixed(2);
-    // console.log('✅ PDF COMPRESSION COMPLETED:');
-    // console.log(`   Compressed Size: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
-    // console.log(`   Saved: ${(savedSize / 1024 / 1024).toFixed(2)} MB (${compressionRatio}% reduction)`);
-    return compressedBuffer;
+    return Buffer.from(compressedPdf);
   } catch (error) {
-    console.error('❌ PDF COMPRESSION FAILED:', error.message);
-    return buffer; // Return original if compression fails
+    return buffer;
   }
 };
 
-// Universal compression middleware
+// Universal Compression Middleware
 const compressFiles = async (req, res, next) => {
   try {
-    // console.log('\n🔄 ========== FILE COMPRESSION STARTED ==========');
+    const processFile = async (file) => {
+      if (!file.buffer) return;
 
-    // Handle single file
-    if (req.file) {
-      const mimetype = req.file.mimetype;
-      // console.log(`📁 Processing single file: ${req.file.originalname} (${req.file.fieldname})`);
-
-      if (mimetype.startsWith('image/')) {
-        req.file.buffer = await compressImage(req.file.buffer);
-      } else if (mimetype.startsWith('video/')) {
-        req.file.buffer = await compressVideo(req.file.buffer);
-      } else if (mimetype === 'application/pdf') {
-        req.file.buffer = await compressPDF(req.file.buffer);
-      }
-    }
-
-    // Handle multiple files (req.files as array)
-    if (req.files && Array.isArray(req.files)) {
-      // console.log(`📁 Processing ${req.files.length} files (array)`);
-
-      for (let i = 0; i < req.files.length; i++) {
-        const file = req.files[i];
-        const mimetype = file.mimetype;
-        console.log(`\n   File ${i + 1}/${req.files.length}: ${file.originalname}`);
-        if (mimetype.startsWith('image/')) {
-          file.buffer = await compressImage(file.buffer);
-        } else if (mimetype.startsWith('video/')) {
-          file.buffer = await compressVideo(file.buffer);
-        } else if (mimetype === 'application/pdf') {
-          file.buffer = await compressPDF(file.buffer);
+      if (file.mimetype.startsWith('image/')) {
+        file.buffer = await compressImage(file.buffer);
+      } 
+      else if (file.mimetype.startsWith('video/')) {
+        // Video compression tabhi karein agar file 5MB se badi ho
+        if (file.size > 5 * 1024 * 1024) {
+           file.buffer = await compressVideo(file.buffer);
         }
+      } 
+      else if (file.mimetype === 'application/pdf') {
+        file.buffer = await compressPDF(file.buffer);
+      }
+    };
+
+    // Single File
+    if (req.file) await processFile(req.file);
+
+    // Multiple Files (Array or Fields)
+    if (req.files) {
+      const allFiles = Array.isArray(req.files) 
+        ? req.files 
+        : Object.values(req.files).flat();
+      
+      // Sequential processing (RAM control ke liye ek-ek karke)
+      for (const file of allFiles) {
+        await processFile(file);
       }
     }
-
-    // Handle multiple files (req.files as object with fieldnames)
-    if (req.files && typeof req.files === 'object' && !Array.isArray(req.files)) {
-      const totalFiles = Object.values(req.files).reduce((sum, arr) => sum + arr.length, 0);
-      // console.log(`📁 Processing ${totalFiles} files (fields)`);
-
-      let fileCounter = 0;
-      for (let fieldname in req.files) {
-        const filesArray = req.files[fieldname];
-
-        for (let file of filesArray) {
-          fileCounter++;
-          const mimetype = file.mimetype;
-          // console.log(`\n   File ${fileCounter}/${totalFiles}: ${file.originalname} (${fieldname})`);
-
-          if (mimetype.startsWith('image/')) {
-            file.buffer = await compressImage(file.buffer);
-          } else if (mimetype.startsWith('video/')) {
-            file.buffer = await compressVideo(file.buffer);
-          } else if (mimetype === 'application/pdf') {
-            file.buffer = await compressPDF(file.buffer);
-          }
-        }
-      }
-    }
-
-    // console.log('✅ ========== FILE COMPRESSION COMPLETED ==========\n');
     next();
   } catch (error) {
-    console.error('❌ COMPRESSION MIDDLEWARE ERROR:', error);
-    next(); // Continue even if compression fails
+    console.error('Compression Middleware Error:', error);
+    next();
   }
 };
-
-// Upload to S3 after compression
+// Upload to S3 and CLEANUP
 const uploadToS3 = async (req, res, next) => {
-  const { PutObjectCommand } = require('../config/s3Config');
-
   try {
-    // Handle single file
-    if (req.file) {
-      const folder = getS3Folder(req.file.fieldname, req);
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      const filename = uniqueSuffix + path.extname(req.file.originalname);
+    const performUpload = async (file) => {
+      const folder = getS3Folder(file.fieldname, req);
+      const filename = `${Date.now()}-${Math.round(Math.random() * 1E9)}${path.extname(file.originalname)}`;
       const key = folder + filename;
 
-      const uploadParams = {
+      await s3Client.send(new PutObjectCommand({
         Bucket: process.env.AWS_BUCKET_NAME,
         Key: key,
-        Body: req.file.buffer,
-        ContentType: req.file.mimetype
-      };
+        Body: file.buffer,
+        ContentType: file.mimetype
+      }));
 
-      await s3Client.send(new PutObjectCommand(uploadParams));
+      file.location = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
+      file.key = key;
+      
+      // CRITICAL: Clear buffer from memory after upload
+      delete file.buffer; 
+    };
 
-      req.file.location = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
-      req.file.key = key;
-    }
+    if (req.file) await performUpload(req.file);
 
-    // Handle multiple files (array)
-    if (req.files && Array.isArray(req.files)) {
-      for (let file of req.files) {
-        const folder = getS3Folder(file.fieldname, req);
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const filename = uniqueSuffix + path.extname(file.originalname);
-        const key = folder + filename;
-
-        const uploadParams = {
-          Bucket: process.env.AWS_BUCKET_NAME,
-          Key: key,
-          Body: file.buffer,
-          ContentType: file.mimetype
-        };
-
-        await s3Client.send(new PutObjectCommand(uploadParams));
-
-        file.location = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
-        file.key = key;
-      }
-    }
-
-    // Handle multiple files (object)
-    if (req.files && typeof req.files === 'object' && !Array.isArray(req.files)) {
-      for (let fieldname in req.files) {
-        const filesArray = req.files[fieldname];
-
-        for (let file of filesArray) {
-          const folder = getS3Folder(file.fieldname, req);
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-          const filename = uniqueSuffix + path.extname(file.originalname);
-          const key = folder + filename;
-
-          const uploadParams = {
-            Bucket: process.env.AWS_BUCKET_NAME,
-            Key: key,
-            Body: file.buffer,
-            ContentType: file.mimetype
-          };
-
-          await s3Client.send(new PutObjectCommand(uploadParams));
-          file.location = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
-          file.key = key;
-        }
-      }
+    if (req.files) {
+      const filesToUpload = Array.isArray(req.files) ? req.files : Object.values(req.files).flat();
+      for (let file of filesToUpload) await performUpload(file);
     }
 
     next();
   } catch (error) {
-    console.error('S3 upload error:', error);
+    console.error('S3 Upload Error:', error);
     return res.status(500).json({ error: 'File upload failed' });
   }
 };
 
-// Error handling middleware
 const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File too large. Maximum size is 50MB.' });
-    }
-    if (err.code === 'LIMIT_FILE_COUNT') {
-      return res.status(400).json({ error: 'Too many files. Maximum is 10 files.' });
-    }
-    return res.status(400).json({ error: `Upload error: ${err.message}` });
+    return res.status(400).json({ error: err.message });
   }
   next(err);
 };
