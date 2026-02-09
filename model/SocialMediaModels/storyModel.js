@@ -15,10 +15,14 @@ const storySchema = new mongoose.Schema({
     default: false,
   },
 
-  // ✅ Each media has its own text, style, mentions AND VIEWS
   media: [
     {
-      url: { type: String, required: true },
+      url: { 
+        type: String, 
+        required: function() {
+          return this.type !== 'text'; // ✅ text stories ke liye url optional
+        }
+      },
       type: { type: String, enum: ['image', 'video', 'text'], required: true },
       text: { type: String, default: '' },
       textStyle: {
@@ -27,6 +31,10 @@ const storySchema = new mongoose.Schema({
         color: { type: String, default: '#ffffff' },
         fontFamily: { type: String, default: 'System' },
         fontSize: { type: Number, default: 16 },
+        // ✅ Gradient colors for text-only stories
+        gradientColors: { type: [String], default: [] },
+        gradientId: { type: String, default: '' },
+        backgroundColor: { type: String, default: '' }, // fallback
       },
       mentionUsers: [
         {
@@ -34,7 +42,6 @@ const storySchema = new mongoose.Schema({
           ref: 'User',
         },
       ],
-      // ✅ HAR MEDIA KA APNA VIEW TRACKING
       views: [
         {
           userId: {
@@ -59,7 +66,6 @@ const storySchema = new mongoose.Schema({
           },
         },
       ],
-
     },
   ],
 

@@ -47,7 +47,7 @@ const createStory = asyncHandler(async (req, res) => {
     const mediaArray = [];
 
     // -----------------------------
-    // 🛡️ Moderation: Check each media before adding
+    //  Moderation: Check each media before adding
     // -----------------------------
     for (const [index, file] of mediaFiles.entries()) {
       // Convert S3 → CDN URL first
@@ -72,6 +72,7 @@ const createStory = asyncHandler(async (req, res) => {
           });
         }
       }
+
       // ✅ Check text inside this media
       const mediaText = Array.isArray(text) ? text[index] || '' : text || '';
       if (mediaText && containsBadWords(mediaText)) {
@@ -81,12 +82,11 @@ const createStory = asyncHandler(async (req, res) => {
         });
       }
 
-
       // ✅ Push safe media into array
       mediaArray.push({
-        url: cdnUrl,
+        url: "",
         type: file.type,
-        text: Array.isArray(text) ? text[index] || '' : text || '',
+        text: mediaText,
         textStyle: Array.isArray(textStyle) ? textStyle[index] || {} : textStyle || {},
         mentionUsers: Array.isArray(mentionUsers)
           ? mentionUsers
@@ -98,11 +98,20 @@ const createStory = asyncHandler(async (req, res) => {
 
     // ✏️ Handle text-only story (no media)
     if (mediaArray.length === 0 && text?.length > 0) {
+      // 🛡️ Text-only story moderation
+      const storyText = Array.isArray(text) ? text.join(' ') : text;
+      if (storyText && containsBadWords(storyText)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Your text contains inappropriate or harmful words.',
+        });
+      }
+
       mediaArray.push({
         url: '',
         type: 'text',
-        text: text || '',
-        textStyle: textStyle || {},
+        text: Array.isArray(text) ? text[0] || '' : text || '',
+        textStyle: Array.isArray(textStyle) ? textStyle[0] || {} : textStyle || {},
         mentionUsers: Array.isArray(mentionUsers)
           ? mentionUsers
               .filter((id) => mongoose.Types.ObjectId.isValid(id))
@@ -127,7 +136,7 @@ const createStory = asyncHandler(async (req, res) => {
       //  Create new story
       const newStory = new Story({
         userId,
-        sanghId: isSanghStory ? sanghId : null,
+        sanghId: isSanghStory === 'true' ? sanghId : null,
         isSanghStory: isSanghStory === 'true',
         media: mediaArray,
       });
@@ -521,7 +530,7 @@ const getStoryViews = asyncHandler(async (req, res) => {
     }),
   });
 });
-// ❤️ Like / Unlike specific story media
+// Like / Unlike specific story media
 const toggleStoryMediaLike = asyncHandler(async (req, res) => {
   const { storyId, mediaId } = req.params;
   const userId = req.user._id;
