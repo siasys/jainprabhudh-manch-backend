@@ -97,7 +97,7 @@ if (req.files?.video) {
   for (const file of req.files.video) {
     const cdnUrl = convertS3UrlToCDN(file.location);
 
-    console.log("Skipping VIDEO moderation for:", cdnUrl);
+   // console.log("Skipping VIDEO moderation for:", cdnUrl);
 
     // ✅ Directly accept video (no moderation call)
     media.push({ url: cdnUrl, type: 'video' });
