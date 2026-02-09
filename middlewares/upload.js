@@ -171,7 +171,7 @@ const getS3Folder = (fieldname, req) => {
 const upload = multer({
   storage: multer.memoryStorage(), // Changed to memory storage for compression
   limits: {
-    fileSize: 100 * 1024 * 1024, // 50 MB maximum
+    fileSize: 50 * 1024 * 1024, // 50 MB maximum
     files: 10
   },
   fileFilter: fileFilter
@@ -211,50 +211,62 @@ const compressVideo = async (inputBuffer) => {
   const tempOutput = path.join(os.tmpdir(), `output-${Date.now()}.mp4`);
 
   try {
-    // write buffer to temp file
+    const originalSize = inputBuffer.length;
+    // console.log('🎥 VIDEO COMPRESSION STARTED:');
+    // console.log(`   Original Size: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
+    // Write buffer to temp file
     await fs.writeFile(tempInput, inputBuffer);
 
     return new Promise((resolve, reject) => {
       ffmpeg(tempInput)
         .outputOptions([
-          '-c:v libx264',
-          '-preset veryfast',
-          '-crf 28',
-          '-c:a aac',
-          '-b:a 128k',
-          '-movflags +faststart',
-          '-vf scale=1280:-2'
+          '-c:v libx264',       // H.264 codec
+          '-preset fast',       // Faster encoding
+          '-crf 28',           // Higher CRF = more compression (23-28 is good)
+          '-c:a aac',          // Audio codec
+          '-b:a 128k',         // Audio bitrate
+          '-movflags +faststart', // Web optimization
+          '-vf scale=1280:-2'  // Scale to 720p, maintain aspect ratio
         ])
         .output(tempOutput)
         .on('end', async () => {
           try {
             const compressedBuffer = await fs.readFile(tempOutput);
+            const compressedSize = compressedBuffer.length;
+            const savedSize = originalSize - compressedSize;
+            const compressionRatio = ((savedSize / originalSize) * 100).toFixed(2);
+            
+            // console.log('✅ VIDEO COMPRESSION COMPLETED:');
+            // console.log(`   Compressed Size: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
+            // console.log(`   Saved: ${(savedSize / 1024 / 1024).toFixed(2)} MB (${compressionRatio}% reduction)`);
 
-            // cleanup
+            // Cleanup
             await fs.unlink(tempInput).catch(() => {});
             await fs.unlink(tempOutput).catch(() => {});
-
             resolve(compressedBuffer);
           } catch (error) {
             reject(error);
           }
         })
         .on('error', async (error) => {
-          console.error('Video compression failed:', error);
-
+          console.error('❌ VIDEO COMPRESSION FAILED:', error.message);
+          // Cleanup on error
           await fs.unlink(tempInput).catch(() => {});
           await fs.unlink(tempOutput).catch(() => {});
-
-          resolve(inputBuffer); // fallback to original
+          reject(error);
         })
         .run();
     });
   } catch (error) {
-    console.error('Video compression error:', error);
-    return inputBuffer;
+    console.error('⚠️ VIDEO COMPRESSION ERROR:', error.message);
+    // console.log('⚠️ FFmpeg not found! Uploading original video without compression.');
+    // console.log('⚠️ Please install FFmpeg to enable video compression.');
+    // Cleanup on error
+    await fs.unlink(tempInput).catch(() => {});
+    await fs.unlink(tempOutput).catch(() => {});
+    return inputBuffer; // Return original if compression fails
   }
 };
-
 
 // PDF Compression
 const compressPDF = async (buffer) => {
@@ -299,38 +311,36 @@ const compressFiles = async (req, res, next) => {
     // console.log('\n🔄 ========== FILE COMPRESSION STARTED ==========');
 
     // Handle single file
- if (req.file) {
-  const mimetype = req.file.mimetype;
+    if (req.file) {
+      const mimetype = req.file.mimetype;
+      // console.log(`📁 Processing single file: ${req.file.originalname} (${req.file.fieldname})`);
 
-  if (mimetype.startsWith('image/')) {
-    req.file.buffer = await compressImage(req.file.buffer);
-  } else if (mimetype.startsWith('video/')) {
-    if (req.file.buffer && req.file.buffer.length > 0) {
-      req.file.buffer = await compressVideo(req.file.buffer);
+      if (mimetype.startsWith('image/')) {
+        req.file.buffer = await compressImage(req.file.buffer);
+      } else if (mimetype.startsWith('video/')) {
+        req.file.buffer = await compressVideo(req.file.buffer);
+      } else if (mimetype === 'application/pdf') {
+        req.file.buffer = await compressPDF(req.file.buffer);
+      }
     }
-  } else if (mimetype === 'application/pdf') {
-    req.file.buffer = await compressPDF(req.file.buffer);
-  }
-}
-
 
     // Handle multiple files (req.files as array)
- if (req.files && Array.isArray(req.files)) {
-  for (let i = 0; i < req.files.length; i++) {
-    const file = req.files[i];
-    const mimetype = file.mimetype;
+    if (req.files && Array.isArray(req.files)) {
+      // console.log(`📁 Processing ${req.files.length} files (array)`);
 
-    if (mimetype.startsWith('image/')) {
-      file.buffer = await compressImage(file.buffer);
-    } else if (mimetype.startsWith('video/')) {
-      if (file.buffer && file.buffer.length > 0) {
-        file.buffer = await compressVideo(file.buffer);
+      for (let i = 0; i < req.files.length; i++) {
+        const file = req.files[i];
+        const mimetype = file.mimetype;
+        console.log(`\n   File ${i + 1}/${req.files.length}: ${file.originalname}`);
+        if (mimetype.startsWith('image/')) {
+          file.buffer = await compressImage(file.buffer);
+        } else if (mimetype.startsWith('video/')) {
+          file.buffer = await compressVideo(file.buffer);
+        } else if (mimetype === 'application/pdf') {
+          file.buffer = await compressPDF(file.buffer);
+        }
       }
-    } else if (mimetype === 'application/pdf') {
-      file.buffer = await compressPDF(file.buffer);
     }
-  }
-}
 
     // Handle multiple files (req.files as object with fieldnames)
     if (req.files && typeof req.files === 'object' && !Array.isArray(req.files)) {
@@ -349,9 +359,7 @@ const compressFiles = async (req, res, next) => {
           if (mimetype.startsWith('image/')) {
             file.buffer = await compressImage(file.buffer);
           } else if (mimetype.startsWith('video/')) {
-          if (file.buffer && file.buffer.length > 0) {
             file.buffer = await compressVideo(file.buffer);
-          }
           } else if (mimetype === 'application/pdf') {
             file.buffer = await compressPDF(file.buffer);
           }
