@@ -117,7 +117,7 @@ module.exports = {
   "Maharashtra": [
   "Ahmadnagar", "Akola", "Amravati", "Aurangabad", "Bhandara", "Bhusawal", "Bid", "Buldhana",
   "Chandrapur", "Daulatabad", "Dhule","Hingoli", "Jalgaon", "Kalyan", "Karli", "Kolhapur", "Mahabaleshwar",
-  "Malegaon", "Matheran", "Mumbai", "Nagpur", "Nanded", "Nashik", "Osmanabad", "Pandharpur",
+  "Malegaon", "Matheran", "Mumbai","Nandurbar", "Nagpur", "Nanded", "Nashik", "Osmanabad", "Pandharpur",
   "Parbhani", "Pune", "Ratnagiri", "Sangli", "Satara", "Sevagram", "Solapur", "Thane",
   "Ulhasnagar", "Vasai-Virar", "Wardha", "Yavatmal"
 ],
