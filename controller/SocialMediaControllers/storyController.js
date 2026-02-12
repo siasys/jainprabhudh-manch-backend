@@ -16,7 +16,7 @@ const createStory = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const userType = req.user.type;
 
-    // 🧩 Parse JSON strings
+    // Parse JSON strings
     const safeParse = (data) => {
       if (typeof data === 'string') {
         try {
@@ -73,18 +73,12 @@ const createStory = asyncHandler(async (req, res) => {
         }
       }
 
-      // ✅ Check text inside this media
+      // ✅ Get text for this media (no bad words check)
       const mediaText = Array.isArray(text) ? text[index] || '' : text || '';
-      if (mediaText && containsBadWords(mediaText)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Your media text contains inappropriate or harmful words.',
-        });
-      }
 
       // ✅ Push safe media into array
       mediaArray.push({
-        url: "",
+        url: cdnUrl,
         type: file.type,
         text: mediaText,
         textStyle: Array.isArray(textStyle) ? textStyle[index] || {} : textStyle || {},
@@ -98,15 +92,7 @@ const createStory = asyncHandler(async (req, res) => {
 
     // ✏️ Handle text-only story (no media)
     if (mediaArray.length === 0 && text?.length > 0) {
-      // 🛡️ Text-only story moderation
-      const storyText = Array.isArray(text) ? text.join(' ') : text;
-      if (storyText && containsBadWords(storyText)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Your text contains inappropriate or harmful words.',
-        });
-      }
-
+      // No bad words check - directly add text-only story
       mediaArray.push({
         url: '',
         type: 'text',
