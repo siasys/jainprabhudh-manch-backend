@@ -1251,26 +1251,54 @@ const unlikePost = asyncHandler(async (req, res) => {
 
 const deletePost = asyncHandler(async (req, res) => {
   const { postId } = req.params;
-  const { userId } = req.query;
+  const { userId, sanghId } = req.query; // ✅ sanghId bhi accept karo
 
   const post = await Post.findById(postId);
   if (!post) {
     return res.status(404).json({ error: 'Post not found' });
   }
 
-  const user = await User.findById(userId);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
+  let isAuthorized = false;
+  let entityToUpdate = null;
+
+  // ✅ Check if it's a sangh post
+  if (post.type === 'sangh' || post.type === 'panch') {
+    if (!sanghId) {
+      return res.status(400).json({ error: 'sanghId required for sangh posts' });
+    }
+
+    const sangh = await Sangh.findById(sanghId);
+    if (!sangh) {
+      return res.status(404).json({ error: 'Sangh not found' });
+    }
+
+    // Check if post belongs to this sangh
+    const postSanghId = post.sanghId?._id || post.sanghId;
+    isAuthorized = postSanghId.toString() === sanghId.toString();
+    entityToUpdate = sangh;
+
+  } else {
+    // Regular user post
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required for user posts' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const isOwner = post.user.toString() === userId.toString();
+    const isSuperAdmin = user.role === 'superadmin';
+    isAuthorized = isOwner || isSuperAdmin;
+    entityToUpdate = user;
   }
 
-  const isOwner = post.user.toString() === userId.toString();
-  const isSuperAdmin = user.role === 'superadmin';
-
-  if (!isOwner && !isSuperAdmin) {
+  if (!isAuthorized) {
     return res.status(403).json({ error: 'Unauthorized to delete this post' });
   }
 
-  // Delete media from S3 (if required)
+  // Delete media from S3
   if (post.media && post.media.length > 0) {
     const deletePromises = post.media.map(async (mediaItem) => {
       try {
@@ -1292,24 +1320,36 @@ const deletePost = asyncHandler(async (req, res) => {
   // ✅ Delete related reports
   await Report.deleteMany({ postId: postId });
 
-  // ✅ Remove postId from user's posts list
-  user.posts = user.posts.filter(id => id.toString() !== postId.toString());
-  await user.save();
-    if (post.type === 'sangh' && post.sanghId) {
-    await Sangh.updateOne(
-      { _id: post.sanghId },
-      { $pull: { posts: post._id } }
+  // ✅ Remove postId from entity's posts list
+  if (entityToUpdate) {
+    entityToUpdate.posts = entityToUpdate.posts.filter(
+      id => id.toString() !== postId.toString()
     );
+    await entityToUpdate.save();
   }
+
+  // ✅ Remove from sangh if sangh post
+  if (post.type === 'sangh' || post.type === 'panch') {
+    if (post.sanghId) {
+      await Sangh.updateOne(
+        { _id: post.sanghId },
+        { $pull: { posts: post._id } }
+      );
+    }
+  }
+
   // ✅ Delete post
   await post.deleteOne();
-  // ✅ Decrease user's post count safely
-  await User.findByIdAndUpdate(
-    post.user,
-    { $inc: { postCount: -1 } }
-  );
 
-  // ✅ Clear cache (optional if used)
+  // ✅ Decrease post count (only for user posts)
+  if (post.user && (post.type !== 'sangh' && post.type !== 'panch')) {
+    await User.findByIdAndUpdate(
+      post.user,
+      { $inc: { postCount: -1 } }
+    );
+  }
+
+  // ✅ Clear cache
   await invalidateCache(`post:${postId}`);
   await invalidateCache('combinedFeed:*');
 
