@@ -12,13 +12,14 @@ const { moderateImage, moderateVideo } = require('../../utils/moderation');
 
 const createStory = asyncHandler(async (req, res) => {
   try {
-    let { type, sanghId, isSanghStory, mentionUsers, text, textStyle } = req.body;
+    let { type, sanghId, isSanghStory, mentionUsers, text, textStyle } =
+      req.body;
     const userId = req.user._id;
     const userType = req.user.type;
 
-    // Parse JSON strings
+    // Parse JSON safely
     const safeParse = (data) => {
-      if (typeof data === 'string') {
+      if (typeof data === "string") {
         try {
           return JSON.parse(data);
         } catch {
@@ -32,56 +33,36 @@ const createStory = asyncHandler(async (req, res) => {
     text = safeParse(text);
     textStyle = safeParse(textStyle);
 
-    //Convert S3 to CDN URLs
+    // Convert uploaded files
     const mediaFiles = req.files
-      ? req.files.map((file) => ({ location: file.location, type: type || 'image' }))
+      ? req.files.map((file) => ({
+          location: file.location,
+          type: type || "image",
+        }))
       : [];
 
     if (mediaFiles.length === 0 && !text?.length) {
       return res.status(400).json({
         success: false,
-        message: 'Either media or text is required for story',
+        message: "Either media or text is required for story",
       });
     }
 
     const mediaArray = [];
 
-    // -----------------------------
-    //  Moderation: Check each media before adding
-    // -----------------------------
+    // ✅ No moderation — directly process media
     for (const [index, file] of mediaFiles.entries()) {
-      // Convert S3 → CDN URL first
       const cdnUrl = convertS3UrlToCDN(file.location);
 
-      if (file.type === 'image') {
-        console.log("Moderating image URL:", cdnUrl);
-        const safe = await moderateImage(cdnUrl);
-        console.log("Moderation result:", safe);
-        if (!safe) {
-          return res.status(400).json({
-            success: false,
-            message: 'Your image contains unsafe or harmful content.',
-          });
-        }
-      } else if (file.type === 'video') {
-        const safe = await moderateVideo(cdnUrl);
-        if (!safe) {
-          return res.status(400).json({
-            success: false,
-            message: 'Your video contains unsafe or harmful content.',
-          });
-        }
-      }
+      const mediaText = Array.isArray(text) ? text[index] || "" : text || "";
 
-      // ✅ Get text for this media (no bad words check)
-      const mediaText = Array.isArray(text) ? text[index] || '' : text || '';
-
-      // ✅ Push safe media into array
       mediaArray.push({
         url: cdnUrl,
         type: file.type,
         text: mediaText,
-        textStyle: Array.isArray(textStyle) ? textStyle[index] || {} : textStyle || {},
+        textStyle: Array.isArray(textStyle)
+          ? textStyle[index] || {}
+          : textStyle || {},
         mentionUsers: Array.isArray(mentionUsers)
           ? mentionUsers
               .filter((id) => mongoose.Types.ObjectId.isValid(id))
@@ -90,14 +71,15 @@ const createStory = asyncHandler(async (req, res) => {
       });
     }
 
-    // ✏️ Handle text-only story (no media)
+    // ✅ Handle text-only story
     if (mediaArray.length === 0 && text?.length > 0) {
-      // No bad words check - directly add text-only story
       mediaArray.push({
-        url: '',
-        type: 'text',
-        text: Array.isArray(text) ? text[0] || '' : text || '',
-        textStyle: Array.isArray(textStyle) ? textStyle[0] || {} : textStyle || {},
+        url: "",
+        type: "text",
+        text: Array.isArray(text) ? text[0] || "" : text || "",
+        textStyle: Array.isArray(textStyle)
+          ? textStyle[0] || {}
+          : textStyle || {},
         mentionUsers: Array.isArray(mentionUsers)
           ? mentionUsers
               .filter((id) => mongoose.Types.ObjectId.isValid(id))
@@ -106,66 +88,70 @@ const createStory = asyncHandler(async (req, res) => {
       });
     }
 
-    //  Find if story already exists (within 24 hours)
+    // 🔎 Check existing story within 24 hours
     const existingStory = await Story.findOne({
       userId,
-      isSanghStory: isSanghStory === 'true',
+      isSanghStory: isSanghStory === "true",
       createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
     });
 
     let savedStory;
+
     if (existingStory) {
-      // Append new media to existing story
       existingStory.media.push(...mediaArray);
       savedStory = await existingStory.save();
     } else {
-      //  Create new story
       const newStory = new Story({
         userId,
-        sanghId: isSanghStory === 'true' ? sanghId : null,
-        isSanghStory: isSanghStory === 'true',
+        sanghId: isSanghStory === "true" ? sanghId : null,
+        isSanghStory: isSanghStory === "true",
         media: mediaArray,
       });
+
       savedStory = await newStory.save();
     }
 
-    //  Update references
-    if (userType === 'user') {
+    // 🔄 Update references
+    if (userType === "user") {
       await User.findByIdAndUpdate(userId, { story: savedStory._id });
-    } else if (userType === 'sangh' && sanghId) {
+    } else if (userType === "sangh" && sanghId) {
       await HierarchicalSangh.findByIdAndUpdate(sanghId, {
         $addToSet: { stories: savedStory._id },
       });
     }
 
-    // Populate mentionUsers for response
+    // 📌 Populate for response
     const populatedStory = await Story.findById(savedStory._id)
-      .populate('userId', 'fullName profilePicture')
-      .populate('media.mentionUsers', 'fullName profilePicture accountType accountStatus sadhuName tirthName');
+      .populate("userId", "fullName profilePicture")
+      .populate(
+        "media.mentionUsers",
+        "fullName profilePicture accountType accountStatus sadhuName tirthName",
+      );
 
     res.status(201).json({
       success: true,
       message: existingStory
-        ? 'New media added to existing story'
-        : 'New story created successfully',
+        ? "New media added to existing story"
+        : "New story created successfully",
       data: populatedStory,
     });
   } catch (error) {
-    console.error('❌ Error creating/updating story:', error);
+    console.error("❌ Error creating/updating story:", error);
     res.status(500).json({
       success: false,
-      message: 'Error creating or updating story',
+      message: "Error creating or updating story",
       error: error.message,
     });
   }
 });
+
 // Get All Stories
 const getAllStories = asyncHandler(async (req, res) => {
   try {
     const userId = req.query.userId || req.user.id;
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    // ⛔ FETCH all stories the user has reported
+    //FETCH all stories the user has reported
     const reportedStories = await StoryReport.find({ reportedBy: userId }).select("storyId");
     const hideStoryIds = reportedStories.map(r => r.storyId.toString());
 
@@ -185,7 +171,7 @@ const getAllStories = asyncHandler(async (req, res) => {
 
     const storyUserIds = new Set([...followingIds, ...followerIds, userId]);
 
-    // 🎯 FILTER REPORTED STORIES
+    // FILTER REPORTED STORIES
     const stories = await Story.find({
       createdAt: { $gte: twentyFourHoursAgo },
       userId: { $in: Array.from(storyUserIds) },

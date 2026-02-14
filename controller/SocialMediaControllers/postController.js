@@ -1251,7 +1251,7 @@ const unlikePost = asyncHandler(async (req, res) => {
 
 const deletePost = asyncHandler(async (req, res) => {
   const { postId } = req.params;
-  const { userId, sanghId } = req.query; // ✅ sanghId bhi accept karo
+  const { userId, sanghId } = req.query;
 
   const post = await Post.findById(postId);
   if (!post) {

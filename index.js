@@ -2,6 +2,7 @@ const dotenv = require("dotenv");
 dotenv.config();
 
 require('newrelic');
+const logger = require('./config/logger');
 const express = require("express");
 const http = require("http");
 const dbConnect = require("./config/dbConnect");
@@ -198,7 +199,11 @@ initializeWebSocket(server);
 scheduleStoryCleanup();
 
 server.listen(PORT, () => {
-    console.log(`✅ Server (HTTP + WebSocket) running on port ${PORT}`);
+  console.log(`✅ Server (HTTP + WebSocket) running on port ${PORT}`);
+  logger.info(`Server started on port ${PORT}`);
+  logger.error(`This is a test error log to verify logging functionality.`);
+  logger.warn(`This is a test warning log to verify logging functionality.`);
+  logger.debug(`This is a test debug log to verify logging functionality.`);
 
 });
 
