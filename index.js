@@ -90,6 +90,22 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended:false}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use((req, res, next) => {
+  const start = Date.now();
+
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    logger.info(`API Request: ${req.method} ${req.url}`, {
+      duration: `${duration}ms`,
+      status: res.statusCode,
+      method: req.method,
+      url: req.url,
+    });
+  });
+
+  next();
+});
 // Serve app-version.json as static file
 app.use('/app-version', express.static(path.join(__dirname, 'app-version.json')));
 // Session configuration for payment flow
@@ -200,10 +216,6 @@ scheduleStoryCleanup();
 
 server.listen(PORT, () => {
   console.log(`✅ Server (HTTP + WebSocket) running on port ${PORT}`);
-  logger.info(`Server started on port ${PORT}`);
-  logger.error(`This is a test error log to verify logging functionality.`);
-  logger.warn(`This is a test warning log to verify logging functionality.`);
-  logger.debug(`This is a test debug log to verify logging functionality.`);
 
 });
 
