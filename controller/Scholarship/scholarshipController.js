@@ -50,24 +50,28 @@ exports.applyScholarship = async (req, res) => {
 exports.createScholarshipSponsor = async (req, res) => {
   try {
     const data = req.body;
-
-    // ⭐ Convert Sponsor Image (if exists under fields)
     let sponsorImageUrl = null;
 
-    if (req.files && req.files.sponserImage && req.files.sponserImage.length > 0) {
-      sponsorImageUrl = convertS3UrlToCDN(req.files.sponserImage[0].location);
+    if (
+      req.files &&
+      req.files.sponsorImage &&
+      req.files.sponsorImage.length > 0
+    ) {
+      sponsorImageUrl = convertS3UrlToCDN(req.files.sponsorImage[0].location);
     }
 
     // Create sponsor
     const sponsor = new ScholarshipSponsor({
       sponsorName: data.sponsorName || "",
+      inMemoryOf: data.inMemoryOf || null,
+      occasion: data.occasion || null,
       address: data.address || "",
       contactNumber: data.contactNumber || "",
-      totalSponsorshipAmount: data.totalSponsorshipAmount || "",
-      numberOfStudents: data.numberOfStudents || "",
+      totalSponsorshipAmount: data.totalSponsorshipAmount || 0,
+      numberOfStudents: data.numberOfStudents || 0,
       sponsorshipType: data.sponsorshipType || "",
-      sponserImage: sponsorImageUrl,           // ⭐ Correct
-      createdBy: data.createdBy || "",
+      sponsorImage: sponsorImageUrl,
+      createdBy: data.createdBy || null,
     });
 
     await sponsor.save();
@@ -76,7 +80,6 @@ exports.createScholarshipSponsor = async (req, res) => {
       message: "Scholarship sponsor added successfully",
       sponsor,
     });
-
   } catch (error) {
     console.error("Sponsor creation error:", error);
 
@@ -86,6 +89,7 @@ exports.createScholarshipSponsor = async (req, res) => {
     });
   }
 };
+
 
 
 exports.getAllScholarshipSponsors = async (req, res) => {

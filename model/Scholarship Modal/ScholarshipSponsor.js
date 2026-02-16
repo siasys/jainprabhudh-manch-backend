@@ -8,6 +8,18 @@ const ScholarshipSponsorSchema = new mongoose.Schema(
       trim: true,
     },
 
+    inMemoryOf: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
+    occasion: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
     address: {
       type: String,
       required: true,
@@ -40,13 +52,14 @@ const ScholarshipSponsorSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
-    sponserImage: {
+
+    sponsorImage: {
+      // spelling correct kar diya
       type: String,
       default: null,
     },
-
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 module.exports = mongoose.model("ScholarshipSponsor", ScholarshipSponsorSchema);
