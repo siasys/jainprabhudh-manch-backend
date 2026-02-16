@@ -28,8 +28,6 @@ const ScholarshipSponsorSchema = new mongoose.Schema(
 
     contactNumber: {
       type: String,
-      required: true,
-      trim: true,
     },
 
     totalSponsorshipAmount: {
@@ -39,13 +37,11 @@ const ScholarshipSponsorSchema = new mongoose.Schema(
 
     numberOfStudents: {
       type: Number,
-      required: true,
     },
 
     sponsorshipType: {
       type: String,
       enum: ["yearly", "monthly", "one-time"],
-      required: true,
     },
 
     createdBy: {
