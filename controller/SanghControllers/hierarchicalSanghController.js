@@ -876,9 +876,9 @@ const updatePanchMembers = async (req, res) => {
     }
 
     // ✅ FIXED: superadmin _id se check + role se check + sanghRoles se check
-    const isSuperAdmin =
-      String(requester._id) === SUPER_ADMIN_ID ||
-      requester.role === "superadmin";
+const isSuperAdmin =
+  String(requester._id || requester.id) === SUPER_ADMIN_ID ||
+  requester.role === "superadmin";
 
     const hasSanghAccess = requester.sanghRoles?.some(
       (role) => String(role.sanghId) === String(sanghId),
