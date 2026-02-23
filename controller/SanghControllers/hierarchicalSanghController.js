@@ -860,12 +860,10 @@ const updatePanchMembers = async (req, res) => {
     }
 
     if (panches.length > 5) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Only 5 Panch members allowed at a time",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Only 5 Panch members allowed at a time",
+      });
     }
 
     const sangh = await HierarchicalSangh.findById(sanghId);
@@ -876,9 +874,9 @@ const updatePanchMembers = async (req, res) => {
     }
 
     // ✅ FIXED: superadmin _id se check + role se check + sanghRoles se check
-const isSuperAdmin =
-  String(requester._id || requester.id) === SUPER_ADMIN_ID ||
-  requester.role === "superadmin";
+    const isSuperAdmin =
+      String(requester._id || requester.id) === SUPER_ADMIN_ID ||
+      requester.role === "superadmin";
 
     const hasSanghAccess = requester.sanghRoles?.some(
       (role) => String(role.sanghId) === String(sanghId),
@@ -945,7 +943,7 @@ const isSuperAdmin =
         } else {
           user.sanghRoles.push({
             sanghId,
-            role: "panch",
+            role: "panchMember",
             level: sangh.level,
             sanghType: sangh.sanghType || "main",
           });
