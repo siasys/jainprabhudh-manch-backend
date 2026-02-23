@@ -91,72 +91,81 @@ const groupMessageSchema = new mongoose.Schema({
   },
 });
 
-const groupChatSchema = new mongoose.Schema({
-  sanghId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: 'HierarchicalSangh',
-},
-  groupName: {
-    type: String,
-    required: true,
-  },
-  gotraGroupName: { type: String, default: null },
-  sanghGroupName: { type: String, default: null },
-  groupImage:{
-    type:String
-  },
-  creator: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-  },
-  description: {
-    type: String,
-    trim: true
-  },
-  admins: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }],
-  groupMembers: [{
-   user: {
+const groupChatSchema = new mongoose.Schema(
+  {
+    sanghId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
+      ref: "HierarchicalSangh",
     },
-    role: {
+    groupName: {
       type: String,
-      enum: ['admin', 'member'],
-      default: 'member'
+      required: true,
     },
-    joinedAt: {
-      type: Date,
-      default: Date.now
+    gotraGroupName: { type: String, default: null },
+    sanghGroupName: { type: String, default: null },
+    groupImage: {
+      type: String,
     },
-  }],
-  groupMessages: [groupMessageSchema],
-  // Group settings
-  settings: {
-    onlyAdminsCanSend: {
+    creator: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    description: {
+      type: String,
+      trim: true,
+    },
+    admins: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    groupMembers: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        role: {
+          type: String,
+          enum: ["admin", "member"],
+          default: "member",
+        },
+        joinedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+    groupMessages: [groupMessageSchema],
+    // Group settings
+    settings: {
+      onlyAdminsCanSend: {
+        type: Boolean,
+        default: false,
+      },
+      onlyAdminsCanAddMembers: {
+        type: Boolean,
+        default: false,
+      },
+      onlyAdminsCanEditInfo: {
+        type: Boolean,
+        default: true,
+      },
+    },
+    isActive: {
       type: Boolean,
-      default: false
+      default: true,
     },
-    onlyAdminsCanAddMembers: {
-      type: Boolean,
-      default: false
-    },
-    onlyAdminsCanEditInfo: {
-      type: Boolean,
-      default: true
-    }
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
     isCityGroup: {
       type: Boolean,
       default: false,
       index: true, // fast query performance
+    },
+    isGlobal: {
+      type: Boolean,
+      default: false,
     },
     normalizedCity: {
       type: String,
@@ -166,11 +175,13 @@ const groupChatSchema = new mongoose.Schema({
       sparse: true, // ignore null values for non-city groups
     },
 
-  isGotraGroup: { type: Boolean, default: false },
-  isSanghGroup: { type: Boolean, default: false },
-}, {
-  timestamps: true,
-});
+    isGotraGroup: { type: Boolean, default: false },
+    isSanghGroup: { type: Boolean, default: false },
+  },
+  {
+    timestamps: true,
+  },
+);
 
 // Indexes for better query performance
 groupChatSchema.index({ 'groupMembers.user': 1 });

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const upload = require('../../middlewares/upload');
-const {createGroupChat, getGroupDetails, getAllGroups, getAllGroupChats, sendGroupMessage, getGroupMessages, deleteGroupMessage, updateGroupDetails, updateGroupMessage, leaveGroup, updateGroupIcon, checkMembership, addMembers, updateGroupName, createOrFindGotraGroup, getAllGotraGroups, getUserGotraGroups, deleteGroupChat, makeAdmin, createOrFindHierarchicalSanghGroup, removeUserFromGroup, deleteGroupMessageOnlyForMe, clearAllGroupMessagesForMe, removeAdmin, createOrFindCityGroup } = require('../../controller/SocialMediaControllers/groupChatController');
+const {createGroupChat, getGroupDetails, getAllGroups, getAllGroupChats, sendGroupMessage, getGroupMessages, deleteGroupMessage, updateGroupDetails, updateGroupMessage, leaveGroup, updateGroupIcon, checkMembership, addMembers, updateGroupName, createOrFindGotraGroup, getAllGotraGroups, getUserGotraGroups, deleteGroupChat, makeAdmin, createOrFindHierarchicalSanghGroup, removeUserFromGroup, deleteGroupMessageOnlyForMe, clearAllGroupMessagesForMe, removeAdmin, createOrFindCityGroup, createSanghGlobalGroup } = require('../../controller/SocialMediaControllers/groupChatController');
 const {authenticate} = require('../../middlewares/authMiddlewares')
 // Apply authentication to all routes
 router.use(authenticate);
@@ -9,6 +9,7 @@ router.use(authenticate);
 router.post('/create', upload.single('groupImage'), createGroupChat);
 router.post('/create-gotra-group', upload.single('groupImage'), createOrFindGotraGroup);
 router.post("/create-hierarchical-sangh-group", createOrFindHierarchicalSanghGroup);
+router.post("/create-sangh-global-group", createSanghGlobalGroup);
 router.post('/remove-user', removeUserFromGroup);
 router.post('/create-city-group', upload.single('groupImage'), createOrFindCityGroup);
 

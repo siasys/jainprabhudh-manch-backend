@@ -173,8 +173,68 @@ exports.createOrFindCityGroup = async (req, res) => {
   }
 };
 
+exports.createSanghGlobalGroup = async (req, res) => {
+  try {
+    const { creator } = req.body;
+    const userId = creator;
 
+    // 1. User fetch roles check karne ke liye
+    const user = await User.findById(userId);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
 
+    // 2. Check sanghRoles
+    if (!user.sanghRoles || user.sanghRoles.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "User has no sangh roles.",
+      });
+    }
+
+    const nameOfGroup = "अन्तर्राष्ट्रीय जैन प्रबुद्ध मंच";
+
+    // 3. Check karein groupName se (name se nahi)
+    let group = await GroupChat.findOne({
+      groupName: nameOfGroup,
+      isGlobal: true,
+    });
+
+    if (!group) {
+      // 4. Create karte waqt groupName aur groupMembers format use karein
+      group = new GroupChat({
+        groupName: nameOfGroup, // 'name' ki jagah 'groupName'
+        creator: userId,
+        admins: [userId],
+        groupMembers: [{ user: userId, role: "admin" }], // Format matched with your Gotra logic
+        isGlobal: true,
+        description: "Official group for all Sangh members",
+      });
+      await group.save();
+    } else {
+      // 5. Check if user already in groupMembers array
+      const isAlreadyMember = group.groupMembers.some(
+        (m) => m.user.toString() === userId.toString(),
+      );
+
+      if (!isAlreadyMember) {
+        group.groupMembers.push({ user: userId, role: "member" });
+        await group.save();
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "User processed for International Jain Prabuddha Manch group",
+      groupId: group._id,
+    });
+  } catch (error) {
+    console.error("Sangh Group Error:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
 exports.getGroupDetails = async (req, res) => {
   try {
     const { groupId } = req.params;

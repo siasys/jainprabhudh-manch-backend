@@ -845,36 +845,53 @@ const updateMemberStatus = asyncHandler(async (req, res) => {
   return successResponse(res, sangh.members[memberIndex], 'Member status updated successfully');
 });
 
+const SUPER_ADMIN_ID = "688378b981449c14306611d7";
+
 const updatePanchMembers = async (req, res) => {
   try {
     const { sanghId } = req.params;
     const { panches } = req.body;
     const requester = req.user;
 
-    //console.log("📥 Received Panches:", panches);
-
     if (!Array.isArray(panches)) {
-      return res.status(400).json({ success: false, message: 'Panch members must be an array' });
+      return res
+        .status(400)
+        .json({ success: false, message: "Panch members must be an array" });
     }
 
     if (panches.length > 5) {
-      return res.status(400).json({ success: false, message: 'Only 5 Panch members allowed at a time' });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Only 5 Panch members allowed at a time",
+        });
     }
 
     const sangh = await HierarchicalSangh.findById(sanghId);
     if (!sangh) {
-      return res.status(404).json({ success: false, message: 'Sangh not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: "Sangh not found" });
     }
 
-    // ✅ Check if user is superadmin or belongs to the sangh
-    if (
-      requester.role !== 'superadmin' &&
-      !requester.sanghRoles.some(role => String(role.sanghId) === sanghId)
-    ) {
-      return res.status(403).json({ success: false, message: 'Unauthorized to update this sangh' });
+    // ✅ FIXED: superadmin _id se check + role se check + sanghRoles se check
+    const isSuperAdmin =
+      String(requester._id) === SUPER_ADMIN_ID ||
+      requester.role === "superadmin";
+
+    const hasSanghAccess = requester.sanghRoles?.some(
+      (role) => String(role.sanghId) === String(sanghId),
+    );
+
+    if (!isSuperAdmin && !hasSanghAccess) {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized to update this sangh",
+      });
     }
 
-    const existingUserIds = new Set(sangh.panches.map(p => String(p.userId)));
+    const existingUserIds = new Set(sangh.panches.map((p) => String(p.userId)));
     const addedUserIds = new Set();
 
     for (const pm of panches) {
@@ -899,21 +916,21 @@ const updatePanchMembers = async (req, res) => {
         name: pm.name,
         jainAadharNumber: pm.jainAadharNumber,
         level: pm.level || sangh.level,
-        sanghType: pm.sanghType || sangh.sanghType || 'main',
-        postMember: pm.postMember || '',
-        email: pm.email || '',
-        phoneNumber: pm.phoneNumber || '',
-        document: pm.document || '',
-        userImage: pm.userImage || '',
+        sanghType: pm.sanghType || sangh.sanghType || "main",
+        postMember: pm.postMember || "",
+        email: pm.email || "",
+        phoneNumber: pm.phoneNumber || "",
+        document: pm.document || "",
+        userImage: pm.userImage || "",
         address: {
-          street: pm.address?.street || '',
-          city: pm.address?.city || '',
-          district: pm.address?.district || '',
-          state: pm.address?.state || '',
-          pincode: pm.address?.pincode || '',
+          street: pm.address?.street || "",
+          city: pm.address?.city || "",
+          district: pm.address?.district || "",
+          state: pm.address?.state || "",
+          pincode: pm.address?.pincode || "",
         },
-        status: 'active',
-        paymentStatus: pm.paymentStatus || 'pending',
+        status: "active",
+        paymentStatus: pm.paymentStatus || "pending",
       });
 
       addedUserIds.add(userIdStr);
@@ -921,16 +938,16 @@ const updatePanchMembers = async (req, res) => {
       const user = await User.findById(pm.userId);
       if (user) {
         const roleIndex = user.sanghRoles.findIndex(
-          r => String(r.sanghId) === sanghId
+          (r) => String(r.sanghId) === sanghId,
         );
         if (roleIndex !== -1) {
-          user.sanghRoles[roleIndex].role = 'panchMember';
+          user.sanghRoles[roleIndex].role = "panchMember";
         } else {
           user.sanghRoles.push({
             sanghId,
-            role: 'panch',
+            role: "panch",
             level: sangh.level,
-            sanghType: sangh.sanghType || 'main',
+            sanghType: sangh.sanghType || "main",
           });
         }
         await user.save();
@@ -941,13 +958,14 @@ const updatePanchMembers = async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'Panch members updated (merged) successfully',
+      message: "Panch members updated (merged) successfully",
       data: sangh.panches,
     });
-
   } catch (error) {
     console.error("❌ Error updating panch members:", error);
-    return res.status(500).json({ success: false, message: 'Internal server error' });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
 // Get Sanghs by level and location
