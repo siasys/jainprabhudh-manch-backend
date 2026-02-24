@@ -1594,19 +1594,20 @@ const changePassword = asyncHandler(async (req, res) => {
   return res.status(200).json({ message: 'Password updated successfully' });
 });
 
-
 const updateUserById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const updates = req.body || {};
   const files = req.files || {};
 
-  // Auth checks
+  // 🔐 Auth checks
   if (!req.user || !req.user._id) {
-    return res.status(401).json({ error: 'Unauthorized: No valid token' });
+    return res.status(401).json({ error: "Unauthorized: No valid token" });
   }
 
   if (req.user._id.toString() !== id) {
-    return res.status(403).json({ error: 'Forbidden: You can only update your own profile' });
+    return res
+      .status(403)
+      .json({ error: "Forbidden: You can only update your own profile" });
   }
 
   // ✅ Get uploaded images
@@ -1618,8 +1619,7 @@ const updateUserById = asyncHandler(async (req, res) => {
     ? convertS3UrlToCDN(files.coverPicture[0].location)
     : null;
 
-
-  // Never allow these
+  // ❌ Never allow direct override
   delete updates.password;
   delete updates.token;
   delete updates.profilePicture;
@@ -1627,74 +1627,82 @@ const updateUserById = asyncHandler(async (req, res) => {
 
   const user = await User.findById(id);
   if (!user) {
-    return res.status(404).json({ error: 'User not found' });
+    return res.status(404).json({ error: "User not found" });
   }
 
-  // ✅ Delete old profile picture from S3
-  if (newProfilePicture && user.profilePicture) {
+  // Helper to delete from S3
+  const deleteFromS3 = async (fileUrl) => {
     try {
-      // Extract key from CloudFront or S3 URL
       let oldKey;
-      
-      if (user.profilePicture.includes('cloudfront.net')) {
-        oldKey = user.profilePicture.split('.net/')[1];
-      } else if (user.profilePicture.includes('.s3.')) {
-        oldKey = user.profilePicture.split('.com/')[1];
+
+      if (fileUrl.includes("cloudfront.net")) {
+        oldKey = fileUrl.split(".net/")[1];
+      } else if (fileUrl.includes(".s3.")) {
+        oldKey = fileUrl.split(".com/")[1];
       }
 
       if (oldKey) {
-        await s3Client.send(new DeleteObjectCommand({
-          Bucket: process.env.AWS_BUCKET_NAME,
-          Key: oldKey,
-        }));
+        await s3Client.send(
+          new DeleteObjectCommand({
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: oldKey,
+          }),
+        );
       }
     } catch (err) {
-      console.error("❌ Profile image delete failed:", err);
+      console.error("❌ S3 delete failed:", err.message);
     }
-  }
+  };
 
-  // ✅ Delete old cover picture from S3
-  if (newCoverPicture && user.coverPicture) {
-    try {
-      let oldKey;
-      if (user.coverPicture.includes('cloudfront.net')) {
-        oldKey = user.coverPicture.split('.net/')[1];
-      } else if (user.coverPicture.includes('.s3.')) {
-        oldKey = user.coverPicture.split('.com/')[1];
-      }
-
-      if (oldKey) {
-        await s3Client.send(new DeleteObjectCommand({
-          Bucket: process.env.AWS_BUCKET_NAME,
-          Key: oldKey,
-        }));
-      }
-    } catch (err) {
-      console.error("❌ Cover image delete failed:", err);
-    }
-  }
-
-  // ✅ Build update object
   const updateData = { ...updates };
 
+  // ====================================================
+  // ✅ CASE 1: New Profile Picture Uploaded
+  // ====================================================
   if (newProfilePicture) {
+    if (user.profilePicture) {
+      await deleteFromS3(user.profilePicture);
+    }
     updateData.profilePicture = newProfilePicture;
   }
 
+  // ====================================================
+  // ✅ CASE 2: Profile Picture Removed
+  // Frontend must send: removeProfilePicture = "true"
+  // ====================================================
+  if (updates.removeProfilePicture === "true") {
+    if (user.profilePicture) {
+      await deleteFromS3(user.profilePicture);
+    }
+    updateData.profilePicture = null;
+  }
+
+  // ====================================================
+  // Cover Picture Same Logic
+  // ====================================================
   if (newCoverPicture) {
+    if (user.coverPicture) {
+      await deleteFromS3(user.coverPicture);
+    }
     updateData.coverPicture = newCoverPicture;
+  }
+
+  if (updates.removeCoverPicture === "true") {
+    if (user.coverPicture) {
+      await deleteFromS3(user.coverPicture);
+    }
+    updateData.coverPicture = null;
   }
 
   const updatedUser = await User.findByIdAndUpdate(
     id,
     { $set: updateData },
-    { new: true, runValidators: true }
-  ).select('-password -__v');
-
+    { new: true, runValidators: true },
+  ).select("-password -__v");
 
   res.json({
     success: true,
-    message: 'Profile updated successfully',
+    message: "Profile updated successfully",
     data: updatedUser,
   });
 });
