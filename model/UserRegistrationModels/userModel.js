@@ -236,6 +236,12 @@ const userSchema = new mongoose.Schema(
         ref: 'Story',
       },
     ],
+    mutedStoryUsers: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }
+  ],
    activity: {
   likes: [
     { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }

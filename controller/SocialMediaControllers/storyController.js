@@ -151,11 +151,17 @@ const getAllStories = asyncHandler(async (req, res) => {
     const userId = req.query.userId || req.user.id;
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    //FETCH all stories the user has reported
-    const reportedStories = await StoryReport.find({ reportedBy: userId }).select("storyId");
-    const hideStoryIds = reportedStories.map(r => r.storyId.toString());
+    // Reported stories
+    const reportedStories = await StoryReport.find({
+      reportedBy: userId,
+    }).select("storyId");
+    const hideStoryIds = reportedStories.map((r) => r.storyId.toString());
 
-    // Users list logic same
+    // Muted users fetch karo
+    const currentUser = await User.findById(userId).select("mutedStoryUsers");
+    const mutedUserIds =
+      currentUser?.mutedStoryUsers?.map((id) => id.toString()) || [];
+
     const followingList = await Friendship.find({
       follower: userId,
       followStatus: "following",
@@ -166,24 +172,32 @@ const getAllStories = asyncHandler(async (req, res) => {
       followStatus: "following",
     }).select("follower");
 
-    const followingIds = followingList.map(f => f.following.toString());
-    const followerIds = followerList.map(f => f.follower.toString());
+    const followingIds = followingList.map((f) => f.following.toString());
+    const followerIds = followerList.map((f) => f.follower.toString());
 
     const storyUserIds = new Set([...followingIds, ...followerIds, userId]);
 
-    // FILTER REPORTED STORIES
     const stories = await Story.find({
       createdAt: { $gte: twentyFourHoursAgo },
-      userId: { $in: Array.from(storyUserIds) },
-      _id: { $nin: hideStoryIds }
+      userId: { $in: Array.from(storyUserIds) }, // ✅ $nin hataya
+      _id: { $nin: hideStoryIds },
     })
-    .populate("userId", "profilePicture firstName lastName fullName accountType accountStatus sadhuName tirthName")
-    .populate("sanghId", "name sanghImage");
+      .populate(
+        "userId",
+        "profilePicture firstName lastName fullName accountType accountStatus sadhuName tirthName",
+      )
+      .populate("sanghId", "name sanghImage");
+
+    // ✅ Har story mein isMuted flag add karo
+    const storiesWithMuteStatus = stories.map((story) => ({
+      ...story.toObject(),
+      isMuted: mutedUserIds.includes(story.userId?._id?.toString()),
+    }));
 
     res.status(200).json({
       success: true,
-      count: stories.length,
-      data: stories,
+      count: storiesWithMuteStatus.length,
+      data: storiesWithMuteStatus,
     });
   } catch (error) {
     console.error("Error fetching stories:", error);
@@ -195,43 +209,72 @@ const getAllStories = asyncHandler(async (req, res) => {
   }
 });
 
-
 const getStoriesByUser = asyncHandler(async (req, res) => {
   try {
     const userId = req.user.id;
     const { userId: targetUserId } = req.params;
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    // ⛔ Stories user has reported
-    const reportedStories = await StoryReport.find({ reportedBy: userId }).select("storyId");
-    const hideStoryIds = reportedStories.map(r => r.storyId.toString());
+    // Reported stories
+    const reportedStories = await StoryReport.find({
+      reportedBy: userId,
+    }).select("storyId");
+    const hideStoryIds = reportedStories.map((r) => r.storyId.toString());
+
+    // ✅ Check karo target user muted hai ya nahi
+    const currentUser = await User.findById(userId).select("mutedStoryUsers");
+    const isMuted = currentUser?.mutedStoryUsers?.some(
+      (id) => id.toString() === targetUserId.toString(),
+    );
+
+    // ✅ Agar muted hai to empty return karo
+    if (isMuted) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+        isMuted: true,
+        message: "Is user ki stories muted hain",
+      });
+    }
 
     const stories = await Story.find({
       userId: targetUserId,
       createdAt: { $gte: twentyFourHoursAgo },
-      _id: { $nin: hideStoryIds }
+      _id: { $nin: hideStoryIds },
     })
-    .populate("userId", "profilePicture firstName lastName fullName accountType accountStatus sadhuName tirthName businessName")
-    .populate("sanghId", "name sanghImage");
+      .populate(
+        "userId",
+        "profilePicture firstName lastName fullName accountType accountStatus sadhuName tirthName businessName",
+      )
+      .populate("sanghId", "name sanghImage");
 
     if (!stories.length) {
-      return errorResponse(res, 'No active stories found for this user', 404);
+      return errorResponse(res, "No active stories found for this user", 404);
     }
 
-    // ✅ FIX: media ab array of objects hai
-    const cdnStories = stories.map(story => ({
+    const cdnStories = stories.map((story) => ({
       ...story.toObject(),
-      media: story.media.map(mediaItem => ({
-        ...mediaItem.toObject ? mediaItem.toObject() : mediaItem,
-        url: convertS3UrlToCDN(mediaItem.url), // 👈 Sirf URL convert karo
-      }))
+      media: story.media.map((mediaItem) => ({
+        ...(mediaItem.toObject ? mediaItem.toObject() : mediaItem),
+        url: convertS3UrlToCDN(mediaItem.url),
+      })),
     }));
 
-    return successResponse(res, cdnStories, "Stories fetched successfully", 200);
-
+    return successResponse(
+      res,
+      cdnStories,
+      "Stories fetched successfully",
+      200,
+    );
   } catch (error) {
-    console.error('Error fetching user stories:', error);
-    return errorResponse(res, 'Error fetching user stories', 500, error.message);
+    console.error("Error fetching user stories:", error);
+    return errorResponse(
+      res,
+      "Error fetching user stories",
+      500,
+      error.message,
+    );
   }
 });
 // Delete Story
@@ -591,18 +634,296 @@ const getStoryMediaLikes = asyncHandler(async (req, res) => {
     }),
   });
 });
+// Add Comment on specific story media
+const addStoryMediaComment = asyncHandler(async (req, res) => {
+  const { storyId, mediaId } = req.params;
+  const { text } = req.body;
+  const userId = req.user._id;
 
+  if (!text || !text.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: "Comment text is required",
+    });
+  }
+
+  const story = await Story.findById(storyId);
+  if (!story) {
+    return res.status(404).json({
+      success: false,
+      message: "Story not found",
+    });
+  }
+
+  const media = story.media.id(mediaId);
+  if (!media) {
+    return res.status(404).json({
+      success: false,
+      message: "Media not found",
+    });
+  }
+
+  media.comments.push({
+    userId,
+    text: text.trim(),
+  });
+
+  await story.save();
+
+  res.status(201).json({
+    success: true,
+    message: "Comment added successfully",
+    totalComments: media.comments.length,
+  });
+});
+
+// Delete comment from story media
+const deleteStoryMediaComment = asyncHandler(async (req, res) => {
+  const { storyId, mediaId, commentId } = req.params;
+  const userId = req.user._id;
+
+  const story = await Story.findById(storyId);
+  if (!story) {
+    return res.status(404).json({
+      success: false,
+      message: "Story not found",
+    });
+  }
+
+  const media = story.media.id(mediaId);
+  if (!media) {
+    return res.status(404).json({
+      success: false,
+      message: "Media not found",
+    });
+  }
+
+  const comment = media.comments.id(commentId);
+  if (!comment) {
+    return res.status(404).json({
+      success: false,
+      message: "Comment not found",
+    });
+  }
+
+  // 🔒 Only comment owner or story owner can delete
+  if (
+    comment.userId.toString() !== userId.toString() &&
+    story.userId.toString() !== userId.toString()
+  ) {
+    return res.status(403).json({
+      success: false,
+      message: "Not authorized to delete this comment",
+    });
+  }
+
+  comment.remove();
+
+  await story.save();
+
+  res.json({
+    success: true,
+    message: "Comment deleted successfully",
+    totalComments: media.comments.length,
+  });
+});
+
+const getStoryMediaComments = asyncHandler(async (req, res) => {
+  const { storyId, mediaId } = req.params;
+
+  const story = await Story.findById(storyId).populate({
+    path: "media.comments.userId",
+    select:
+      "fullName profilePicture accountType businessName sadhuName tirthName",
+  });
+
+  if (!story) {
+    return res.status(404).json({
+      success: false,
+      message: "Story not found",
+    });
+  }
+
+  const media = story.media.id(mediaId);
+  if (!media) {
+    return res.status(404).json({
+      success: false,
+      message: "Media not found",
+    });
+  }
+
+  res.json({
+    success: true,
+    totalComments: media.comments.length,
+    comments: media.comments.map((c) => {
+      const u = c.userId;
+      return {
+        _id: c._id,
+        userId: u._id,
+        name:
+          u.accountType === "business"
+            ? u.businessName
+            : u.accountType === "sadhu"
+              ? u.sadhuName
+              : u.accountType === "tirth"
+                ? u.tirthName
+                : u.fullName,
+        profilePicture: u.profilePicture,
+        text: c.text,
+        createdAt: c.createdAt,
+      };
+    }),
+  });
+});
+// ✅ Mute a user's stories
+const muteStoryUser = asyncHandler(async (req, res) => {
+  const { userId } = req.params; // jis user ko mute karna hai
+  const currentUserId = req.user._id;
+
+  if (String(userId) === String(currentUserId)) {
+    return res.status(400).json({
+      success: false,
+      message: "Aap apni khud ki story mute nahi kar sakte",
+    });
+  }
+
+  const user = await User.findById(currentUserId);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found",
+    });
+  }
+
+  // Check karo already muted hai ya nahi
+  const alreadyMuted = user.mutedStoryUsers.some(
+    (id) => String(id) === String(userId)
+  );
+
+  if (alreadyMuted) {
+    return res.status(400).json({
+      success: false,
+      message: "Ye user already muted hai",
+    });
+  }
+
+  user.mutedStoryUsers.push(userId);
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: "User ki stories mute kar di gayi hain",
+    mutedUserId: userId,
+  });
+});
+
+// ✅ Unmute a user's stories
+const unmuteStoryUser = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+  const currentUserId = req.user._id;
+
+  const user = await User.findById(currentUserId);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found",
+    });
+  }
+
+  // ✅ isMuted check hatao, directly filter karo
+  user.mutedStoryUsers = user.mutedStoryUsers.filter(
+    (id) => String(id) !== String(userId),
+  );
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: "User stories unmuted successfully",
+    unmutedUserId: userId,
+  });
+});
+
+// ✅ Get all muted users list
+const getMutedStoryUsers = asyncHandler(async (req, res) => {
+  const currentUserId = req.user._id;
+
+  const user = await User.findById(currentUserId).populate({
+    path: "mutedStoryUsers",
+    select:
+      "fullName profilePicture accountType businessName sadhuName tirthName",
+  });
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found",
+    });
+  }
+
+  const mutedList = user.mutedStoryUsers.map((u) => ({
+    _id: u._id,
+    name:
+      u.accountType === "business"
+        ? u.businessName
+        : u.accountType === "sadhu"
+        ? u.sadhuName
+        : u.accountType === "tirth"
+        ? u.tirthName
+        : u.fullName,
+    profilePicture: u.profilePicture,
+  }));
+
+  res.status(200).json({
+    success: true,
+    totalMuted: mutedList.length,
+    mutedUsers: mutedList,
+  });
+});
+
+// ✅ Check karo koi specific user muted hai ya nahi
+const checkMuteStatus = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+  const currentUserId = req.user._id;
+
+  const user = await User.findById(currentUserId);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found",
+    });
+  }
+
+  const isMuted = user.mutedStoryUsers.some(
+    (id) => String(id) === String(userId)
+  );
+
+  res.status(200).json({
+    success: true,
+    isMuted,
+    userId,
+  });
+});
 module.exports = {
-    createStory,
-    getAllStories,
-    getStoriesByUser,
-    deleteStory,
-    deleteStoryMedia,
-    adminDeleteStory,
-    viewStory,
-    getStoryViews,
-    toggleStoryMediaLike,
-    getStoryMediaLikes
+  createStory,
+  getAllStories,
+  getStoriesByUser,
+  deleteStory,
+  deleteStoryMedia,
+  adminDeleteStory,
+  viewStory,
+  getStoryViews,
+  toggleStoryMediaLike,
+  getStoryMediaLikes,
+  addStoryMediaComment,
+  deleteStoryMediaComment,
+  getStoryMediaComments,
+  muteStoryUser,
+  unmuteStoryUser,
+  getMutedStoryUsers,
+  checkMuteStatus,
 };
 
 // exports.createStory = async (req, res) => {

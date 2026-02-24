@@ -3,12 +3,12 @@ const mongoose = require('mongoose');
 const storySchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    ref: "User",
     required: true,
   },
   sanghId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'HierarchicalSangh',
+    ref: "HierarchicalSangh",
   },
   isSanghStory: {
     type: Boolean,
@@ -17,36 +17,36 @@ const storySchema = new mongoose.Schema({
 
   media: [
     {
-      url: { 
-        type: String, 
-        required: function() {
-          return this.type !== 'text'; // ✅ text stories ke liye url optional
-        }
+      url: {
+        type: String,
+        required: function () {
+          return this.type !== "text"; // ✅ text stories ke liye url optional
+        },
       },
-      type: { type: String, enum: ['image', 'video', 'text'], required: true },
-      text: { type: String, default: '' },
+      type: { type: String, enum: ["image", "video", "text"], required: true },
+      text: { type: String, default: "" },
       textStyle: {
         x: { type: Number, default: 0.5 },
         y: { type: Number, default: 0.5 },
-        color: { type: String, default: '#ffffff' },
-        fontFamily: { type: String, default: 'System' },
+        color: { type: String, default: "#ffffff" },
+        fontFamily: { type: String, default: "System" },
         fontSize: { type: Number, default: 16 },
         // ✅ Gradient colors for text-only stories
         gradientColors: { type: [String], default: [] },
-        gradientId: { type: String, default: '' },
-        backgroundColor: { type: String, default: '' }, // fallback
+        gradientId: { type: String, default: "" },
+        backgroundColor: { type: String, default: "" }, // fallback
       },
       mentionUsers: [
         {
           type: mongoose.Schema.Types.ObjectId,
-          ref: 'User',
+          ref: "User",
         },
       ],
       views: [
         {
           userId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'User',
+            ref: "User",
           },
           viewedAt: {
             type: Date,
@@ -58,9 +58,27 @@ const storySchema = new mongoose.Schema({
         {
           userId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'User',
+            ref: "User",
           },
           likedAt: {
+            type: Date,
+            default: Date.now,
+          },
+        },
+      ],
+      comments: [
+        {
+          userId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true,
+          },
+          text: {
+            type: String,
+            required: true,
+            trim: true,
+          },
+          createdAt: {
             type: Date,
             default: Date.now,
           },
@@ -72,7 +90,7 @@ const storySchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now,
-    expires: '24h',
+    expires: "24h",
   },
 });
 
