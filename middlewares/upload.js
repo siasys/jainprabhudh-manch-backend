@@ -172,7 +172,7 @@ const getS3Folder = (fieldname, req) => {
 const upload = multer({
   storage: multer.memoryStorage(), // Changed to memory storage for compression
   limits: {
-    fileSize: 20 * 1024 * 1024, // 50 MB maximum
+    fileSize: 50 * 1024 * 1024, // 50 MB maximum
     files: 10
   },
   fileFilter: fileFilter
