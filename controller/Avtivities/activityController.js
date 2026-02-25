@@ -106,7 +106,6 @@ exports.getAllActivities = async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error", error });
   }
 };
-
 // 🔵 Get Activity by ID with winners populated
 exports.getActivityById = async (req, res) => {
   try {
@@ -118,8 +117,7 @@ exports.getActivityById = async (req, res) => {
       .populate("sanghId", "name level")
       .populate("organizedBy", "name level")
       .populate("participants.userId", "fullName profilePicture phoneNumber")
-      .populate("judges.userId", "fullName phoneNumber profilePicture")
-
+      .populate("judges.userId", "fullName phoneNumber profilePicture");
 
     if (!activity) {
       return res
@@ -127,49 +125,59 @@ exports.getActivityById = async (req, res) => {
         .json({ success: false, message: "Activity not found" });
     }
 
-    // Step 2️⃣: Manually populate winner user details
-  const populateWinnerFromParticipant = async (participantId) => {
-  if (!participantId) return null;
+    // Step 2️⃣: Convert to plain object first
+    const activityObj = activity.toObject();
 
-  // Pehle participant fetch karo
-  const participant = activity.participants.find(
-    (p) => p._id.toString() === participantId.toString()
-  );
+    // Step 3️⃣: Fixed - userId se match karo (participantId se nahi)
+    const populateWinnerFromParticipant = (userId) => {
+      if (!userId) return null;
 
-  if (!participant || !participant.userId) return null;
+      const participant = activityObj.participants.find(
+        (p) => p.userId && p.userId._id.toString() === userId.toString()
+      );
 
-  // Fir user details lao
-  const user = await User.findById(participant.userId._id).select(
-    "fullName profilePicture phoneNumber"
-  );
+      if (!participant || !participant.userId) return null;
 
-  return user;
-};
+      // participants.userId already populated hai upar ke .populate() se
+      return {
+        _id: participant.userId._id,
+        fullName: participant.userId.fullName,
+        profilePicture: participant.userId.profilePicture,
+        phoneNumber: participant.userId.phoneNumber,
+      };
+    };
 
-   const winners = {
-  firstWinner: activity.winners?.firstWinner
-    ? {
-        ...activity.winners.firstWinner,
-        userId: await populateWinnerFromParticipant(activity.winners.firstWinner.userId),
-      }
-    : null,
-  secondWinner: activity.winners?.secondWinner
-    ? {
-        ...activity.winners.secondWinner,
-        userId: await populateWinnerFromParticipant(activity.winners.secondWinner.userId),
-      }
-    : null,
-  thirdWinner: activity.winners?.thirdWinner
-    ? {
-        ...activity.winners.thirdWinner,
-        userId: await populateWinnerFromParticipant(activity.winners.thirdWinner.userId),
-      }
-    : null,
-};
+    // Step 4️⃣: Winners populate karo
+    const winners = {
+      firstWinner: activityObj.winners?.firstWinner?.userId
+        ? {
+            ...activityObj.winners.firstWinner,
+            userId: populateWinnerFromParticipant(
+              activityObj.winners.firstWinner.userId
+            ),
+          }
+        : null,
+      secondWinner: activityObj.winners?.secondWinner?.userId
+        ? {
+            ...activityObj.winners.secondWinner,
+            userId: populateWinnerFromParticipant(
+              activityObj.winners.secondWinner.userId
+            ),
+          }
+        : null,
+      thirdWinner: activityObj.winners?.thirdWinner?.userId
+        ? {
+            ...activityObj.winners.thirdWinner,
+            userId: populateWinnerFromParticipant(
+              activityObj.winners.thirdWinner.userId
+            ),
+          }
+        : null,
+    };
 
-    // Step 3️⃣: Merge updated winners in response
+    // Step 5️⃣: Merge updated winners in response
     const updatedActivity = {
-      ...activity.toObject(),
+      ...activityObj,
       winners,
     };
 
