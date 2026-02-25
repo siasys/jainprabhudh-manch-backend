@@ -242,6 +242,12 @@ const userSchema = new mongoose.Schema(
       ref: 'User'
     }
   ],
+  hiddenStoriesFrom: [
+  {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User"
+  }
+],
    activity: {
   likes: [
     { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }

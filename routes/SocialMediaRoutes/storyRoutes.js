@@ -1,5 +1,5 @@
 const express = require('express');
-const { createStory, getAllStories, getStoriesByUser, deleteStory, deleteStoryMedia, adminDeleteStory, viewStory, getStoryViews, toggleStoryMediaLike, getStoryMediaLikes, addStoryMediaComment, getStoryMediaComments, deleteStoryMediaComment, muteStoryUser, unmuteStoryUser, getMutedStoryUsers, checkMuteStatus } = require('../../controller/SocialMediaControllers/storyController');
+const { createStory, getAllStories, getStoriesByUser, deleteStory, deleteStoryMedia, adminDeleteStory, viewStory, getStoryViews, toggleStoryMediaLike, getStoryMediaLikes, addStoryMediaComment, getStoryMediaComments, deleteStoryMediaComment, muteStoryUser, unmuteStoryUser, getMutedStoryUsers, checkMuteStatus, toggleHideStory } = require('../../controller/SocialMediaControllers/storyController');
 const upload = require('../../middlewares/upload');
 const { authMiddleware } = require('../../middlewares/authMiddlewares');
 const router = express.Router();
@@ -44,7 +44,9 @@ router.get('/:storyId/media/:mediaId/comments', getStoryMediaComments);
 // Mute/Unmute routes
 router.post("/mute/:userId", muteStoryUser);
 router.post("/unmute/:userId", unmuteStoryUser);
+router.post("/toggle-hide-story", toggleHideStory);
 router.get("/muted-users", getMutedStoryUsers);
+
 router.get("/mute-status/:userId", checkMuteStatus);
 router.delete('/:storyId/media/:mediaId/comment/:commentId', deleteStoryMediaComment);
 router.delete('/admin/delete/:storyId', adminDeleteStory);

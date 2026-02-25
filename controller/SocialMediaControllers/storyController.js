@@ -9,15 +9,17 @@ const Friendship = require('../../model/SocialMediaModels/friendshipModel');
 const { containsBadWords } = require("../../utils/filterBadWords");
 
 const { moderateImage, moderateVideo } = require('../../utils/moderation');
+const { default: mongoose } = require('mongoose');
 
 const createStory = asyncHandler(async (req, res) => {
   try {
-    let { type, sanghId, isSanghStory, mentionUsers, text, textStyle } =
-      req.body;
     const userId = req.user._id;
     const userType = req.user.type;
 
-    // Parse JSON safely
+    let { type, sanghId, isSanghStory, mentionUsers, text, textStyle } =
+      req.body;
+
+    // Safely parse arrays
     const safeParse = (data) => {
       if (typeof data === "string") {
         try {
@@ -42,19 +44,22 @@ const createStory = asyncHandler(async (req, res) => {
       : [];
 
     if (mediaFiles.length === 0 && !text?.length) {
-      return res.status(400).json({
-        success: false,
-        message: "Either media or text is required for story",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "Media or text required" });
     }
 
     const mediaArray = [];
 
-    // ✅ No moderation — directly process media
+    // ✅ Handle media files
     for (const [index, file] of mediaFiles.entries()) {
       const cdnUrl = convertS3UrlToCDN(file.location);
-
       const mediaText = Array.isArray(text) ? text[index] || "" : text || "";
+      const mediaMentions = Array.isArray(mentionUsers[index])
+        ? mentionUsers[index]
+            .filter((id) => mongoose.Types.ObjectId.isValid(id))
+            .map((id) => new mongoose.Types.ObjectId(id))
+        : [];
 
       mediaArray.push({
         url: cdnUrl,
@@ -63,11 +68,7 @@ const createStory = asyncHandler(async (req, res) => {
         textStyle: Array.isArray(textStyle)
           ? textStyle[index] || {}
           : textStyle || {},
-        mentionUsers: Array.isArray(mentionUsers)
-          ? mentionUsers
-              .filter((id) => mongoose.Types.ObjectId.isValid(id))
-              .map((id) => new mongoose.Types.ObjectId(id))
-          : [],
+        mentionUsers: mediaMentions,
       });
     }
 
@@ -76,19 +77,19 @@ const createStory = asyncHandler(async (req, res) => {
       mediaArray.push({
         url: "",
         type: "text",
-        text: Array.isArray(text) ? text[0] || "" : text || "",
+        text: Array.isArray(text) ? text[0] : text || "",
         textStyle: Array.isArray(textStyle)
           ? textStyle[0] || {}
           : textStyle || {},
-        mentionUsers: Array.isArray(mentionUsers)
-          ? mentionUsers
+        mentionUsers: Array.isArray(mentionUsers[0])
+          ? mentionUsers[0]
               .filter((id) => mongoose.Types.ObjectId.isValid(id))
               .map((id) => new mongoose.Types.ObjectId(id))
           : [],
       });
     }
 
-    // 🔎 Check existing story within 24 hours
+    // 🔎 Check if existing story in last 24h
     const existingStory = await Story.findOne({
       userId,
       isSanghStory: isSanghStory === "true",
@@ -107,7 +108,6 @@ const createStory = asyncHandler(async (req, res) => {
         isSanghStory: isSanghStory === "true",
         media: mediaArray,
       });
-
       savedStory = await newStory.save();
     }
 
@@ -120,7 +120,7 @@ const createStory = asyncHandler(async (req, res) => {
       });
     }
 
-    // 📌 Populate for response
+    // 📌 Populate mentionUsers properly
     const populatedStory = await Story.findById(savedStory._id)
       .populate("userId", "fullName profilePicture")
       .populate(
@@ -151,47 +151,80 @@ const getAllStories = asyncHandler(async (req, res) => {
     const userId = req.query.userId || req.user.id;
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    // Reported stories
+    // ✅ Reported stories
     const reportedStories = await StoryReport.find({
       reportedBy: userId,
     }).select("storyId");
-    const hideStoryIds = reportedStories.map((r) => r.storyId.toString());
 
-    // Muted users fetch karo
-    const currentUser = await User.findById(userId).select("mutedStoryUsers");
+    const hideStoryIds = reportedStories.map((r) =>
+      r.storyId.toString()
+    );
+
+    // ✅ Current user muted list
+    const currentUser = await User.findById(userId).select(
+      "mutedStoryUsers"
+    );
+
     const mutedUserIds =
       currentUser?.mutedStoryUsers?.map((id) => id.toString()) || [];
 
+    // ✅ Find users who have hidden their stories from current user
+    const usersWhoHiddenMe = await User.find({
+      hiddenStoriesFrom: userId,
+    }).select("_id");
+
+    const hiddenByUserIds = usersWhoHiddenMe.map((u) =>
+      u._id.toString()
+    );
+
+    // ✅ Following list
     const followingList = await Friendship.find({
       follower: userId,
       followStatus: "following",
     }).select("following");
 
+    // ✅ Follower list
     const followerList = await Friendship.find({
       following: userId,
       followStatus: "following",
     }).select("follower");
 
-    const followingIds = followingList.map((f) => f.following.toString());
-    const followerIds = followerList.map((f) => f.follower.toString());
+    const followingIds = followingList.map((f) =>
+      f.following.toString()
+    );
 
-    const storyUserIds = new Set([...followingIds, ...followerIds, userId]);
+    const followerIds = followerList.map((f) =>
+      f.follower.toString()
+    );
 
+    const storyUserIds = new Set([
+      ...followingIds,
+      ...followerIds,
+      userId,
+    ]);
+
+    // ✅ FINAL STORY FETCH (Hidden logic added here)
     const stories = await Story.find({
       createdAt: { $gte: twentyFourHoursAgo },
-      userId: { $in: Array.from(storyUserIds) }, // ✅ $nin hataya
+      userId: {
+        $in: Array.from(storyUserIds),
+        $nin: hiddenByUserIds, // 👈 Hidden users excluded
+      },
       _id: { $nin: hideStoryIds },
     })
       .populate(
         "userId",
-        "profilePicture firstName lastName fullName accountType accountStatus sadhuName tirthName",
+        "profilePicture firstName lastName fullName accountType accountStatus sadhuName tirthName"
       )
-      .populate("sanghId", "name sanghImage");
+      .populate("sanghId", "name sanghImage")
+      .populate("media.mentionUsers", "fullName profilePicture _id");
 
-    // ✅ Har story mein isMuted flag add karo
+    // ✅ Add isMuted flag
     const storiesWithMuteStatus = stories.map((story) => ({
       ...story.toObject(),
-      isMuted: mutedUserIds.includes(story.userId?._id?.toString()),
+      isMuted: mutedUserIds.includes(
+        story.userId?._id?.toString()
+      ),
     }));
 
     res.status(200).json({
@@ -208,7 +241,6 @@ const getAllStories = asyncHandler(async (req, res) => {
     });
   }
 });
-
 const getStoriesByUser = asyncHandler(async (req, res) => {
   try {
     const userId = req.user.id;
@@ -247,8 +279,8 @@ const getStoriesByUser = asyncHandler(async (req, res) => {
         "userId",
         "profilePicture firstName lastName fullName accountType accountStatus sadhuName tirthName businessName",
       )
-      .populate("sanghId", "name sanghImage");
-
+      .populate("sanghId", "name sanghImage")
+      .populate("media.mentionUsers", "fullName profilePicture _id");
     if (!stories.length) {
       return errorResponse(res, "No active stories found for this user", 404);
     }
@@ -906,6 +938,55 @@ const checkMuteStatus = asyncHandler(async (req, res) => {
     userId,
   });
 });
+const toggleHideStory = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const { targetUserId } = req.body;
+
+    if (!targetUserId) {
+      return res.status(400).json({
+        success: false,
+        message: "Target user ID is required",
+      });
+    }
+
+    const user = await User.findById(currentUserId);
+
+    const alreadyHidden = user.hiddenStoriesFrom.includes(targetUserId);
+
+    let updatedUser;
+
+    if (alreadyHidden) {
+      // ✅ Unhide
+      updatedUser = await User.findByIdAndUpdate(
+        currentUserId,
+        { $pull: { hiddenStoriesFrom: targetUserId } },
+        { new: true },
+      );
+    } else {
+      // ✅ Hide
+      updatedUser = await User.findByIdAndUpdate(
+        currentUserId,
+        { $addToSet: { hiddenStoriesFrom: targetUserId } },
+        { new: true },
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      isHidden: !alreadyHidden, // 👈 IMPORTANT
+      message: alreadyHidden
+        ? "Stories unhidden successfully"
+        : "Stories hidden successfully",
+    });
+  } catch (error) {
+    console.error("Toggle Hide Story Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
 module.exports = {
   createStory,
   getAllStories,
@@ -924,6 +1005,7 @@ module.exports = {
   unmuteStoryUser,
   getMutedStoryUsers,
   checkMuteStatus,
+  toggleHideStory,
 };
 
 // exports.createStory = async (req, res) => {

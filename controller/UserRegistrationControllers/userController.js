@@ -1452,7 +1452,14 @@ const getUserById = asyncHandler(async (req, res) => {
 
   userResponse.friendCount = user.friends.length;
   userResponse.postCount = user.posts.length;
+const currentUser =
+  await User.findById(currentUserId).select("hiddenStoriesFrom");
 
+const isStoryHidden = currentUser?.hiddenStoriesFrom?.some(
+  (hiddenId) => hiddenId.toString() === id.toString(),
+);
+
+userResponse.isStoryHidden = isStoryHidden;
   res.json(userResponse);
 });
 
