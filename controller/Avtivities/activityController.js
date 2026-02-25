@@ -401,13 +401,10 @@ exports.calculateWinners = async (req, res) => {
     const { activityId } = req.params;
     const { firstWinner, secondWinner, thirdWinner } = req.body;
 
-    // console.log("🔍 Received activityId:", activityId);
-    // console.log("🔍 Request body:", req.body);
-
     const activity = await Activity.findById(activityId);
     if (!activity) {
       return res.status(404).json({
-        success: false, 
+        success: false,
         message: "Activity not found"
       });
     }
