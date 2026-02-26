@@ -2,7 +2,8 @@ const expressAsyncHandler = require('express-async-handler');
 const Notification = require('../../model/SocialMediaModels/notificationModel');
 const {getIo}  = require('../../websocket/socket');
 const Block = require('../../model/Block User/Block');
-
+const Story = require("../../model/SocialMediaModels/storyModel");
+const Post = require("../../model/SocialMediaModels/postModel");
 // Notification Send Karna
 exports.sendNotification = async (req, res) => {
   try {
@@ -31,23 +32,21 @@ exports.sendNotification = async (req, res) => {
   }
 };
 
-//  Notification Fetch Karna (User ke liye)
+
 exports.getNotifications = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // ⭐ Blocked Users List (Two-way block)
     const blockRelations = await Block.find({
-      $or: [{ blocker: userId }, { blocked: userId }]
+      $or: [{ blocker: userId }, { blocked: userId }],
     }).lean();
 
-    const blockedUsers = blockRelations.map(rel =>
+    const blockedUsers = blockRelations.map((rel) =>
       rel.blocker.toString() === userId.toString()
         ? rel.blocked.toString()
-        : rel.blocker.toString()
+        : rel.blocker.toString(),
     );
 
-    // ⭐ Fetch all notifications
     let notifications = await Notification.find({ receiverId: userId })
       .sort({ createdAt: -1 })
       .populate({
@@ -55,19 +54,60 @@ exports.getNotifications = async (req, res) => {
         select:
           "firstName lastName fullName profilePicture privacy accountType businessName sadhuName tirthName",
       })
-      .populate({
-        path: "postId",
-        select: "media",
-      })
       .lean();
 
-    // ⭐ Filter notifications where sender is blocked or has blocked you
-    notifications = notifications.filter(n => {
-      if (!n.senderId) return false; // handle deleted user
-
+    notifications = notifications.filter((n) => {
+      if (!n.senderId) return false;
       const senderId = n.senderId._id.toString();
       return !blockedUsers.includes(senderId);
     });
+
+    // ✅ like/comment/mention ke liye storyId ya postId se data fetch karo
+    notifications = await Promise.all(
+      notifications.map(async (notif) => {
+        // ✅ STORY notification (like, comment, mention) - storyId field use karo
+        if (notif.storyId) {
+          try {
+            const story = await Story.findById(notif.storyId)
+              .select("media")
+              .lean();
+
+            if (story) {
+              // ✅ Agar mediaId hai to sirf wahi media bhejo
+              if (notif.mediaId) {
+                const specificMedia = story.media.find(
+                  (m) => m._id.toString() === notif.mediaId.toString(),
+                );
+                notif.storyData = {
+                  _id: story._id,
+                  media: specificMedia ? [specificMedia] : story.media,
+                };
+              } else {
+                notif.storyData = story;
+              }
+            }
+          } catch (e) {
+            console.error("Story fetch error:", e);
+          }
+        }
+
+        // ✅ POST notification (like, comment) - postId field use karo
+        else if (notif.postId) {
+          try {
+            const post = await Post.findById(notif.postId)
+              .select("media")
+              .lean();
+            if (post) {
+              notif.postData = post;
+            }
+          } catch (e) {
+            console.error("Post fetch error:", e);
+          }
+        }
+
+        return notif;
+      }),
+    );
 
     res.status(200).json({
       success: true,
@@ -82,7 +122,6 @@ exports.getNotifications = async (req, res) => {
     });
   }
 };
-
 //  Notification Read Mark Karna
 exports.markAllNotificationsRead = async (req, res) => {
   try {
@@ -102,7 +141,7 @@ exports.markAllNotificationsRead = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to mark notifications as read' });
   }
 };
-// 🔹 Notification Delete Karna (By Notification ID)
+// Notification Delete Karna (By Notification ID)
 exports.deleteNotification = async (req, res) => {
   try {
     const { notificationId } = req.params;
