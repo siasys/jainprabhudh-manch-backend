@@ -1444,7 +1444,7 @@ const distributeMemberPayment = async ({ member, user, sourceSangh }) => {
         });
       }
     } else {
-    /* ---------- COUNTRY / STATE / DISTRICT (USER LOCATION BASED) ---------- */
+      /* ---------- COUNTRY / STATE / DISTRICT (USER LOCATION BASED) ---------- */
       let query = { level, sanghType };
 
       if (level === "country") query["location.country"] = userLocation.country;
@@ -2894,13 +2894,13 @@ const generateMemberCard = async (req, res) => {
     ctx.drawImage(backTemplate, 0, height, width, height);
     ctx.font = "26px Georgia";
     ctx.fillStyle = "black";
-
+    ctx.textAlign = "left";
     const addr = user.address || {};
-    const line1 = `${addr.street || ""}, ${addr.state || ""}`;
-    const line2 = `${addr.district || ""}, ${addr.pincode || ""}`;
+    const line1 = addr.street || "";
+    const line2 = `${addr.state || ""}, ${addr.city || ""}  ${addr.pincode || ""}`;
 
-    ctx.fillText(line1, 330, height + 182);
-    ctx.fillText(line2, 330, height + 220);
+    ctx.fillText(line1, 190, height + 182);
+    ctx.fillText(line2, 190, height + 220);
 
     // === RESPONSE ===
     res.setHeader("Content-Type", "image/jpeg");
@@ -3101,12 +3101,10 @@ const unfollowSangh = asyncHandler(async (req, res) => {
   );
   await sangh.save();
 
-  res
-    .status(200)
-    .json({
-      message: "Unfollowed successfully",
-      followersCount: sangh.followers.length,
-    });
+  res.status(200).json({
+    message: "Unfollowed successfully",
+    followersCount: sangh.followers.length,
+  });
 });
 
 module.exports = {
