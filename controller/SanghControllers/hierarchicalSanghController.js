@@ -2874,9 +2874,23 @@ const generateMemberCard = async (req, res) => {
 
     // ===== Correct postMember logic =====
     // For officeBearers, field is "postMember"; for regular members it could also be "postMember" or "description"
-    const postText = user.postMember || user.description || "";
-    ctx.fillText(`${postText}`, 570, 320);
+let postText = user.postMember || user.description || "";
 
+// Agar postText empty hai, toh officeBearers mein userId se role dhundo
+if (!postText) {
+  const officeBearerEntry = sangh.officeBearers?.find(
+    (ob) => ob.userId.toString() === userId,
+  );
+  if (officeBearerEntry) {
+    // role ko capitalize karo: "president" → "President"
+    postText = officeBearerEntry.role
+      ? officeBearerEntry.role.charAt(0).toUpperCase() +
+        officeBearerEntry.role.slice(1)
+      : "";
+  }
+}
+
+ctx.fillText(`${postText}`, 570, 320);
     if (user.jainAadharNumber)
       ctx.fillText(`${user.jainAadharNumber}`, 570, 379);
 
@@ -2897,7 +2911,7 @@ const generateMemberCard = async (req, res) => {
     ctx.textAlign = "left";
     const addr = user.address || {};
     const line1 = addr.street || "";
-    const line2 = `${addr.state || ""}, ${addr.city || ""}  ${addr.pincode || ""}`;
+    const line2 = `${addr.city || ""} ${addr.state || ""},  ${addr.pincode || ""}`;
 
     ctx.fillText(line1, 190, height + 182);
     ctx.fillText(line2, 190, height + 220);
