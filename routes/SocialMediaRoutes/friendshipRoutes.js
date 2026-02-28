@@ -39,7 +39,7 @@ router.get('/followers/:userId', getFollowers);
 // Get all users a user is following
 router.get('/following/:userId', getFollowing);
 //get follow request
-router.get('/follow-requests/:userId',getFollowRequests);
+router.get('/follow-requests/:userId', getFollowRequests);
 router.get('/status/:followerId/:followingId', getFollowStatus);
 
 // Check follow status

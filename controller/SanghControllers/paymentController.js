@@ -19,11 +19,11 @@ const getAmountByLevel = (level, sanghType, age) => {
 
   if (isYouthLike) {
     switch (lvl) {
-      case 'city': return 500;
+      case 'city': return 550;
       case 'district': return 1100;
       case 'state': return 2500;
       case 'country': return 5100;
-      default: return 500;
+      default: return 550;
     }
   } else {
     switch (lvl) {
@@ -208,12 +208,12 @@ const createOfficeBearerOrder = asyncHandler(async (req, res) => {
   const payment = new Payment({
     transactionId: order.id,
     sanghId,
-    memberId: userId, // Keeping same field for simplicity
+    memberId: userId,
     amountCollected: amount,
     currency: "INR",
     status: "pending",
     role: role,
-    type: "officeBearer"  // optional for clarity
+    type: "officeBearer"
   });
 
   await payment.save();
