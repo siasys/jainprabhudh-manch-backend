@@ -1797,7 +1797,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
     sangh.members.push(newMember);
     await sangh.save();
 
-    // ✅ STEP 1: UPDATE USER SANGH ROLES - MEMBER ROLE FIRST (Index 0)
+    // STEP 1: UPDATE USER SANGH ROLES - MEMBER ROLE FIRST (Index 0)
     await User.findByIdAndUpdate(user._id, {
       $push: {
         sanghRoles: {
@@ -2355,8 +2355,8 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
       contact,
       socialMedia,
     } = req.body;
-    console.log("Received Body:", req.body);
-    console.log("SanghType:", req.body.sanghType);
+    // console.log("Received Body:", req.body);
+    // console.log("SanghType:", req.body.sanghType);
     // Validate sanghType
     if (!sanghType) {
       return errorResponse(res, "Sangh type is required.", 400);

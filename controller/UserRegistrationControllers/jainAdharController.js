@@ -58,7 +58,7 @@ const createJainAadhar = asyncHandler(async (req, res) => {
     if (!location || !location.state) {
       return errorResponse(res, 'State is required in location data', 400);
     }
-    
+
     // ✅ Name Formatting Logic
     if (req.body.name) {
       let fullName = req.body.name.trim();
@@ -66,19 +66,15 @@ const createJainAadhar = asyncHandler(async (req, res) => {
       if (nameParts.length >= 2) {
         const firstName = nameParts[0];
         const lastName = nameParts[nameParts.length - 1];
-        const lowerLast = lastName.toLowerCase();
         const lowerFull = fullName.toLowerCase();
 
-        // agar naam me "jain" already present nahi hai
         if (!lowerFull.includes('jain')) {
           req.body.name = `${firstName} Jain (${lastName})`;
         } else {
-          // agar pehle se Jain likha hai to jaisa hai waisa hi rehne do
           req.body.name = fullName;
         }
       }
     }
-    
 
     // Normalize input strings
     const norm = {
@@ -110,12 +106,20 @@ const createJainAadhar = asyncHandler(async (req, res) => {
     const stateRegex = norm.state ? new RegExp('^' + escapeRegex(norm.state) + '$', 'i') : null;
     const countryRegex = norm.country ? new RegExp('^' + escapeRegex(norm.country) + '$', 'i') : null;
 
+    // ✅ NEW HELPER: Check if a sangh has an active president in officeBearers
+    const hasActivePresident = (sangh) => {
+      if (!sangh || !Array.isArray(sangh.officeBearers)) return false;
+      return sangh.officeBearers.some(
+        (ob) => ob.role === 'president' && ob.status === 'active' && ob.userId
+      );
+    };
+
     let reviewingSangh = null;
 
     // 🔹 Step 1: Try City (strict + fuzzy)
     if (norm.city && norm.district && norm.state) {
       // 1A) Exact match
-      reviewingSangh = await HierarchicalSangh.findOne({
+      let citySangh = await HierarchicalSangh.findOne({
         level: 'city',
         sanghType: 'main',
         status: 'active',
@@ -125,7 +129,7 @@ const createJainAadhar = asyncHandler(async (req, res) => {
       });
 
       // 1B) Fuzzy match if exact not found
-      if (!reviewingSangh) {
+      if (!citySangh) {
         const allCitySanghs = await HierarchicalSangh.find({
           level: 'city',
           sanghType: 'main',
@@ -143,54 +147,92 @@ const createJainAadhar = asyncHandler(async (req, res) => {
           return common / longer.length;
         };
 
-        reviewingSangh = allCitySanghs.find(
-          (s) => stringSimilarity(norm.city, s.location.city) > 0.7 // 70% similar
-        );
+        citySangh = allCitySanghs.find(
+          (s) => stringSimilarity(norm.city, s.location.city) > 0.7
+        ) || null;
       }
 
-      if (reviewingSangh) {
-        applicationLevel = 'city';
-        reviewingSanghId = reviewingSangh._id;
+      // ✅ City sangh found — now check if it has a president
+      if (citySangh) {
+        if (hasActivePresident(citySangh)) {
+          // President exists → assign to city
+          reviewingSangh = citySangh;
+          applicationLevel = 'city';
+          reviewingSanghId = citySangh._id;
+        }
+        // else: city sangh exists but no president → fall through to district
       }
     }
 
-    // 🔹 Step 2: Try District
+    // 🔹 Step 2: Try District (if city had no president or city sangh not found)
     if (!reviewingSangh && norm.district && norm.state) {
-      reviewingSangh = await findSangh('district', {
+      const districtSangh = await findSangh('district', {
         'location.district': districtRegex,
         'location.state': stateRegex,
       });
-      if (reviewingSangh) {
-        applicationLevel = 'district';
-        reviewingSanghId = reviewingSangh._id;
+
+      if (districtSangh) {
+        if (hasActivePresident(districtSangh)) {
+          reviewingSangh = districtSangh;
+          applicationLevel = 'district';
+          reviewingSanghId = districtSangh._id;
+        }
+        // else: district sangh exists but no president → fall through to state
       }
     }
 
-    // 🔹 Step 3: Try State
+    // 🔹 Step 3: Try State (if district had no president or not found)
     if (!reviewingSangh && norm.state) {
-      reviewingSangh = await findSangh('state', {
+      const stateSangh = await findSangh('state', {
         'location.state': stateRegex,
       });
-      if (reviewingSangh) {
-        applicationLevel = 'state';
-        reviewingSanghId = reviewingSangh._id;
+
+      if (stateSangh) {
+        if (hasActivePresident(stateSangh)) {
+          reviewingSangh = stateSangh;
+          applicationLevel = 'state';
+          reviewingSanghId = stateSangh._id;
+        }
+        // else: state sangh exists but no president → fall through to country
       }
     }
 
     // 🔹 Step 4: Try Country / Foundation / Superadmin
     if (!reviewingSangh) {
-      reviewingSangh = await findSangh('country', {
+      const countrySangh = await findSangh('country', {
         'location.country': countryRegex,
       });
-      if (reviewingSangh) {
-        applicationLevel = 'country';
-        reviewingSanghId = reviewingSangh._id;
+
+      if (countrySangh) {
+        if (hasActivePresident(countrySangh)) {
+          reviewingSangh = countrySangh;
+          applicationLevel = 'country';
+          reviewingSanghId = countrySangh._id;
+        } else {
+          // Country sangh exists but no president → go to foundation
+          const foundationSangh = await HierarchicalSangh.findOne({
+            level: 'foundation',
+            status: 'active',
+          }).exec();
+
+          if (foundationSangh) {
+            reviewingSangh = foundationSangh;
+            applicationLevel = 'foundation';
+            reviewingSanghId = foundationSangh._id;
+          } else {
+            applicationLevel = 'superadmin';
+            reviewingSanghId = null;
+          }
+        }
       } else {
+        // No country sangh at all
         const foundationSangh = await HierarchicalSangh.findOne({
           level: 'foundation',
           status: 'active',
         }).exec();
+
         if (foundationSangh) {
+          reviewingSangh = foundationSangh;
           applicationLevel = 'foundation';
           reviewingSanghId = foundationSangh._id;
         } else {
