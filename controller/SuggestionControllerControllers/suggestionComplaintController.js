@@ -173,37 +173,43 @@ exports.getAllSuggestionsComplaints = async (req, res) => {
   }
 };
 
-
-
 // Get Single Suggestion / Complaint by ID
 exports.getSuggestionComplaintById = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user._id;
-    const isSuperAdmin = req.user.role === 'superadmin';
+    const userId = req.user._id.toString();
+    const isSuperAdmin = req.user.role === "superadmin";
 
-    const submission = await SuggestionComplaint.findById(id)
-      .populate('submittedBy', 'firstName lastName fullName');
+ const allowedAdminIds = [
+   "688378b981449c14306611d7",
+   "6883812f016032eba93b4a0b",
+ ];
+
+    const submission = await SuggestionComplaint.findById(id).populate(
+      "submittedBy",
+      "firstName lastName fullName",
+    );
 
     if (!submission) {
-      return errorResponse(res, 'Suggestion/complaint not found', 404);
+      return errorResponse(res, "Suggestion/complaint not found", 404);
     }
 
-    const isSubmitter =
-      submission.submittedBy._id.toString() === userId.toString();
+    const isSubmitter = submission.submittedBy._id.toString() === userId;
 
-    if (!isSubmitter && !isSuperAdmin) {
-      return errorResponse(res, 'Unauthorized', 403);
+    const isAllowedAdmin = allowedAdminIds.includes(userId);
+
+    if (!isSubmitter && !isSuperAdmin && !isAllowedAdmin) {
+      return errorResponse(res, "Unauthorized", 403);
     }
 
     return successResponse(
       res,
-      'Suggestion/complaint retrieved successfully',
-      submission
+      "Suggestion/complaint retrieved successfully",
+      submission,
     );
   } catch (error) {
-    console.error('Error retrieving suggestion/complaint:', error);
-    return errorResponse(res, 'Internal Server Error', 500);
+    console.error("Error retrieving suggestion/complaint:", error);
+    return errorResponse(res, "Internal Server Error", 500);
   }
 };
 
@@ -212,19 +218,27 @@ exports.updateSuggestionComplaint = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, response } = req.body;
-    const userId = req.user._id;
+    const userId = req.user._id.toString();
 
-    if (req.user.role !== 'superadmin') {
-      return errorResponse(res, 'Only superadmin can update', 403);
+    const allowedAdminIds = [
+      "688378b981449c14306611d7",
+      "6883812f016032eba93b4a0b",
+    ];
+
+    const isSuperAdmin = req.user.role === "superadmin";
+    const isAllowedAdmin = allowedAdminIds.includes(userId);
+
+    if (!isSuperAdmin && !isAllowedAdmin) {
+      return errorResponse(res, "Only admin can update", 403);
     }
 
     const submission = await SuggestionComplaint.findById(id).populate(
-      'submittedBy',
-      'firstName lastName fullName'
+      "submittedBy",
+      "firstName lastName fullName",
     );
 
     if (!submission) {
-      return errorResponse(res, 'Suggestion/complaint not found', 404);
+      return errorResponse(res, "Suggestion/complaint not found", 404);
     }
 
     const oldStatus = submission.status;
@@ -241,18 +255,18 @@ exports.updateSuggestionComplaint = async (req, res) => {
         type: submission.type,
         message: `Your ${submission.type} "${submission.subject}" status updated to ${status}`,
         entityId: submission._id,
-        entityType: 'SuggestionComplaint',
+        entityType: "SuggestionComplaint",
       });
     }
 
     return successResponse(
       res,
-      'Suggestion/complaint updated successfully',
-      submission
+      "Suggestion/complaint updated successfully",
+      submission,
     );
   } catch (error) {
-    console.error('Error updating suggestion/complaint:', error);
-    return errorResponse(res, 'Internal Server Error', 500);
+    console.error("Error updating suggestion/complaint:", error);
+    return errorResponse(res, "Internal Server Error", 500);
   }
 };
 
