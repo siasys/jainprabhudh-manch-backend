@@ -928,29 +928,38 @@ const reviewByAdmin = asyncHandler(async (req, res) => {
     const { status, remarks, userId } = req.body;
 
     const application = await JainAadhar.findById(applicationId);
-    if (!application) return errorResponse(res, 'Application not found', 404);
+    if (!application) return errorResponse(res, "Application not found", 404);
 
-    if (application.status !== 'pending') {
-      return errorResponse(res, `This application has already been ${application.status}`, 400);
+    // ✅ FIX: Sirf 'approved' wali application block karo, rejected ko allow karo
+    if (application.status === "approved") {
+      return errorResponse(
+        res,
+        "This application has already been approved",
+        400,
+      );
     }
 
-    //Allowed reviewers (user IDs)
+    // Allowed reviewers (user IDs)
     const allowedReviewers = [
-      '688378b981449c14306611d7',
-      '68837378f698f83ab109f019',
-      '6883812f016032eba93b4a0b',
-      '6874fa87237fcfa631771cbf'
+      "688378b981449c14306611d7",
+      "68837378f698f83ab109f019",
+      "6883812f016032eba93b4a0b",
+      "6874fa87237fcfa631771cbf",
     ];
 
     if (!allowedReviewers.includes(req.user._id.toString())) {
-      return errorResponse(res, 'Not authorized to review this application', 403);
+      return errorResponse(
+        res,
+        "Not authorized to review this application",
+        403,
+      );
     }
 
     application.status = status;
     application.reviewHistory.push({
       action: status,
       by: userId,
-      level: 'user', // level ko user rakha
+      level: "user",
       sanghId: null,
       remarks,
       timestamp: new Date(),
@@ -958,32 +967,35 @@ const reviewByAdmin = asyncHandler(async (req, res) => {
 
     application.reviewedBy = {
       userId,
-      role: 'user', // role ko user rakha
-      level: 'user',
+      role: "user",
+      level: "user",
       sanghId: null,
     };
 
-    if (status === 'approved') {
+    if (status === "approved") {
       const jainAadharNumber = await generateJainAadharNumber();
       application.jainAadharNumber = jainAadharNumber;
 
       await User.findByIdAndUpdate(application.userId, {
-        jainAadharStatus: 'verified',
+        jainAadharStatus: "verified",
         jainAadharNumber,
       });
-    } else if (status === 'rejected') {
+    } else if (status === "rejected") {
       await User.findByIdAndUpdate(application.userId, {
-        jainAadharStatus: 'rejected',
+        jainAadharStatus: "rejected",
       });
     }
 
     await application.save();
-    return successResponse(res, application, `Application ${status} successfully`);
+    return successResponse(
+      res,
+      application,
+      `Application ${status} successfully`,
+    );
   } catch (err) {
     return errorResponse(res, err.message, 500);
   }
 });
-
 // Admin: Get detailed application statistics
 const getApplicationStats = asyncHandler(async (req, res) => {
   try {
