@@ -27,18 +27,236 @@ const { moderateImage } = require('../../utils/moderation');
 const BoostPlan = require('../../model/BoostPlan/BoostPlan')
 const mongoose = require("mongoose");
 
+// const createPost = [
+//   upload.postMediaUpload,
+//   body('userId').notEmpty().isMongoId(),
+//   body('hashtags')
+//     .optional()
+//     .custom(value => {
+//       try {
+//         const parsed = JSON.parse(value);
+//         if (!Array.isArray(parsed)) throw new Error();
+//         return true;
+//       } catch {
+//         throw new Error('Hashtags must be a JSON array');
+//       }
+//     }),
+
+//   asyncHandler(async (req, res) => {
+//     const errors = validationResult(req);
+//     if (!errors.isEmpty()) {
+//       return res.status(400).json({ errors: errors.array() });
+//     }
+
+//     const { caption, userId, hashtags, type, refId, postType: reqPostType, pollQuestion, pollOptions, pollDuration } = req.body;
+
+//     const parsedHashtags = hashtags
+//       ? JSON.parse(hashtags).map(tag => tag.toLowerCase())
+//       : [];
+
+//     const user = await User.findById(userId);
+//     if (!user) return res.status(404).json({ error: 'User not found' });
+
+//     // ✅ POST LIMIT CHECK (ONLY business / sadhu / tirth)
+//     const restrictedAccounts = ['business', 'sadhu', 'tirth'];
+//       if (
+//         restrictedAccounts.includes(user.accountType) &&
+//         user.postCount >= 3 &&
+//         !user.isBoostActive &&
+//         type !== 'sangh' &&
+//         type !== 'panch'
+//       ) {
+//         return res.status(403).json({
+//           error: 'BOOST_REQUIRED',
+//           message:
+//             'You have reached your free post limit. Please boost to continue posting.'
+//         });
+//       }
+
+
+//     const media = [];
+
+//     // -----------------------------
+//     // IMAGE MODERATION + S3 UPLOAD
+//     // -----------------------------
+
+// if (req.files?.image) {
+//   for (const file of req.files.image) {
+//     // Convert directly to CDN URL
+//     const cdnUrl = convertS3UrlToCDN(file.location);
+
+//     // Push directly without moderation
+//     media.push({ url: cdnUrl, type: 'image' });
+//   }
+// }
+
+//     // -----------------------------
+//     // VIDEO MODERATION (optional same logic)
+//     // -----------------------------
+// if (req.files?.video) {
+//   for (const file of req.files.video) {
+//     const cdnUrl = convertS3UrlToCDN(file.location);
+
+//    // console.log("Skipping VIDEO moderation for:", cdnUrl);
+
+//     // ✅ Directly accept video (no moderation call)
+//     media.push({ url: cdnUrl, type: 'video' });
+//   }
+// }
+
+
+
+//     // -----------------------------
+//     // TEXT CHECK USING BAD-WORD FILTER
+//     // -----------------------------
+//     const textInputs = [
+//       caption || "",
+//       pollQuestion || "",
+//       ...(Array.isArray(pollOptions) ? pollOptions : [])
+//     ];
+
+//     for (const text of textInputs) {
+//       if (text && containsBadWords(text)) {
+//         return res.status(400).json({
+//           error: "Your post contains inappropriate or harmful words."
+//         });
+//       }
+//     }
+
+//     // -----------------------------
+//     // POLL PARSING
+//     // -----------------------------
+//     let parsedPollOptionsArray = [];
+//     try {
+//       if (reqPostType === 'poll') {
+//         parsedPollOptionsArray = Array.isArray(pollOptions)
+//           ? pollOptions
+//           : JSON.parse(pollOptions);
+//         if (!pollQuestion || parsedPollOptionsArray.length < 2 || !pollDuration) {
+//           return res.status(400).json({
+//             error: 'Poll requires question, minimum 2 options, and duration'
+//           });
+//         }
+//       }
+//     } catch (err) {
+//       return res.status(400).json({ error: "pollOptions must be valid JSON array" });
+//     }
+
+//     // -----------------------------
+//     // Save Hashtags
+//     // -----------------------------
+//     for (const tag of parsedHashtags) {
+//       await Hashtag.findOneAndUpdate(
+//         { name: tag.toLowerCase() },
+//         { $inc: { count: 1 } },
+//         { upsert: true, new: true }
+//       );
+//     }
+
+//     let postType = reqPostType || (media.length > 0 ? 'media' : 'text');
+
+//     const postData = {
+//       user: userId,
+//       caption,
+//       media,
+//       postType,
+//       hashtags: parsedHashtags,
+//       type
+//     };
+
+//     if (postType === 'poll') {
+//       postData.pollQuestion = pollQuestion;
+//       postData.pollOptions = parsedPollOptionsArray;
+//       postData.pollDuration = pollDuration;
+//       postData.pollVotes = parsedPollOptionsArray.reduce((acc, _, i) => {
+//         acc[i] = [];
+//         return acc;
+//       }, {});
+//       postData.votedUsers = [];
+//     }
+
+//     // RefId mapping
+//     if (type === 'sangh') postData.sanghId = refId;
+//     else if (type === 'panch') postData.sanghId = refId;
+//     else if (type === 'sadhu') postData.sadhuId = refId;
+//     else if (type === 'vyapar') postData.vyaparId = refId;
+
+
+// // ASSIGN ACTIVE BOOST TO POST
+// let activeBoostId = null;
+// if (user.activeBoosts && user.activeBoosts.length > 0) {
+//   // Find first boost which is active AND not already used
+//   const unusedBoost = await BoostPlan.findOne({
+//   _id: { $in: user.activeBoosts },
+//   $or: [
+//     { post: { $exists: false } },
+//     { post: null }
+//   ]
+// });
+//   if (!unusedBoost) {
+//     return res.status(403).json({
+//       error: "BOOST_ALREADY_USED",
+//       message: "All your active boosts are already used for posts. Please purchase a new boost to continue posting."
+//     });
+//   }
+
+//   activeBoostId = unusedBoost._id;
+//   postData.activeBoost = activeBoostId;
+//   postData.isBoosted = true;
+// }
+
+//     const post = await Post.create(postData);
+
+// // -------------------------
+// // LINK POST TO BOOST PLAN
+// // -------------------------
+// if (activeBoostId) {
+//   await BoostPlan.findByIdAndUpdate(activeBoostId, { post: post._id });
+// }
+
+//     // increment postCount ONLY after successful post creation
+//       await User.findByIdAndUpdate(
+//         userId,
+//         { $inc: { postCount: 1 } }
+//       );
+
+//     if (!type) {
+//       user.posts.push(post._id);
+//       await user.save();
+//     } else if (type === 'sangh' || type === 'panch') {
+//       await Sangh.findByIdAndUpdate(refId, { $push: { posts: post._id } });
+//     }
+//     // -------------------------
+//     // OPTIONAL: REMOVE EXPIRED BOOSTS
+//     // -------------------------
+//     const now = new Date();
+//     user.activeBoosts = user.activeBoosts.filter(async (boostId) => {
+//       const boost = await BoostPlan.findById(boostId);
+//       return boost && boost.endDate > now;
+//     });
+//     if (user.activeBoosts.length === 0) user.isBoostActive = false;
+//     await user.save();
+
+//     await invalidateCache('combinedFeed:*');
+//     await invalidateCache('combinedFeed:firstPage:limit:10');
+
+//     res.status(201).json(post);
+//   })
+// ];
+
+
 const createPost = [
   upload.postMediaUpload,
-  body('userId').notEmpty().isMongoId(),
-  body('hashtags')
+  body("userId").notEmpty().isMongoId(),
+  body("hashtags")
     .optional()
-    .custom(value => {
+    .custom((value) => {
       try {
         const parsed = JSON.parse(value);
         if (!Array.isArray(parsed)) throw new Error();
         return true;
       } catch {
-        throw new Error('Hashtags must be a JSON array');
+        throw new Error("Hashtags must be a JSON array");
       }
     }),
 
@@ -48,77 +266,60 @@ const createPost = [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { caption, userId, hashtags, type, refId, postType: reqPostType, pollQuestion, pollOptions, pollDuration } = req.body;
+    const {
+      caption,
+      userId,
+      hashtags,
+      type,
+      refId,
+      postType: reqPostType,
+      pollQuestion,
+      pollOptions,
+      pollDuration,
+    } = req.body;
 
     const parsedHashtags = hashtags
-      ? JSON.parse(hashtags).map(tag => tag.toLowerCase())
+      ? JSON.parse(hashtags).map((tag) => tag.toLowerCase())
       : [];
 
     const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    // ✅ POST LIMIT CHECK (ONLY business / sadhu / tirth)
-    const restrictedAccounts = ['business', 'sadhu', 'tirth'];
-      if (
-        restrictedAccounts.includes(user.accountType) &&
-        user.postCount >= 3 &&
-        !user.isBoostActive &&
-        type !== 'sangh' &&
-        type !== 'panch'
-      ) {
-        return res.status(403).json({
-          error: 'BOOST_REQUIRED',
-          message:
-            'You have reached your free post limit. Please boost to continue posting.'
-        });
-      }
-
+    if (!user) return res.status(404).json({ error: "User not found" });
 
     const media = [];
 
     // -----------------------------
-    // IMAGE MODERATION + S3 UPLOAD
+    // IMAGE UPLOAD
     // -----------------------------
-
-if (req.files?.image) {
-  for (const file of req.files.image) {
-    // Convert directly to CDN URL
-    const cdnUrl = convertS3UrlToCDN(file.location);
-
-    // Push directly without moderation
-    media.push({ url: cdnUrl, type: 'image' });
-  }
-}
+    if (req.files?.image) {
+      for (const file of req.files.image) {
+        const cdnUrl = convertS3UrlToCDN(file.location);
+        media.push({ url: cdnUrl, type: "image" });
+      }
+    }
 
     // -----------------------------
-    // VIDEO MODERATION (optional same logic)
+    // VIDEO UPLOAD
     // -----------------------------
-if (req.files?.video) {
-  for (const file of req.files.video) {
-    const cdnUrl = convertS3UrlToCDN(file.location);
-
-   // console.log("Skipping VIDEO moderation for:", cdnUrl);
-
-    // ✅ Directly accept video (no moderation call)
-    media.push({ url: cdnUrl, type: 'video' });
-  }
-}
-
-
+    if (req.files?.video) {
+      for (const file of req.files.video) {
+        const cdnUrl = convertS3UrlToCDN(file.location);
+        media.push({ url: cdnUrl, type: "video" });
+      }
+    }
 
     // -----------------------------
-    // TEXT CHECK USING BAD-WORD FILTER
+    // TEXT BAD WORD FILTER
     // -----------------------------
     const textInputs = [
       caption || "",
       pollQuestion || "",
-      ...(Array.isArray(pollOptions) ? pollOptions : [])
+      ...(Array.isArray(pollOptions) ? pollOptions : []),
     ];
 
     for (const text of textInputs) {
       if (text && containsBadWords(text)) {
         return res.status(400).json({
-          error: "Your post contains inappropriate or harmful words."
+          error: "Your post contains inappropriate or harmful words.",
         });
       }
     }
@@ -128,32 +329,39 @@ if (req.files?.video) {
     // -----------------------------
     let parsedPollOptionsArray = [];
     try {
-      if (reqPostType === 'poll') {
+      if (reqPostType === "poll") {
         parsedPollOptionsArray = Array.isArray(pollOptions)
           ? pollOptions
           : JSON.parse(pollOptions);
-        if (!pollQuestion || parsedPollOptionsArray.length < 2 || !pollDuration) {
+
+        if (
+          !pollQuestion ||
+          parsedPollOptionsArray.length < 2 ||
+          !pollDuration
+        ) {
           return res.status(400).json({
-            error: 'Poll requires question, minimum 2 options, and duration'
+            error: "Poll requires question, minimum 2 options, and duration",
           });
         }
       }
     } catch (err) {
-      return res.status(400).json({ error: "pollOptions must be valid JSON array" });
+      return res.status(400).json({
+        error: "pollOptions must be valid JSON array",
+      });
     }
 
     // -----------------------------
-    // Save Hashtags
+    // SAVE HASHTAGS
     // -----------------------------
     for (const tag of parsedHashtags) {
       await Hashtag.findOneAndUpdate(
         { name: tag.toLowerCase() },
         { $inc: { count: 1 } },
-        { upsert: true, new: true }
+        { upsert: true, new: true },
       );
     }
 
-    let postType = reqPostType || (media.length > 0 ? 'media' : 'text');
+    let postType = reqPostType || (media.length > 0 ? "media" : "text");
 
     const postData = {
       user: userId,
@@ -161,10 +369,13 @@ if (req.files?.video) {
       media,
       postType,
       hashtags: parsedHashtags,
-      type
+      type,
     };
 
-    if (postType === 'poll') {
+    // -----------------------------
+    // POLL DATA
+    // -----------------------------
+    if (postType === "poll") {
       postData.pollQuestion = pollQuestion;
       postData.pollOptions = parsedPollOptionsArray;
       postData.pollDuration = pollDuration;
@@ -175,75 +386,32 @@ if (req.files?.video) {
       postData.votedUsers = [];
     }
 
-    // RefId mapping
-    if (type === 'sangh') postData.sanghId = refId;
-    else if (type === 'panch') postData.sanghId = refId;
-    else if (type === 'sadhu') postData.sadhuId = refId;
-    else if (type === 'vyapar') postData.vyaparId = refId;
-
-
-// ASSIGN ACTIVE BOOST TO POST
-let activeBoostId = null;
-if (user.activeBoosts && user.activeBoosts.length > 0) {
-  // Find first boost which is active AND not already used
-  const unusedBoost = await BoostPlan.findOne({
-  _id: { $in: user.activeBoosts },
-  $or: [
-    { post: { $exists: false } },
-    { post: null }
-  ]
-});
-  if (!unusedBoost) {
-    return res.status(403).json({
-      error: "BOOST_ALREADY_USED",
-      message: "All your active boosts are already used for posts. Please purchase a new boost to continue posting."
-    });
-  }
-
-  activeBoostId = unusedBoost._id;
-  postData.activeBoost = activeBoostId;
-  postData.isBoosted = true;
-}
+    // -----------------------------
+    // REF ID MAPPING
+    // -----------------------------
+    if (type === "sangh") postData.sanghId = refId;
+    else if (type === "panch") postData.sanghId = refId;
+    else if (type === "sadhu") postData.sadhuId = refId;
+    else if (type === "vyapar") postData.vyaparId = refId;
 
     const post = await Post.create(postData);
 
-// -------------------------
-// LINK POST TO BOOST PLAN
-// -------------------------
-if (activeBoostId) {
-  await BoostPlan.findByIdAndUpdate(activeBoostId, { post: post._id });
-}
-
-    // increment postCount ONLY after successful post creation
-      await User.findByIdAndUpdate(
-        userId,
-        { $inc: { postCount: 1 } }
-      );
+    // increment postCount
+    await User.findByIdAndUpdate(userId, { $inc: { postCount: 1 } });
 
     if (!type) {
       user.posts.push(post._id);
       await user.save();
-    } else if (type === 'sangh' || type === 'panch') {
+    } else if (type === "sangh" || type === "panch") {
       await Sangh.findByIdAndUpdate(refId, { $push: { posts: post._id } });
     }
-    // -------------------------
-    // OPTIONAL: REMOVE EXPIRED BOOSTS
-    // -------------------------
-    const now = new Date();
-    user.activeBoosts = user.activeBoosts.filter(async (boostId) => {
-      const boost = await BoostPlan.findById(boostId);
-      return boost && boost.endDate > now;
-    });
-    if (user.activeBoosts.length === 0) user.isBoostActive = false;
-    await user.save();
 
-    await invalidateCache('combinedFeed:*');
-    await invalidateCache('combinedFeed:firstPage:limit:10');
+    await invalidateCache("combinedFeed:*");
+    await invalidateCache("combinedFeed:firstPage:limit:10");
 
     res.status(201).json(post);
-  })
+  }),
 ];
-
 const voteOnPoll = async (req, res) => {
   try {
     const { postId } = req.params;

@@ -930,7 +930,6 @@ const reviewByAdmin = asyncHandler(async (req, res) => {
     const application = await JainAadhar.findById(applicationId);
     if (!application) return errorResponse(res, "Application not found", 404);
 
-    // ✅ FIX: Sirf 'approved' wali application block karo, rejected ko allow karo
     if (application.status === "approved") {
       return errorResponse(
         res,
