@@ -73,6 +73,8 @@ const donationRoute = require('./routes/Donation/donationRoutes');
 const accountRoutes = require('./routes/Account Model/sanghClaimRoutes');
 const expenseRoutes = require('./routes/Account Model/sanghExpenseRoutes');
 const panchApplicationRoutes = require('./routes/SanghRoutes/applicationRoutes');
+const donationPaymentRoutes = require('./routes/Donation/Donationpaymentroutes');
+
 //const appVersionRoute = require('./routes/Update apk/appVersion');
 app.set('trust proxy',1);
 // connect to databse
@@ -177,6 +179,7 @@ app.use('/api', projectRoutes);
 // uplaod biolers
 app.use('/api/bailors', bailorRoutes);
 app.use('/api/donation', donationRoute);
+app.use("/api/donation/payment", donationPaymentRoutes);
 
 // Post boostup 
 app.use('/api/boost', boostRoute);

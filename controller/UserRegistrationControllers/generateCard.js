@@ -34,7 +34,7 @@ const generateJainAadharCard = async (req, res) => {
       application.gender === "Female" &&
       application.marriedStatus === "Yes"
     ) {
-      templateName = "jain_shravak_2.jpeg"; // Married Female template
+      templateName = "jain_shravak_2.jpeg";
       pitaOrPatiLabel =
         application.husbandName || application.pitaOrpatiName || "N/A";
     } else if (
@@ -47,7 +47,7 @@ const generateJainAadharCard = async (req, res) => {
       pitaOrPatiLabel =
         application.fatherName || application.pitaOrpatiName || "N/A";
     } else {
-      templateName = "jain_shravak_2.jpeg";
+      templateName = "jain_shravak_1.jpeg";
       pitaOrPatiLabel = application.pitaOrpatiName || "N/A";
     }
 
