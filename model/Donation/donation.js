@@ -1,37 +1,34 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const donationSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
+      ref: "User",
+      required: true,
     },
 
     sanghId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'HierarchicalSangh',
-      required: true
+      ref: "HierarchicalSangh",
+      required: true,
     },
 
     type: {
       type: String,
-      default: 'donation'
+      default: "donation",
     },
 
-    // 🎉 Occasion title (Birthday / Anniversary / etc.)
     title: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
-
-
 
     purpose: {
-      type: String
+      type: String,
     },
-        onBehalfOf: {
+    onBehalfOf: {
       type: String,
     },
 
@@ -42,27 +39,27 @@ const donationSchema = new mongoose.Schema(
 
     amount: {
       type: String,
-      required: true
+      required: true,
     },
     isGuptDan: {
       type: Boolean,
-      default: false
+      default: false,
     },
     donationPhoto: {
-      type: String
+      type: String,
     },
 
     paymentStatus: {
       type: String,
-      enum: ['pending', 'success', 'failed'],
-      default: 'pending'
+      enum: ["pending", "success", "failed"],
+      default: "pending",
     },
 
     paymentScreenshot: {
-      type: String
-    }
+      type: String,
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-module.exports = mongoose.model('Donation', donationSchema);
+module.exports = mongoose.model("Donation", donationSchema);

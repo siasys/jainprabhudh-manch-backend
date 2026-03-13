@@ -74,6 +74,7 @@ const accountRoutes = require('./routes/Account Model/sanghClaimRoutes');
 const expenseRoutes = require('./routes/Account Model/sanghExpenseRoutes');
 const panchApplicationRoutes = require('./routes/SanghRoutes/applicationRoutes');
 const donationPaymentRoutes = require('./routes/Donation/Donationpaymentroutes');
+const matrimonyPaymentRoutes = require('./routes/Matrimonial/Matrimonialpaymentroutes');
 
 //const appVersionRoute = require('./routes/Update apk/appVersion');
 app.set('trust proxy',1);
@@ -146,6 +147,7 @@ app.use('/api/panchayat', panchayatIdPasswordRoutes);
 app.use('/api/tirth', tirthIdPasswordRoutes);
 app.use('/api/jainvyapar', jainVyaparRoute);
 app.use('/api/biodata', biodataRoutes);
+app.use("/api/matrimonial-payment", matrimonyPaymentRoutes);
 app.use("/api/rojgar", rojgarRoutes);
 app.use('/api/reporting', reportingRoutes);
 app.use('/api/suggestion-complaint', suggestionComplaintRoutes);

@@ -15,10 +15,12 @@ const initializeWebSocket = (server) => {
       methods: ["GET", "POST"],
       credentials: true,
     },
-    transports: ['websocket', 'polling'],
+    transports: ["websocket", "polling"],
     allowUpgrades: true,
     pingTimeout: 60000,
     pingInterval: 25000,
+    upgradeTimeout: 30000,
+    maxHttpBufferSize: 50 * 1024 * 1024,
   });
 
 io.use(async (socket, next) => {
@@ -41,13 +43,18 @@ io.use(async (socket, next) => {
     }
 
     // DB update
-    const result = await User.findByIdAndUpdate(
-      socket.userId,
-      { status: "online", lastSeen: null },
-      { new: true }
-    );
+    try {
+      await User.findByIdAndUpdate(
+        socket.userId,
+        { status: "online", lastSeen: null },
+        { new: true },
+      );
+    } catch (dbErr) {
+      console.warn("⚠️ DB update failed but socket allowed:", dbErr.message);
+      // ✅ DB fail hone pe bhi socket connect hone do
+    }
 
-    console.log("✅ DB update result:", result);
+    // console.log("✅ DB update result:", result);
 
     return next();
   } catch (err) {
@@ -260,22 +267,25 @@ const updateUserStatus = async (userId, status) => {
 
   // ✅ Update in database
   try {
-    const result = await User.findByIdAndUpdate(
+    await User.findByIdAndUpdate(
       userId,
       {
         status: statusObj.status,
         lastSeen: statusObj.lastSeen,
       },
-      { new: true } // optional: returns updated doc
+      { new: true },
     );
     //console.log("✅ DB update result:", result);
     if (result) {
-     // console.log(`✅ DB updated: user ${userId} is now ${statusObj.status}`);
+      // console.log(`✅ DB updated: user ${userId} is now ${statusObj.status}`);
     } else {
       console.warn(`⚠️ No user found in DB for ID ${userId}`);
     }
   } catch (err) {
-    console.error(`❌ Failed to update user ${userId} status in DB:`, err.message);
+    console.error(
+      `❌ Failed to update user ${userId} status in DB:`,
+      err.message,
+    );
   }
 };
 
