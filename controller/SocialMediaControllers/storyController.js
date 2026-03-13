@@ -168,7 +168,7 @@ const createStory = asyncHandler(async (req, res) => {
       .populate("userId", "fullName profilePicture")
       .populate(
         "media.mentionUsers",
-        "fullName profilePicture accountType accountStatus sadhuName tirthName",
+        "fullName profilePicture accountType accountStatus sadhuName tirthName businessName",
       );
 
     res.status(201).json({
@@ -193,7 +193,7 @@ const getAllStories = asyncHandler(async (req, res) => {
     const userId = req.query.userId || req.user.id;
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    // ✅ Reported stories
+    // Reported stories
     const reportedStories = await StoryReport.find({
       reportedBy: userId,
     }).select("storyId");
@@ -255,31 +255,31 @@ const getAllStories = asyncHandler(async (req, res) => {
     })
       .populate(
         "userId",
-        "profilePicture firstName lastName fullName accountType accountStatus sadhuName tirthName"
+        "profilePicture firstName lastName fullName accountType accountStatus sadhuName tirthName businessName",
       )
       .populate("sanghId", "name sanghImage")
       .populate("media.mentionUsers", "fullName profilePicture _id");
 
     // ✅ MEDIA LEVEL 24h FILTER
-    const filteredStories = stories
-      .map((story) => {
-        const filteredMedia = story.media.filter(
-          (mediaItem) =>
-            mediaItem.createdAt &&
-            new Date(mediaItem.createdAt) >= twentyFourHoursAgo
-        );
+   const filteredStories = stories
+     .map((story) => {
+       const storyObj = story.toObject(); // ✅ pehle convert karo
 
-        if (filteredMedia.length === 0) return null;
+       const filteredMedia = storyObj.media.filter(
+         (mediaItem) =>
+           mediaItem.createdAt &&
+           new Date(mediaItem.createdAt) >= twentyFourHoursAgo,
+       );
 
-        return {
-          ...story.toObject(),
-          media: filteredMedia,
-          isMuted: mutedUserIds.includes(
-            story.userId?._id?.toString()
-          ),
-        };
-      })
-      .filter(Boolean);
+       if (filteredMedia.length === 0) return null;
+
+       return {
+         ...storyObj,
+         media: filteredMedia,
+         isMuted: mutedUserIds.includes(story.userId?._id?.toString()),
+       };
+     })
+     .filter(Boolean);
 
     res.status(200).json({
       success: true,
