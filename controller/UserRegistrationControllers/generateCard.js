@@ -170,15 +170,6 @@ const generateJainAadharCard = async (req, res) => {
 
     yPos = wrapText(ctx, fullAddress, xPos, yPos, maxWidth, 40);
 
-    // ✅ Mobile — contactDetails.number (actual DB field)
-    const mobileNumber =
-      application.mobileNumber || application.contactDetails?.number;
-    if (mobileNumber) {
-      const mobileText = `Mobile: ${mobileNumber}`;
-      const mobileTextWidth = ctx.measureText(mobileText).width;
-      ctx.fillText(mobileText, width - mobileTextWidth - 100, height + 240);
-    }
-
     // === QR Code ===
     const qrUrl = `https://jainprabhudh-manch-backend.onrender.com/api/generate-card/verify/jain-shravak/${application.jainAadharNumber}`;
     const qrCodeDataURL = await QRCode.toDataURL(qrUrl);
