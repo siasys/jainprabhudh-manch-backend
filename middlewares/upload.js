@@ -195,63 +195,10 @@ const compressImage = async (buffer) => {
   }
 };
 const compressVideo = async (inputBuffer) => {
-  const tempInput = path.join(os.tmpdir(), `temp-in-${Date.now()}.mp4`);
-  const tempOutput = path.join(os.tmpdir(), `temp-out-${Date.now()}.mp4`);
-
-  try {
-    await fs.writeFile(tempInput, inputBuffer);
-
-    return await Promise.race([
-      // ✅ Compression
-      new Promise((resolve) => {
-        ffmpeg(tempInput)
-          .outputOptions([
-            "-vcodec libx264",
-            "-crf 28",
-            "-preset superfast",
-            "-movflags +faststart",
-            "-vf scale=w=720:h=-2",
-            "-maxrate 1M",
-            "-bufsize 2M",
-          ])
-          .output(tempOutput)
-          .on("end", async () => {
-            try {
-              const result = await fs.readFile(tempOutput);
-              await Promise.all([
-                fs.unlink(tempInput).catch(() => {}),
-                fs.unlink(tempOutput).catch(() => {}),
-              ]);
-              resolve(result);
-            } catch (e) {
-              // ✅ Read fail ho to original bhejo
-              resolve(inputBuffer);
-            }
-          })
-          .on("error", async (err) => {
-            console.warn("FFmpeg Error:", err.message);
-            await fs.unlink(tempInput).catch(() => {});
-            await fs.unlink(tempOutput).catch(() => {});
-            // ✅ Compress fail — original bhejo, crash mat karo
-            resolve(inputBuffer);
-          })
-          .run();
-      }),
-
-      // ✅ 2 min timeout — server hang band
-      new Promise((resolve) =>
-        setTimeout(async () => {
-          console.warn("⚠️ Video compression timeout — sending original");
-          await fs.unlink(tempInput).catch(() => {});
-          await fs.unlink(tempOutput).catch(() => {});
-          resolve(inputBuffer);
-        }, 120000),
-      ),
-    ]);
-  } catch (error) {
-    console.warn("Video Compression Catch:", error.message);
-    return inputBuffer;
-  }
+  // ✅ Presigned URL flow mein video server pe aati hi nahi
+  // Yeh function ab sirf backup hai — directly original return karo
+  console.warn("⚠️ compressVideo called — presigned URL flow use karo");
+  return inputBuffer;
 };
 const compressPDF = async (buffer) => {
   try {
@@ -275,9 +222,9 @@ const compressFiles = async (req, res, next) => {
       if (file.mimetype.startsWith("image/")) {
         file.buffer = await compressImage(file.buffer);
       } else if (file.mimetype.startsWith("video/")) {
-        if (file.size > 5 * 1024 * 1024) {
-          file.buffer = await compressVideo(file.buffer);
-        }
+        // ✅ Video compression BAND kiya — Presigned URL se direct S3 pe jaayegi
+        // Server pe video aayegi hi nahi ab, isliye yahan kuch nahi karna
+        // console.log(`📹 Video skipped in compressFiles — using presigned URL`);
       } else if (file.mimetype === "application/pdf") {
         file.buffer = await compressPDF(file.buffer);
       }
