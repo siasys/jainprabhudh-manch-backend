@@ -170,6 +170,7 @@ const generateJainAadharCard = async (req, res) => {
 
     yPos = wrapText(ctx, fullAddress, xPos, yPos, maxWidth, 40);
 
+
     // === QR Code ===
     const qrUrl = `https://jainprabhudh-manch-backend.onrender.com/api/generate-card/verify/jain-shravak/${application.jainAadharNumber}`;
     const qrCodeDataURL = await QRCode.toDataURL(qrUrl);
