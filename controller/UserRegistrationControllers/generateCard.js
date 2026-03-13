@@ -4,20 +4,49 @@ const JainAadhar = require("../../model/UserRegistrationModels/jainAadharModel")
 const path = require("path");
 const fs = require("fs");
 const axios = require("axios");
-
+const sharp = require("sharp");
 // Force Pango backend (fixes Devanagari rendering issue)
 process.env.PANGOCAIRO_BACKEND = "fontconfig";
 
+// ================= FONT LOAD =================
 const fontPath = path.resolve(
   __dirname,
-  "../../Public/fonts/NotoSansDevanagari-Regular.ttf",
+  "../../Public/fonts/NotoSansDevanagari-Regular.ttf"
 );
-if (!fs.existsSync(fontPath)) {
-  console.error("❌ Font file not found at:", fontPath);
-} else {
-  console.log("✅ Font file found:", fontPath);
+
+if (fs.existsSync(fontPath)) {
   registerFont(fontPath, { family: "NotoDevanagari" });
+  console.log("✅ Font Loaded");
+} else {
+  console.error("❌ Font not found:", fontPath);
 }
+
+// ================= TEMPLATE PRELOAD =================
+let templateShravak1;
+let templateShravak2;
+let templateBack;
+
+async function loadTemplates() {
+  try {
+    templateShravak1 = await loadImage(
+      path.join(__dirname, "../../Public/jain_shravak_1.jpeg")
+    );
+
+    templateShravak2 = await loadImage(
+      path.join(__dirname, "../../Public/jain_shravak_2.jpeg")
+    );
+
+    templateBack = await loadImage(
+      path.join(__dirname, "../../Public/jain_shravak_3.jpeg")
+    );
+
+    console.log("✅ Card Templates Loaded");
+  } catch (err) {
+    console.error("❌ Template Load Error:", err);
+  }
+}
+
+loadTemplates();
 
 const generateJainAadharCard = async (req, res) => {
   try {
@@ -76,7 +105,12 @@ const generateJainAadharCard = async (req, res) => {
       const profileRes = await axios.get(application.userProfile, {
         responseType: "arraybuffer",
       });
-      const profileImg = await loadImage(profileRes.data);
+    const resizedBuffer = await sharp(profileRes.data)
+      .resize(220, 240)
+      .jpeg({ quality: 80 })
+      .toBuffer();
+
+    const profileImg = await loadImage(resizedBuffer);
 
       const imgX = 760;
       const imgY = 170;
@@ -173,8 +207,8 @@ const generateJainAadharCard = async (req, res) => {
 
     // === QR Code ===
     const qrUrl = `https://jainprabhudh-manch-backend.onrender.com/api/generate-card/verify/jain-shravak/${application.jainAadharNumber}`;
-    const qrCodeDataURL = await QRCode.toDataURL(qrUrl);
-    const qrImage = await loadImage(qrCodeDataURL);
+  const qrBuffer = await QRCode.toBuffer(qrUrl, { width: 200 });
+  const qrImage = await loadImage(qrBuffer);
     ctx.drawImage(qrImage, 750, height + 280, 180, 180);
 
     res.setHeader("Content-Type", "image/jpeg");

@@ -16,6 +16,7 @@ const { createCanvas, loadImage } = require("canvas");
 const path = require("path");
 const fs = require("fs");
 const { default: axios } = require("axios");
+const sharp = require("sharp");
 // Helper Functions
 const formatFullName = (firstName, lastName) => {
   return lastName.toLowerCase() === "jain"
@@ -2801,6 +2802,32 @@ const updateSpecializedSangh = asyncHandler(async (req, res) => {
     return errorResponse(res, error.message, 500);
   }
 });
+
+
+let memberFrontTemplate;
+let memberBackTemplate;
+
+// ===== Preload Templates =====
+async function loadMemberTemplates() {
+  try {
+    memberFrontTemplate = await loadImage(
+      path.join(__dirname, "../../Public/member_front.jpg"),
+    );
+
+    memberBackTemplate = await loadImage(
+      path.join(__dirname, "../../Public/member_back.jpg"),
+    );
+
+    console.log("✅ Member card templates loaded");
+  } catch (err) {
+    console.error("❌ Template load error:", err);
+  }
+}
+
+loadMemberTemplates();
+
+// ================= GENERATE MEMBER CARD =================
+
 const generateMemberCard = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -2810,60 +2837,72 @@ const generateMemberCard = async (req, res) => {
 
     // ===== Check in regular members =====
     sangh = await HierarchicalSangh.findOne({ "members.userId": userId });
+
     if (sangh) {
       user = sangh.members.find((m) => m.userId.toString() === userId);
     }
 
-    // ===== If not found, check in foundation officeBearers =====
+    // ===== If not found check officeBearers =====
     if (!user) {
       sangh = await HierarchicalSangh.findOne({
         "officeBearers.userId": userId,
       });
+
       if (sangh) {
         user = sangh.officeBearers.find((m) => m.userId.toString() === userId);
       }
     }
 
-    // ===== If still not found, return 404 =====
-    if (!user)
+    // ===== If still not found =====
+    if (!user) {
       return res
         .status(404)
         .json({ message: "User not found in members or officeBearers." });
+    }
 
     // ===== Membership Number =====
     function getRandomThreeDigitNumber() {
       return Math.floor(100 + Math.random() * 900);
     }
+
     const level = sangh.level || "unknown";
     const randomNum = getRandomThreeDigitNumber();
-    const membershipNumber = `${level}/00${randomNum.toString().padStart(3, "0")}`;
+
+    const membershipNumber = `${level}/00${randomNum
+      .toString()
+      .padStart(3, "0")}`;
 
     // ===== Canvas setup =====
     const width = 1011;
     const height = 639;
+
     const combinedCanvas = createCanvas(width, height * 2);
     const ctx = combinedCanvas.getContext("2d");
 
-    const frontTemplate = await loadImage(
-      path.join(__dirname, "../../Public/member_front.jpg"),
-    );
-    const backTemplate = await loadImage(
-      path.join(__dirname, "../../Public/member_back.jpg"),
-    );
+    // ===== FRONT TEMPLATE =====
+    ctx.drawImage(memberFrontTemplate, 0, 0, width, height);
 
-    // === FRONT ===
-    ctx.drawImage(frontTemplate, 0, 0, width, height);
-
+    // ===== USER IMAGE =====
     if (user.userImage) {
       try {
         const response = await axios.get(user.userImage, {
           responseType: "arraybuffer",
+          timeout: 5000,
+          headers: {
+            "User-Agent": "Mozilla/5.0",
+          },
         });
-        const imageBuffer = Buffer.from(response.data, "binary");
-        const userPhoto = await loadImage(imageBuffer);
+
+        const resizedBuffer = await sharp(response.data)
+          .resize(220, 260)
+          .jpeg({ quality: 80 })
+          .toBuffer();
+
+        const userPhoto = await loadImage(resizedBuffer);
+
         ctx.drawImage(userPhoto, 65, 180, 220, 260);
       } catch (err) {
-        console.error("Error loading user photo:", err);
+        console.error("Error loading user photo:", err.message);
       }
     }
 
@@ -2873,61 +2912,72 @@ const generateMemberCard = async (req, res) => {
     ctx.fillText(`${user.name || ""}`, 570, 196);
     ctx.fillText(`${membershipNumber}`, 570, 260);
 
-    // ===== Correct postMember logic =====
-    // For officeBearers, field is "postMember"; for regular members it could also be "postMember" or "description"
-let postText = user.postMember || user.description || "";
+    // ===== postMember logic =====
+    let postText = user.postMember || user.description || "";
 
-// Agar postText empty hai, toh officeBearers mein userId se role dhundo
-if (!postText) {
-  const officeBearerEntry = sangh.officeBearers?.find(
-    (ob) => ob.userId.toString() === userId,
-  );
-  if (officeBearerEntry) {
-    // role ko capitalize karo: "president" → "President"
-    postText = officeBearerEntry.role
-      ? officeBearerEntry.role.charAt(0).toUpperCase() +
-        officeBearerEntry.role.slice(1)
-      : "";
-  }
-}
+    if (!postText) {
+      const officeBearerEntry = sangh.officeBearers?.find(
+        (ob) => ob.userId.toString() === userId,
+      );
 
-ctx.fillText(`${postText}`, 570, 320);
+      if (officeBearerEntry) {
+        postText = officeBearerEntry.role
+          ? officeBearerEntry.role.charAt(0).toUpperCase() +
+            officeBearerEntry.role.slice(1)
+          : "";
+      }
+    }
+
+    ctx.fillText(`${postText}`, 570, 320);
+
     if (user.jainAadharNumber)
       ctx.fillText(`${user.jainAadharNumber}`, 570, 379);
 
-    // Bottom center text: Created By
+    // ===== Bottom Created By =====
     function getRandomFourDigitNumber() {
       return Math.floor(1000 + Math.random() * 9000);
     }
-    const createdByText = `Created By: ${sangh.level || "unknown"}/JA${getRandomFourDigitNumber()}`;
+
+    const createdByText = `Created By: ${
+      sangh.level || "unknown"
+    }/JA${getRandomFourDigitNumber()}`;
+
     ctx.font = "bold 28px Georgia";
     ctx.textAlign = "center";
     ctx.fillStyle = "black";
+
     ctx.fillText(createdByText, width / 2, height - 90);
 
-    // === BACK ===
-    ctx.drawImage(backTemplate, 0, height, width, height);
+    // ===== BACK TEMPLATE =====
+    ctx.drawImage(memberBackTemplate, 0, height, width, height);
+
     ctx.font = "26px Georgia";
     ctx.fillStyle = "black";
     ctx.textAlign = "left";
+
     const addr = user.address || {};
+
     const line1 = addr.street || "";
-    const line2 = `${addr.city || ""} ${addr.state || ""},  ${addr.pincode || ""}`;
+    const line2 = `${addr.city || ""} ${addr.state || ""},  ${
+      addr.pincode || ""
+    }`;
 
     ctx.fillText(line1, 190, height + 182);
     ctx.fillText(line2, 190, height + 220);
 
-    // === RESPONSE ===
+    // ===== RESPONSE =====
     res.setHeader("Content-Type", "image/jpeg");
+
     combinedCanvas.createJPEGStream().pipe(res);
   } catch (err) {
     console.error(err);
-    res
-      .status(500)
-      .json({ message: "Failed to generate member card", error: err.message });
+
+    res.status(500).json({
+      message: "Failed to generate member card",
+      error: err.message,
+    });
   }
 };
-
 const generateMembersCard = async (req, res) => {
   try {
     const { userId } = req.params;
