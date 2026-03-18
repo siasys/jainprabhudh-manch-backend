@@ -1,16 +1,16 @@
-const Story = require('../../model/SocialMediaModels/storyModel');
-const User = require('../../model/UserRegistrationModels/userModel');
+const Story = require("../../model/SocialMediaModels/storyModel");
+const User = require("../../model/UserRegistrationModels/userModel");
 const asyncHandler = require("express-async-handler");
-const { successResponse, errorResponse } = require('../../utils/apiResponse');
-const { convertS3UrlToCDN } = require('../../utils/s3Utils');
-const StoryReport = require('../../model/SocialMediaModels/StoryReport');
-const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
-const Friendship = require('../../model/SocialMediaModels/friendshipModel');
+const { successResponse, errorResponse } = require("../../utils/apiResponse");
+const { convertS3UrlToCDN } = require("../../utils/s3Utils");
+const StoryReport = require("../../model/SocialMediaModels/StoryReport");
+const HierarchicalSangh = require("../../model/SanghModels/hierarchicalSanghModel");
+const Friendship = require("../../model/SocialMediaModels/friendshipModel");
 const { containsBadWords } = require("../../utils/filterBadWords");
 const Notification = require("../../model/SocialMediaModels/notificationModel");
 
-const { moderateImage, moderateVideo } = require('../../utils/moderation');
-const { default: mongoose } = require('mongoose');
+const { moderateImage, moderateVideo } = require("../../utils/moderation");
+const { default: mongoose } = require("mongoose");
 
 const createStory = asyncHandler(async (req, res) => {
   try {
@@ -123,46 +123,46 @@ const createStory = asyncHandler(async (req, res) => {
       });
     }
 
-   const senderUser = await User.findById(userId).select("fullName");
+    const senderUser = await User.findById(userId).select("fullName");
 
-   const allMentionedUserIds = new Set();
-   // mediaItem ka index track karo taaki mediaId mil sake
-   const mentionMediaMap = new Map(); // userId -> mediaId
+    const allMentionedUserIds = new Set();
+    // mediaItem ka index track karo taaki mediaId mil sake
+    const mentionMediaMap = new Map(); // userId -> mediaId
 
-   for (const [index, mediaItem] of mediaArray.entries()) {
-     if (Array.isArray(mediaItem.mentionUsers)) {
-       for (const mentionedId of mediaItem.mentionUsers) {
-         const mentionedIdStr = mentionedId.toString();
-         if (mentionedIdStr !== userId.toString()) {
-           allMentionedUserIds.add(mentionedIdStr);
-           // Saved story ke media ka _id lo
-           const savedMedia =
-             savedStory.media[
-               existingStory
-                 ? savedStory.media.length - mediaArray.length + index
-                 : index
-             ];
-           mentionMediaMap.set(mentionedIdStr, savedMedia?._id || null);
-         }
-       }
-     }
-   }
+    for (const [index, mediaItem] of mediaArray.entries()) {
+      if (Array.isArray(mediaItem.mentionUsers)) {
+        for (const mentionedId of mediaItem.mentionUsers) {
+          const mentionedIdStr = mentionedId.toString();
+          if (mentionedIdStr !== userId.toString()) {
+            allMentionedUserIds.add(mentionedIdStr);
+            // Saved story ke media ka _id lo
+            const savedMedia =
+              savedStory.media[
+                existingStory
+                  ? savedStory.media.length - mediaArray.length + index
+                  : index
+              ];
+            mentionMediaMap.set(mentionedIdStr, savedMedia?._id || null);
+          }
+        }
+      }
+    }
 
-   if (allMentionedUserIds.size > 0) {
-     const notificationDocs = Array.from(allMentionedUserIds).map(
-       (mentionedId) => ({
-         senderId: userId,
-         receiverId: new mongoose.Types.ObjectId(mentionedId),
-         type: "mention",
-         message: `${senderUser.fullName} mentioned you in a story`,
-         isRead: false,
-         storyId: savedStory._id, // ✅ Story ID
-         mediaId: mentionMediaMap.get(mentionedId) || null, // ✅ Media ID
-       }),
-     );
+    if (allMentionedUserIds.size > 0) {
+      const notificationDocs = Array.from(allMentionedUserIds).map(
+        (mentionedId) => ({
+          senderId: userId,
+          receiverId: new mongoose.Types.ObjectId(mentionedId),
+          type: "mention",
+          message: `${senderUser.fullName} mentioned you in a story`,
+          isRead: false,
+          storyId: savedStory._id, // ✅ Story ID
+          mediaId: mentionMediaMap.get(mentionedId) || null, // ✅ Media ID
+        }),
+      );
 
-     await Notification.insertMany(notificationDocs);
-   }
+      await Notification.insertMany(notificationDocs);
+    }
     // 📌 Populate mentionUsers properly
     const populatedStory = await Story.findById(savedStory._id)
       .populate("userId", "fullName profilePicture")
@@ -198,14 +198,10 @@ const getAllStories = asyncHandler(async (req, res) => {
       reportedBy: userId,
     }).select("storyId");
 
-    const hideStoryIds = reportedStories.map((r) =>
-      r.storyId.toString()
-    );
+    const hideStoryIds = reportedStories.map((r) => r.storyId.toString());
 
     // ✅ Current user muted list
-    const currentUser = await User.findById(userId).select(
-      "mutedStoryUsers"
-    );
+    const currentUser = await User.findById(userId).select("mutedStoryUsers");
 
     const mutedUserIds =
       currentUser?.mutedStoryUsers?.map((id) => id.toString()) || [];
@@ -215,9 +211,7 @@ const getAllStories = asyncHandler(async (req, res) => {
       hiddenStoriesFrom: userId,
     }).select("_id");
 
-    const hiddenByUserIds = usersWhoHiddenMe.map((u) =>
-      u._id.toString()
-    );
+    const hiddenByUserIds = usersWhoHiddenMe.map((u) => u._id.toString());
 
     // ✅ Following
     const followingList = await Friendship.find({
@@ -231,19 +225,11 @@ const getAllStories = asyncHandler(async (req, res) => {
       followStatus: "following",
     }).select("follower");
 
-    const followingIds = followingList.map((f) =>
-      f.following.toString()
-    );
+    const followingIds = followingList.map((f) => f.following.toString());
 
-    const followerIds = followerList.map((f) =>
-      f.follower.toString()
-    );
+    const followerIds = followerList.map((f) => f.follower.toString());
 
-    const storyUserIds = new Set([
-      ...followingIds,
-      ...followerIds,
-      userId,
-    ]);
+    const storyUserIds = new Set([...followingIds, ...followerIds, userId]);
 
     // ✅ Fetch stories WITHOUT createdAt filter
     const stories = await Story.find({
@@ -261,32 +247,31 @@ const getAllStories = asyncHandler(async (req, res) => {
       .populate("media.mentionUsers", "fullName profilePicture _id");
 
     // ✅ MEDIA LEVEL 24h FILTER
-   const filteredStories = stories
-     .map((story) => {
-       const storyObj = story.toObject(); // ✅ pehle convert karo
+    const filteredStories = stories
+      .map((story) => {
+        const storyObj = story.toObject(); // ✅ pehle convert karo
 
-       const filteredMedia = storyObj.media.filter(
-         (mediaItem) =>
-           mediaItem.createdAt &&
-           new Date(mediaItem.createdAt) >= twentyFourHoursAgo,
-       );
+        const filteredMedia = storyObj.media.filter(
+          (mediaItem) =>
+            mediaItem.createdAt &&
+            new Date(mediaItem.createdAt) >= twentyFourHoursAgo,
+        );
 
-       if (filteredMedia.length === 0) return null;
+        if (filteredMedia.length === 0) return null;
 
-       return {
-         ...storyObj,
-         media: filteredMedia,
-         isMuted: mutedUserIds.includes(story.userId?._id?.toString()),
-       };
-     })
-     .filter(Boolean);
+        return {
+          ...storyObj,
+          media: filteredMedia,
+          isMuted: mutedUserIds.includes(story.userId?._id?.toString()),
+        };
+      })
+      .filter(Boolean);
 
     res.status(200).json({
       success: true,
       count: filteredStories.length,
       data: filteredStories,
     });
-
   } catch (error) {
     console.error("Error fetching stories:", error);
     res.status(500).json({
@@ -381,41 +366,41 @@ const getStoriesByUser = asyncHandler(async (req, res) => {
 });
 // Delete Story
 const deleteStory = asyncHandler(async (req, res) => {
-    try {
-        const { userId, storyId } = req.params;
-        // Verify story ownership
-        const story = await Story.findOne({
-            _id: storyId,
-            userId: req.user._id // Ensure the authenticated user owns the story
-        });
+  try {
+    const { userId, storyId } = req.params;
+    // Verify story ownership
+    const story = await Story.findOne({
+      _id: storyId,
+      userId: req.user._id, // Ensure the authenticated user owns the story
+    });
 
-        if (!story) {
-            return res.status(404).json({
-                success: false,
-                message: "Story not found or unauthorized"
-            });
-        }
-
-        // Delete the story
-        await Story.findByIdAndDelete(storyId);
-
-        // Remove story reference from User
-        await User.findByIdAndUpdate(userId, {
-            $pull: { story: storyId }
-        });
-
-        res.json({
-            success: true,
-            message: "Story deleted successfully"
-        });
-    } catch (error) {
-        console.error("Error deleting story:", error);
-        res.status(500).json({
-            success: false,
-            message: "Error deleting story",
-            error: error.message
-        });
+    if (!story) {
+      return res.status(404).json({
+        success: false,
+        message: "Story not found or unauthorized",
+      });
     }
+
+    // Delete the story
+    await Story.findByIdAndDelete(storyId);
+
+    // Remove story reference from User
+    await User.findByIdAndUpdate(userId, {
+      $pull: { story: storyId },
+    });
+
+    res.json({
+      success: true,
+      message: "Story deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error deleting story:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error deleting story",
+      error: error.message,
+    });
+  }
 });
 // delete story media by mediaId
 const deleteStoryMedia = asyncHandler(async (req, res) => {
@@ -428,14 +413,14 @@ const deleteStoryMedia = asyncHandler(async (req, res) => {
     if (!story) {
       return res.status(404).json({
         success: false,
-        message: "Story not found"
+        message: "Story not found",
       });
     }
 
-    if (!story.userId.equals(userId) && userRole !== 'superadmin') {
+    if (!story.userId.equals(userId) && userRole !== "superadmin") {
       return res.status(403).json({
         success: false,
-        message: "Not authorized to delete this story"
+        message: "Not authorized to delete this story",
       });
     }
 
@@ -444,7 +429,7 @@ const deleteStoryMedia = asyncHandler(async (req, res) => {
     if (!mediaExists) {
       return res.status(404).json({
         success: false,
-        message: "Media not found in this story"
+        message: "Media not found in this story",
       });
     }
 
@@ -457,7 +442,7 @@ const deleteStoryMedia = asyncHandler(async (req, res) => {
 
       // Remove story reference from User
       await User.findByIdAndUpdate(story.userId, {
-        $pull: { story: storyId }
+        $pull: { story: storyId },
       });
 
       // Delete related story reports
@@ -466,7 +451,7 @@ const deleteStoryMedia = asyncHandler(async (req, res) => {
       return res.json({
         success: true,
         message: "Story and related reports deleted successfully",
-        storyDeleted: true
+        storyDeleted: true,
       });
     }
 
@@ -477,15 +462,14 @@ const deleteStoryMedia = asyncHandler(async (req, res) => {
       success: true,
       message: "Media deleted successfully",
       data: story,
-      storyDeleted: false
+      storyDeleted: false,
     });
-
   } catch (error) {
     console.error("Error deleting story media:", error);
     res.status(500).json({
       success: false,
       message: "Error deleting story media",
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -495,9 +479,9 @@ const adminDeleteStory = asyncHandler(async (req, res) => {
     const userRole = req.user.role;
 
     if (userRole !== "superadmin") {
-      return res.status(403).json({ 
-        success: false, 
-        message: "Only superadmin can delete stories." 
+      return res.status(403).json({
+        success: false,
+        message: "Only superadmin can delete stories.",
       });
     }
 
@@ -505,7 +489,7 @@ const adminDeleteStory = asyncHandler(async (req, res) => {
     if (!story) {
       return res.status(404).json({
         success: false,
-        message: "Story not found"
+        message: "Story not found",
       });
     }
 
@@ -514,7 +498,7 @@ const adminDeleteStory = asyncHandler(async (req, res) => {
 
     // Remove from user
     await User.findByIdAndUpdate(story.userId, {
-      $pull: { story: storyId }
+      $pull: { story: storyId },
     });
 
     // Delete reports
@@ -522,14 +506,13 @@ const adminDeleteStory = asyncHandler(async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Story deleted by superadmin"
+      message: "Story deleted by superadmin",
     });
-
   } catch (error) {
     return res.status(500).json({
       success: false,
       message: "Error deleting story",
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -564,7 +547,7 @@ const viewStory = asyncHandler(async (req, res) => {
 
   // ❌ already viewed hai to dubara mat add karo
   const alreadyViewed = media.views?.some(
-    v => v.userId.toString() === viewerId.toString()
+    (v) => v.userId.toString() === viewerId.toString(),
   );
 
   if (!alreadyViewed) {
@@ -614,8 +597,9 @@ const getStoryViews = asyncHandler(async (req, res) => {
 
   // Populate user details
   await story.populate({
-    path: 'media.views.userId',
-    select: 'fullName profilePicture accountType accountStatus sadhuName tirthName businessName'
+    path: "media.views.userId",
+    select:
+      "fullName profilePicture accountType accountStatus sadhuName tirthName businessName",
   });
 
   // Get the populated media again
@@ -624,14 +608,14 @@ const getStoryViews = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     totalViews: populatedMedia.views.length,
-    viewers: populatedMedia.views.map(v => {
-      let displayName = 'User';
-      
-      if (v.userId.accountType === 'business' && v.userId.businessName) {
+    viewers: populatedMedia.views.map((v) => {
+      let displayName = "User";
+
+      if (v.userId.accountType === "business" && v.userId.businessName) {
         displayName = v.userId.businessName;
-      } else if (v.userId.accountType === 'sadhu' && v.userId.sadhuName) {
+      } else if (v.userId.accountType === "sadhu" && v.userId.sadhuName) {
         displayName = v.userId.sadhuName;
-      } else if (v.userId.accountType === 'tirth' && v.userId.tirthName) {
+      } else if (v.userId.accountType === "tirth" && v.userId.tirthName) {
         displayName = v.userId.tirthName;
       } else if (v.userId.fullName) {
         displayName = v.userId.fullName;
@@ -681,14 +665,14 @@ const toggleStoryMediaLike = asyncHandler(async (req, res) => {
 
     if (userId.toString() !== story.userId.toString()) {
       try {
-       const notification = new Notification({
-         senderId: userId,
-         receiverId: story.userId,
-         type: "like",
-         message: `${req.user.fullName} liked your story`,
-         storyId: storyId, // ✅ storyId field
-         mediaId: mediaId, // ✅ mediaId field
-       });
+        const notification = new Notification({
+          senderId: userId,
+          receiverId: story.userId,
+          type: "like",
+          message: `${req.user.fullName} liked your story`,
+          storyId: storyId, // ✅ storyId field
+          mediaId: mediaId, // ✅ mediaId field
+        });
 
         await notification.save();
 
@@ -717,8 +701,9 @@ const getStoryMediaLikes = asyncHandler(async (req, res) => {
   const { storyId, mediaId } = req.params;
 
   const story = await Story.findById(storyId).populate({
-    path: 'media.likes.userId',
-    select: 'fullName profilePicture accountType businessName sadhuName tirthName',
+    path: "media.likes.userId",
+    select:
+      "fullName profilePicture accountType businessName sadhuName tirthName",
   });
 
   if (!story) {
@@ -739,18 +724,18 @@ const getStoryMediaLikes = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     totalLikes: media.likes.length,
-    likes: media.likes.map(like => {
+    likes: media.likes.map((like) => {
       const u = like.userId;
       return {
         _id: u._id,
         name:
-          u.accountType === 'business'
+          u.accountType === "business"
             ? u.businessName
-            : u.accountType === 'sadhu'
-            ? u.sadhuName
-            : u.accountType === 'tirth'
-            ? u.tirthName
-            : u.fullName,
+            : u.accountType === "sadhu"
+              ? u.sadhuName
+              : u.accountType === "tirth"
+                ? u.tirthName
+                : u.fullName,
         profilePicture: u.profilePicture,
         likedAt: like.likedAt,
       };
@@ -797,15 +782,14 @@ const addStoryMediaComment = asyncHandler(async (req, res) => {
   // ✅ Notification - apne aap ko mat bhejo
   if (userId.toString() !== story.userId.toString()) {
     try {
-         const notification = new Notification({
-           senderId: userId,
-           receiverId: story.userId,
-           type: "comment",
-           message: `${req.user.fullName} commented on your story`,
-           storyId: storyId, // ✅ storyId field
-           mediaId: mediaId, // ✅ mediaId field
-         });
-
+      const notification = new Notification({
+        senderId: userId,
+        receiverId: story.userId,
+        type: "comment",
+        message: `${req.user.fullName} commented on your story`,
+        storyId: storyId, // ✅ storyId field
+        mediaId: mediaId, // ✅ mediaId field
+      });
 
       await notification.save();
 
@@ -950,7 +934,7 @@ const muteStoryUser = asyncHandler(async (req, res) => {
 
   // Check karo already muted hai ya nahi
   const alreadyMuted = user.mutedStoryUsers.some(
-    (id) => String(id) === String(userId)
+    (id) => String(id) === String(userId),
   );
 
   if (alreadyMuted) {
@@ -1020,10 +1004,10 @@ const getMutedStoryUsers = asyncHandler(async (req, res) => {
       u.accountType === "business"
         ? u.businessName
         : u.accountType === "sadhu"
-        ? u.sadhuName
-        : u.accountType === "tirth"
-        ? u.tirthName
-        : u.fullName,
+          ? u.sadhuName
+          : u.accountType === "tirth"
+            ? u.tirthName
+            : u.fullName,
     profilePicture: u.profilePicture,
   }));
 
@@ -1049,7 +1033,7 @@ const checkMuteStatus = asyncHandler(async (req, res) => {
   }
 
   const isMuted = user.mutedStoryUsers.some(
-    (id) => String(id) === String(userId)
+    (id) => String(id) === String(userId),
   );
 
   res.status(200).json({
@@ -1160,7 +1144,6 @@ module.exports = {
 //         res.status(500).json({ message: "Internal Server Error" });
 //     }
 // };
-
 
 // exports.getStoriesByUser = async (req, res) => {
 //     try {

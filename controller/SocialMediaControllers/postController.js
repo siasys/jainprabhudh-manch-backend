@@ -310,19 +310,19 @@ const createPost = [
     // -----------------------------
     // TEXT BAD WORD FILTER
     // -----------------------------
-    const textInputs = [
-      caption || "",
-      pollQuestion || "",
-      ...(Array.isArray(pollOptions) ? pollOptions : []),
-    ];
+    // const textInputs = [
+    //   caption || "",
+    //   pollQuestion || "",
+    //   ...(Array.isArray(pollOptions) ? pollOptions : []),
+    // ];
 
-    for (const text of textInputs) {
-      if (text && containsBadWords(text)) {
-        return res.status(400).json({
-          error: "Your post contains inappropriate or harmful words.",
-        });
-      }
-    }
+    // for (const text of textInputs) {
+    //   if (text && containsBadWords(text)) {
+    //     return res.status(400).json({
+    //       error: "Your post contains inappropriate or harmful words.",
+    //     });
+    //   }
+    // }
 
     // -----------------------------
     // POLL PARSING
@@ -545,15 +545,15 @@ const getPostsByUser = asyncHandler(async (req, res) => {
         select: "fullName profilePicture accountType accountStatus sadhuName tirthName businessName"
       })
       .populate({
-        path: "comments.replies.user", 
+        path: "comments.replies.user",
         select: "fullName profilePicture accountType accountStatus sadhuName tirthName businessName"
       })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .lean(); // ✅ Performance improvement
+      .lean();
 
-    // ✅ Calculate current page from skip
+    //  Calculate current page from skip
     const currentPage = Math.floor(skip / limit) + 1;
 
     res.json({
@@ -562,7 +562,7 @@ const getPostsByUser = asyncHandler(async (req, res) => {
       totalPosts: totalPosts,
       postsOnCurrentPage: posts.length,
       totalPages: Math.ceil(totalPosts / limit),
-      hasMore: skip + limit < totalPosts, // ✅ Frontend ke liye useful
+      hasMore: skip + limit < totalPosts,
       data: {
         posts: posts
       }
@@ -570,10 +570,10 @@ const getPostsByUser = asyncHandler(async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching user posts:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       error: "Failed to fetch posts",
-      message: error.message 
+      message: error.message
     });
   }
 });
@@ -655,8 +655,15 @@ const getPostById = asyncHandler(async (req, res) => {
     userName: getDisplayName(post.user),
     profilePicture: post.user?.profilePicture,
     type: post.type || null,
-    sanghId: post.sanghId || null,
-    panchId: post.panchId || null,
+    // ── Sangh/Panch populated data ──
+    sanghId: post.sanghId?._id || post.sanghId || null,
+    sanghName: post.sanghId?.name || null,
+    sanghImage: post.sanghId?.sanghImage || null,
+
+    panchId: post.panchId?._id || post.panchId || null,
+    panchName: post.panchId?.name || null,
+    panchImage: post.panchId?.sanghImage || null,
+
     pollQuestion: post.pollQuestion || null,
     pollOptions: post.pollOptions || [],
     pollVotes: post.pollVotes || {},

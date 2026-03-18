@@ -75,6 +75,10 @@ const postSchema = new mongoose.Schema(
       type:String
     },
     hashtags: [{ type: String }],
+    watchTime: {
+      type: Number,
+      default: 0
+    },
     emoji: {
     type: String,
     default: "",

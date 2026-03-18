@@ -293,7 +293,7 @@ const verifyRegisterOtp = asyncHandler(async (req, res) => {
 //   );
 // });
 
-// New register without numebr and email check
+// New register without number and email check
 const registerFinalUser = asyncHandler(async (req, res) => {
   let { userData } = req.body;
 
@@ -316,12 +316,55 @@ const registerFinalUser = asyncHandler(async (req, res) => {
     sadhuName,
     businessName,
     businessDate,
-    tirthName,       // ✅ Add tirthName here
+    tirthName,
     shravakId,
     password,
     isEmailVerified = false,
     isPhoneVerified = false,
   } = userData;
+
+  // ✅ Duplicate check only against accountType "user"
+  if (accountType === "user") {
+    const orConditions = [];
+
+    if (phoneNumber?.trim()) {
+      orConditions.push({ phoneNumber: phoneNumber.trim(), accountType: "user" });
+    }
+
+    if (email?.trim()) {
+      orConditions.push({ email: email.trim(), accountType: "user" });
+    }
+
+    if (orConditions.length > 0) {
+      const existingUser = await User.findOne({ $or: orConditions });
+
+      if (existingUser) {
+        const isPhoneDuplicate =
+          phoneNumber?.trim() &&
+          existingUser.phoneNumber === phoneNumber.trim();
+
+        const isEmailDuplicate =
+          email?.trim() &&
+          existingUser.email === email.trim();
+
+  if (isPhoneDuplicate) {
+    return errorResponse(
+      res,
+      "This phone number is already registered, please login.",
+      409,
+    );
+  }
+
+  if (isEmailDuplicate) {
+    return errorResponse(
+      res,
+      "This email is already registered, please login.",
+      409,
+    );
+  }
+      }
+    }
+  }
 
   // Prepare user object
   let newUserData = {
@@ -330,23 +373,20 @@ const registerFinalUser = asyncHandler(async (req, res) => {
     accountType,
     isEmailVerified,
     isPhoneVerified,
-    password
+    password,
   };
 
   if (accountType === "business") {
     newUserData.businessName = businessName?.trim() || "";
     newUserData.businessDate = businessDate || "";
     newUserData.shravakId = shravakId || "";
-  }
-  else if (accountType === "sadhu") {
+  } else if (accountType === "sadhu") {
     newUserData.sadhuName = sadhuName?.trim() || "";
     newUserData.shravakId = shravakId || "";
-  }
-  else if (accountType === "tirth") {
+  } else if (accountType === "tirth") {
     newUserData.tirthName = tirthName?.trim() || "";
     newUserData.shravakId = shravakId || "";
-  }
-  else {
+  } else {
     newUserData.firstName = firstName?.trim() || "";
     newUserData.lastName = lastName?.trim() || "";
     newUserData.fullName = fullName?.trim() || "";
@@ -372,8 +412,7 @@ const registerFinalUser = asyncHandler(async (req, res) => {
   );
 });
 
-
-// Register new user with enhanced security 
+// Register new user with enhanced security
 // const registerUser = asyncHandler(async (req, res) => {
 //   const { firstName, lastName, phoneNumber, email, password, birthDate, gender, location } = req.body;
 

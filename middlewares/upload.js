@@ -181,7 +181,7 @@ const upload = multer({
   fileFilter: fileFilter,
 });
 
-// ✅ FIX 2: flatten() add kiya - PNG transparency white blank issue fix
+// FIX 2: flatten() add kiya - PNG transparency white blank issue fix
 const compressImage = async (buffer) => {
   try {
     return await sharp(buffer)
