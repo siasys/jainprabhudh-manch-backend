@@ -323,7 +323,7 @@ const registerFinalUser = asyncHandler(async (req, res) => {
     isPhoneVerified = false,
   } = userData;
 
-  // ✅ Duplicate check only against accountType "user"
+  // Duplicate check only against accountType "user"
   if (accountType === "user") {
     const orConditions = [];
 

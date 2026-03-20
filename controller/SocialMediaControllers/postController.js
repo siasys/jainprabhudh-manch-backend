@@ -979,17 +979,90 @@ const boostedPosts = boostedPostsForOthers;
     // ------------------------------
     // HASHTAG SCORE
     // ------------------------------
-    const userHashtags = user.hashtags || [];
-    finalFeed = finalFeed.map(post => {
-      let score = 0;
-      if (post.hashtags?.length && userHashtags.length) {
-        post.hashtags.forEach(tag => {
-          const match = userHashtags.find(h => h.name === tag);
-          if (match) score += match.score;
-        });
-      }
-      return { ...post, _score: score };
+const userInterest = await UserInterest.findOne({ user: userId }).lean();
+const userHashtags = userInterest?.hashtags || [];
+  // User ne jinke posts like kiye hain unki set banaao (O(1) lookup ke liye)
+  const likedCreatorIds = new Set();
+  try {
+    const userLikedPosts = await Post.find(
+      { likes: userId },
+      { user: 1 },
+    ).lean();
+    userLikedPosts.forEach((p) => {
+      if (p.user) likedCreatorIds.add(p.user.toString());
     });
+  } catch (_) {}
+
+  // Score weights — tune karo apni need ke hisaab se
+  const WEIGHTS = {
+    hashtag: 1.0, // user ke hashtag interest se match
+    likeAffinity: 5.0, // user ne us creator ki post already like ki hai
+    watchTime: 0.01, // post ka total watch time (seconds/ms jo bhi store ho)
+  };
+
+  // Boosted slot posts ko score se alag rakho
+  const boostedSlotIds = new Set(
+    finalFeed.filter((p) => p.isBoostSlot).map((p) => p._id?.toString()),
+  );
+
+  finalFeed = finalFeed.map((post) => {
+    // Boosted slots untoched
+    if (post.isBoostSlot) return { ...post, _score: 0 };
+
+    let score = 0;
+    const postUserId = post.user?._id?.toString() || post.user?.toString();
+
+    // 1. Hashtag score
+    if (post.hashtags?.length && userHashtags.length) {
+      post.hashtags.forEach((tag) => {
+        const match = userHashtags.find((h) => h.name === tag);
+        if (match) score += match.score * WEIGHTS.hashtag;
+      });
+    }
+
+    // 2. Like affinity — agar user ne is creator ki koi post like ki ho
+    if (postUserId && likedCreatorIds.has(postUserId)) {
+      score += WEIGHTS.likeAffinity;
+    }
+
+    // 3. Watch time — jitna zyada watch hua, utna relevant
+    if (post.watchTime && post.watchTime > 0) {
+      score += post.watchTime * WEIGHTS.watchTime;
+    }
+
+    return { ...post, _score: score };
+  });
+
+  // Score ke hisaab se sort karo — boosted slots apni position pe rahenge
+  // Strategy: non-boosted posts ko unke original positions ke beech sort karo
+  const nonBoostedWithIndex = [];
+  const boostedWithIndex = [];
+
+  finalFeed.forEach((post, idx) => {
+    if (post.isBoostSlot) {
+      boostedWithIndex.push({ post, idx });
+    } else {
+      nonBoostedWithIndex.push({ post, idx });
+    }
+  });
+
+  // Non-boosted ko score ke hisaab se sort karo
+  nonBoostedWithIndex.sort(
+    (a, b) => (b.post._score || 0) - (a.post._score || 0),
+  );
+
+  // Wapas merge karo — boosted apni original position pe, non-boosted sorted order mein
+  const sortedFeed = new Array(finalFeed.length);
+  let nonBoostedPtr = 0;
+  for (let i = 0; i < sortedFeed.length; i++) {
+    const boostedHere = boostedWithIndex.find((b) => b.idx === i);
+    if (boostedHere) {
+      sortedFeed[i] = boostedHere.post;
+    } else {
+      sortedFeed[i] = nonBoostedWithIndex[nonBoostedPtr++]?.post;
+    }
+  }
+  finalFeed = sortedFeed.filter(Boolean);
 
     // ------------------------------
     // PAGINATION
@@ -1023,15 +1096,29 @@ const getAllVideoPosts = async (req, res) => {
     // 1️⃣ Find user
     const user = await User.findById(userId).lean();
     if (!user)
-      return successResponse(res, { posts: [], pagination: { nextCursor: null, hasMore: false } }, "User not found");
+      return successResponse(
+        res,
+        { posts: [], pagination: { nextCursor: null, hasMore: false } },
+        "User not found",
+      );
 
     // 2️⃣ Blocked users
-    const blockedUsers = (await Block.find({ $or: [{ blocker: userId }, { blocked: userId }] }).lean())
-      .map(rel => rel.blocker.toString() === userId ? rel.blocked.toString() : rel.blocker.toString());
+    const blockedUsers = (
+      await Block.find({
+        $or: [{ blocker: userId }, { blocked: userId }],
+      }).lean()
+    ).map((rel) =>
+      rel.blocker.toString() === userId
+        ? rel.blocked.toString()
+        : rel.blocker.toString(),
+    );
 
     // 3️⃣ Reported posts
-    const reportedPostIds = (await Report.find({ reportedBy: userId, postId: { $ne: null } }).select("postId").lean())
-      .map(r => r.postId.toString());
+    const reportedPostIds = (
+      await Report.find({ reportedBy: userId, postId: { $ne: null } })
+        .select("postId")
+        .lean()
+    ).map((r) => r.postId.toString());
 
     // 4️⃣ NORMAL VIDEO POSTS
     const normalQuery = {
@@ -1044,20 +1131,25 @@ const getAllVideoPosts = async (req, res) => {
         { isBoosted: { $exists: false } },
 
         // Post was boosted before but now expired (isBoosted false + activeBoost removed)
-        { isBoosted: false, activeBoost: { $exists: false } }
+        { isBoosted: false, activeBoost: { $exists: false } },
       ],
 
-      ...(cursor ? { createdAt: { $lt: new Date(cursor) } } : {})
+      ...(cursor ? { createdAt: { $lt: new Date(cursor) } } : {}),
     };
 
     let normalPosts = await Post.find(normalQuery)
-      .populate("user", "firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName tirthName")
+      .populate(
+        "user",
+        "firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName tirthName",
+      )
       .populate("sanghId", "name sanghImage")
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
 
-    normalPosts = normalPosts.filter(p => p.user?.accountStatus !== "deactivated");
+    normalPosts = normalPosts.filter(
+      (p) => p.user?.accountStatus !== "deactivated",
+    );
 
     // 5️⃣ ACTIVE BOOSTED POSTS
     const activeBoosts = await BoostPlan.find({
@@ -1065,43 +1157,54 @@ const getAllVideoPosts = async (req, res) => {
       paymentStatus: "verified",
       startDate: { $lte: new Date() },
       endDate: { $gte: new Date() },
-    }).populate({
-      path: "post",
-      populate: { path: "user", select: "firstName lastName fullName sadhuName tirthName accountType profilePicture accountStatus" }
-    }).lean();
+    })
+      .populate({
+        path: "post",
+        populate: {
+          path: "user",
+          select:
+            "firstName lastName fullName sadhuName tirthName accountType profilePicture accountStatus",
+        },
+      })
+      .lean();
 
     const userState = user.location?.state;
     const userDistrict = user.location?.district;
     const userCity = user.location?.city;
 
     // 6️⃣ Filter boosts by location + self-post
-   let targetedBoosts = activeBoosts.filter(boost => {
-  if (!boost.post) return false;
+    let targetedBoosts = activeBoosts.filter((boost) => {
+      if (!boost.post) return false;
 
-  //  Video only
-  if (boost.post.media?.[0]?.type !== "video") return false;
+      //  Video only
+      if (boost.post.media?.[0]?.type !== "video") return false;
 
-  //  Strict boost checks (IMPORTANT)
-  if (boost.post.isBoosted !== true) return false;
-  if (!boost.post.activeBoost) return false;
-  if (boost.post.activeBoost.toString() !== boost._id.toString()) return false;
+      //  Strict boost checks (IMPORTANT)
+      if (boost.post.isBoosted !== true) return false;
+      if (!boost.post.activeBoost) return false;
+      if (boost.post.activeBoost.toString() !== boost._id.toString())
+        return false;
 
-  const isSelf = boost.post.user._id.toString() === userId.toString();
-  const t = boost.targeting;
+      const isSelf = boost.post.user._id.toString() === userId.toString();
+      const t = boost.targeting;
 
-  const match =
-    t?.states?.includes(userState) ||
-    t?.districts?.includes(userDistrict) ||
-    t?.cities?.includes(userCity);
+      const match =
+        t?.states?.includes(userState) ||
+        t?.districts?.includes(userDistrict) ||
+        t?.cities?.includes(userCity);
 
-  return isSelf || match;
-});
+      return isSelf || match;
+    });
 
+    const normalIds = new Set(normalPosts.map((p) => p._id.toString()));
+    targetedBoosts = targetedBoosts.filter(
+      (b) => !normalIds.has(b.post._id.toString()),
+    );
 
-    const normalIds = new Set(normalPosts.map(p => p._id.toString()));
-    targetedBoosts = targetedBoosts.filter(b => !normalIds.has(b.post._id.toString()));
-
-    const boostedPosts = targetedBoosts.map(b => ({ ...b.post, isBoostSlot: true }));
+    const boostedPosts = targetedBoosts.map((b) => ({
+      ...b.post,
+      isBoostSlot: true,
+    }));
 
     // 7️⃣ Insert boosted after every 4 normal posts
     let finalFeed = [];
@@ -1123,34 +1226,123 @@ const getAllVideoPosts = async (req, res) => {
       boostIndex++;
     }
 
-    // 8️⃣ Hashtag score
-    const userHashtags = (await UserInterest.findOne({ user: userId }).lean())?.hashtags || [];
-    finalFeed = finalFeed.map(post => {
+    const userInterest = await UserInterest.findOne({ user: userId }).lean();
+    const userHashtags = userInterest?.hashtags || [];
+
+    // Like affinity — user ne jinke posts like kiye hain
+    const likedCreatorIds = new Set();
+    try {
+      const userLikedPosts = await Post.find(
+        { likes: userId, "media.type": "video" },
+        { user: 1 },
+      ).lean();
+      userLikedPosts.forEach((p) => {
+        if (p.user) likedCreatorIds.add(p.user.toString());
+      });
+    } catch (_) {}
+
+    const WEIGHTS = {
+      hashtag: 1.0,
+      likeAffinity: 5.0,
+      watchTime: 0.01,
+    };
+
+    finalFeed = finalFeed.map((post) => {
+      // Boosted slots untouched
+      if (post.isBoostSlot) return { ...post, _score: 0 };
+
       let score = 0;
-      if (post.hashtags?.length) {
-        post.hashtags.forEach(tag => {
-          const match = userHashtags.find(h => h.name === tag);
-          if (match) score += match.score;
+      const postUserId = post.user?._id?.toString() || post.user?.toString();
+
+      // 1. Hashtag score
+      if (post.hashtags?.length && userHashtags.length) {
+        post.hashtags.forEach((tag) => {
+          const match = userHashtags.find((h) => h.name === tag);
+          if (match) score += match.score * WEIGHTS.hashtag;
         });
       }
+
+      // 2. Like affinity
+      if (postUserId && likedCreatorIds.has(postUserId)) {
+        score += WEIGHTS.likeAffinity;
+      }
+
+      // 3. Watch time
+      if (post.watchTime && post.watchTime > 0) {
+        score += post.watchTime * WEIGHTS.watchTime;
+      }
+
       return { ...post, _score: score };
     });
 
+    // Boosted slots apni position pe fix, non-boosted score se sort
+    const nonBoostedWithIndex = [];
+    const boostedWithIndex = [];
+
+    finalFeed.forEach((post, idx) => {
+      if (post.isBoostSlot) {
+        boostedWithIndex.push({ post, idx });
+      } else {
+        nonBoostedWithIndex.push({ post, idx });
+      }
+    });
+
+    nonBoostedWithIndex.sort(
+      (a, b) => (b.post._score || 0) - (a.post._score || 0),
+    );
+
+    const sortedFeed = new Array(finalFeed.length);
+    let nonBoostedPtr = 0;
+    for (let i = 0; i < sortedFeed.length; i++) {
+      const boostedHere = boostedWithIndex.find((b) => b.idx === i);
+      if (boostedHere) {
+        sortedFeed[i] = boostedHere.post;
+      } else {
+        sortedFeed[i] = nonBoostedWithIndex[nonBoostedPtr++]?.post;
+      }
+    }
+    finalFeed = sortedFeed.filter(Boolean);
+
     // 9️⃣ Pagination cursor
-    const nextCursor = normalPosts.length > 0 ? normalPosts[normalPosts.length - 1].createdAt.toISOString() : null;
+    const nextCursor =
+      normalPosts.length > 0
+        ? normalPosts[normalPosts.length - 1].createdAt.toISOString()
+        : null;
 
-    return successResponse(res, {
-      posts: finalFeed,
-      pagination: { nextCursor, hasMore: normalPosts.length === limit },
-    }, "Video posts fetched successfully");
-
+    return successResponse(
+      res,
+      {
+        posts: finalFeed,
+        pagination: { nextCursor, hasMore: normalPosts.length === limit },
+      },
+      "Video posts fetched successfully",
+    );
   } catch (err) {
     console.error("❌ Error in getAllVideoPosts:", err);
     return errorResponse(res, "Failed to fetch video posts", 500, err.message);
   }
 };
 
+const updateWatchTime = asyncHandler(async (req, res) => {
+  const { postId, duration } = req.body;
+  // duration = seconds jitna user ne post dekha
 
+  if (!postId || !duration || duration <= 0) {
+    return res
+      .status(400)
+      .json({ error: "postId and valid duration required" });
+  }
+
+  const post = await Post.findByIdAndUpdate(
+    postId,
+    { $inc: { watchTime: duration } },
+    { new: true, select: "watchTime" },
+  );
+
+  if (!post) return res.status(404).json({ error: "Post not found" });
+
+  return res.status(200).json({ success: true, watchTime: post.watchTime });
+});
 
 // Get all posts (Modified)
 
@@ -1254,80 +1446,81 @@ const toggleLike = [
 
     const isLiked = post.likes.includes(userId);
 
-    if (isLiked) {
-      // ---- Unlike ----
-      post.likes = post.likes.filter((id) => id.toString() !== userId);
+  if (isLiked) {
+    // ---- Unlike ----
+    post.likes = post.likes.filter((id) => id.toString() !== userId);
 
-       user.activity.likes = user.activity.likes.filter(
-        (like) => like.postId.toString() !== postId
-      );
-      await user.save();
+    user.activity.likes = user.activity.likes.filter(
+      (like) => like.postId.toString() !== postId,
+    );
+    await user.save();
 
-      // UserInterest score reduce
-      if (post.hashtags && post.hashtags.length) {
-        let interestDoc = await UserInterest.findOne({ user: userId });
-        if (interestDoc) {
-          post.hashtags.forEach(tag => {
-            const lowerTag = tag.toLowerCase();
-            const existingTag = interestDoc.hashtags.find(h => h.name === lowerTag);
-            if (existingTag) {
-              existingTag.score += 1;
-            } else {
-              interestDoc.hashtags.push({ name: lowerTag, score: 1 });
-            }
-          });
-
-          await interestDoc.save();
-        }
-      }
-
-      // Notification delete karein
-      await Notification.findOneAndDelete({
-        senderId: userId,
-        receiverId: post.user._id,
-        type: 'like',
-        postId: postId,
-      });
-
-    } else {
-      // ---- Like ----
-      post.likes.push(userId);
-
-      if (!user.activity.likes.some(like => like.postId.toString() === postId)) {
-        user.activity.likes.push({ postId });
-        await user.save();
-      }
-      // UserInterest score increase
-      if (post.hashtags && post.hashtags.length) {
-        let interestDoc = await UserInterest.findOne({ user: userId });
-        if (!interestDoc) {
-          interestDoc = new UserInterest({ user: userId, hashtags: [] });
-        }
-        post.hashtags.forEach(tag => {
-          const existingTag = interestDoc.hashtags.find(h => h.name === tag);
+    // ✅ UserInterest score DECREASE on unlike
+    if (post.hashtags && post.hashtags.length) {
+      let interestDoc = await UserInterest.findOne({ user: userId });
+      if (interestDoc) {
+        post.hashtags.forEach((tag) => {
+          const lowerTag = tag.toLowerCase();
+          const existingTag = interestDoc.hashtags.find(
+            (h) => h.name === lowerTag,
+          );
           if (existingTag) {
-            existingTag.score += 1;
-          } else {
-            interestDoc.hashtags.push({ name: tag, score: 1 });
+            // ✅ Score minus karo, 0 se neeche nahi jayega
+            existingTag.score = Math.max(0, existingTag.score - 1);
           }
+          // Unlike pe naya tag add nahi karte
         });
         await interestDoc.save();
       }
-
-      // Notification create
-      const notification = new Notification({
-        senderId: userId,
-        receiverId: post.user._id,
-        type: 'like',
-        message: "liked your post.",
-        postId: postId,
-      });
-      await notification.save();
-
-      // Socket notification send
-      const io = getIo();
-      io.to(post.user._id.toString()).emit('newNotification', notification);
     }
+
+    await Notification.findOneAndDelete({
+      senderId: userId,
+      receiverId: post.user._id,
+      type: "like",
+      postId: postId,
+    });
+  } else {
+    // ---- Like ----
+    post.likes.push(userId);
+
+    if (
+      !user.activity.likes.some((like) => like.postId.toString() === postId)
+    ) {
+      user.activity.likes.push({ postId });
+      await user.save();
+    }
+    // UserInterest score increase
+    if (post.hashtags && post.hashtags.length) {
+      let interestDoc = await UserInterest.findOne({ user: userId });
+      if (!interestDoc) {
+        interestDoc = new UserInterest({ user: userId, hashtags: [] });
+      }
+      post.hashtags.forEach((tag) => {
+        const existingTag = interestDoc.hashtags.find((h) => h.name === tag);
+        if (existingTag) {
+          existingTag.score += 1;
+        } else {
+          interestDoc.hashtags.push({ name: tag, score: 1 });
+        }
+      });
+      await interestDoc.save();
+    }
+
+    // Notification create
+    const notification = new Notification({
+      senderId: userId,
+      receiverId: post.user._id,
+      type: "like",
+      message: "liked your post.",
+      postId: postId,
+    });
+    await notification.save();
+
+    // Socket notification send
+    const io = getIo();
+    io.to(post.user._id.toString()).emit("newNotification", notification);
+  }
 
     await post.save();
     await invalidateCache(`post:${postId}`);
@@ -2232,5 +2425,7 @@ module.exports = {
   deleteReply,
   voteOnPoll,
   getAllVideoPosts,
-  toggleSavePost
+  toggleSavePost,
+  updateWatchTime
+
 };
