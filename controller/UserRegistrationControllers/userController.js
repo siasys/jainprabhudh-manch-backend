@@ -1359,7 +1359,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
     gender,
     role,
     page = 1,
-    limit = 10
+    limit = 20,
   } = req.query;
 
   const currentUserId = req.user._id.toString();
@@ -1367,7 +1367,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
 
   // 🔍 SEARCH (name + business + location)
   if (search) {
-    const searchRegex = new RegExp(search, 'i');
+    const searchRegex = new RegExp(search, "i");
     query.$or = [
       { firstName: searchRegex },
       { lastName: searchRegex },
@@ -1380,7 +1380,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
       { "location.country": searchRegex },
       { "location.state": searchRegex },
       { "location.district": searchRegex },
-      { "location.city": searchRegex }
+      { "location.city": searchRegex },
     ];
   }
 
@@ -1396,43 +1396,45 @@ const getAllUsers = asyncHandler(async (req, res) => {
 
   // 🔐 BLOCKED USERS LOGIC
   const blockRelations = await Block.find({
-    $or: [
-      { blocker: currentUserId },
-      { blocked: currentUserId }
-    ]
+    $or: [{ blocker: currentUserId }, { blocked: currentUserId }],
   }).lean();
 
-  const blockedUserIds = blockRelations.map(rel =>
+  const blockedUserIds = blockRelations.map((rel) =>
     rel.blocker.toString() === currentUserId
       ? rel.blocked.toString()
-      : rel.blocker.toString()
+      : rel.blocker.toString(),
   );
 
   // ❌ Hide blocked + self
   query._id = { $nin: [...blockedUserIds, currentUserId] };
-
+  const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+  const parsedPage = Math.max(parseInt(page) || 1, 1);
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
-  const users = await User.find(query)
-    .select("-password -__v")
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(parseInt(limit))
-    .lean();
+  const [users, total] = await Promise.all([
+    User.find(query)
+      .select("-password -__v")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parsedLimit)
+      .lean(),
+    User.countDocuments(query),
+  ]);
 
-  const total = await User.countDocuments(query);
-
-  users.forEach(user => {
+  users.forEach((user) => {
     if (user.profilePicture) {
       user.profilePicture = convertS3UrlToCDN(user.profilePicture);
     }
   });
-
-  res.json({
+  return res.status(200).json({
+    success: true,
     users,
     totalUsers: total,
-    currentPage: parseInt(page),
-    totalPages: Math.ceil(total / parseInt(limit)),
+    currentPage: parsedPage,
+    totalPages: Math.ceil(total / parsedLimit),
+    limit: parsedLimit,
+    hasNextPage: parsedPage < Math.ceil(total / parsedLimit),
+    hasPrevPage: parsedPage > 1,
   });
 });
 

@@ -5,7 +5,7 @@ const {authenticate} = require('../../middlewares/authMiddlewares')
 const upload = require('../../middlewares/upload');
 const { param } = require('express-validator');
 const router = express.Router();
-
+const { chatImageUpload } = require("../../middlewares/upload");
 // Apply authentication middleware to all routes
 router.use(authenticate);
 
@@ -14,7 +14,7 @@ router.post('/create', createMessage);
 router.post('/share-post', sharePost);
 router.get('/',getMessages)
 // Send an image message
-router.post('/send-image', upload.single('chatImage'), sendImageMessage);
+router.post("/send-image", chatImageUpload, sendImageMessage);
 router.post('/broadcast', broadcastMessage)
 // Get all messages for a user
 router.get('/:userId', getAllMessages);
