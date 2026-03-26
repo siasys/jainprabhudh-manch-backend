@@ -15,7 +15,7 @@ const createBiodata = async (req, res) => {
 
     const paymentScreenshotS3 = req.files?.paymentScreenshot?.[0]?.location || null;
 
-    // ⭐ Divorce Certificate
+    // Divorce Certificate
     const divorceCertificateS3 = req.files?.divorceCertificate?.[0]?.location || null;
 
     // Convert S3 URLs → CDN

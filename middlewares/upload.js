@@ -252,12 +252,20 @@ const compressFiles = async (req, res, next) => {
 const uploadToS3 = async (req, res, next) => {
   try {
     const performUpload = async (file) => {
-      // ✅ FIX 3: already uploaded ho to skip karo (double upload band)
       if (file.location) return;
 
       const folder = getS3Folder(file.fieldname, req);
       const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
       const key = folder + filename;
+
+      // ✅ ADD THIS - buffer check
+      if (!file.buffer || file.buffer.length === 0) {
+        throw new Error(`Empty buffer for file: ${file.fieldname}`);
+      }
+
+      console.log(
+        `Uploading: ${file.fieldname} → ${key} (${file.buffer.length} bytes)`,
+      );
 
       await s3Client.send(
         new PutObjectCommand({
@@ -265,15 +273,15 @@ const uploadToS3 = async (req, res, next) => {
           Key: key,
           Body: file.buffer,
           ContentType: file.mimetype,
-          ACL: "public-read",
+          // ACL: "public-read", // ← REMOVED
         }),
       );
 
       file.location = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
       file.key = key;
-
-      // CRITICAL: Clear buffer from memory after upload
       delete file.buffer;
+
+      console.log(`✅ Uploaded: ${file.fieldname} → ${file.location}`);
     };
 
     if (req.file) await performUpload(req.file);
@@ -287,8 +295,17 @@ const uploadToS3 = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("S3 Upload Error:", error);
-    return res.status(500).json({ error: "File upload failed" });
+    // ✅ EXACT error print karo
+    console.error("S3 Upload Error DETAILS:", {
+      message: error.message,
+      code: error.Code || error.code,
+      statusCode: error.$metadata?.httpStatusCode,
+      stack: error.stack,
+    });
+    return res.status(500).json({
+      error: "File upload failed",
+      detail: error.message, // dev mode mein rakhna, prod mein hatana
+    });
   }
 };
 
