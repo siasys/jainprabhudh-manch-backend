@@ -1348,7 +1348,6 @@ const loginUser = [
   }),
 ];
 
-
 const getAllUsers = asyncHandler(async (req, res) => {
   const {
     search,
@@ -1365,7 +1364,6 @@ const getAllUsers = asyncHandler(async (req, res) => {
   const currentUserId = req.user._id.toString();
   let query = {};
 
-  // 🔍 SEARCH (name + business + location)
   if (search) {
     const searchRegex = new RegExp(search, "i");
     query.$or = [
@@ -1375,8 +1373,6 @@ const getAllUsers = asyncHandler(async (req, res) => {
       { businessName: searchRegex },
       { tirthName: searchRegex },
       { sadhuName: searchRegex },
-
-      // 🔥 location based search
       { "location.country": searchRegex },
       { "location.state": searchRegex },
       { "location.district": searchRegex },
@@ -1384,17 +1380,14 @@ const getAllUsers = asyncHandler(async (req, res) => {
     ];
   }
 
-  // 📍 Location filters (exact / dropdown based)
   if (country) query["location.country"] = new RegExp(country, "i");
   if (state) query["location.state"] = new RegExp(state, "i");
   if (district) query["location.district"] = new RegExp(district, "i");
   if (city) query["location.city"] = new RegExp(city, "i");
 
-  // 👤 Other filters
   if (gender) query.gender = gender;
   if (role) query.role = role;
 
-  // 🔐 BLOCKED USERS LOGIC
   const blockRelations = await Block.find({
     $or: [{ blocker: currentUserId }, { blocked: currentUserId }],
   }).lean();
@@ -1405,13 +1398,13 @@ const getAllUsers = asyncHandler(async (req, res) => {
       : rel.blocker.toString(),
   );
 
-  // ❌ Hide blocked + self
   query._id = { $nin: [...blockedUserIds, currentUserId] };
   const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
   const parsedPage = Math.max(parseInt(page) || 1, 1);
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
-  const [users, total] = await Promise.all([
+  // ✅ CHANGE 1: noCardCount query add ki Promise.all mein
+  const [users, total, noCardCount] = await Promise.all([
     User.find(query)
       .select("-password -__v")
       .sort({ createdAt: -1 })
@@ -1419,6 +1412,16 @@ const getAllUsers = asyncHandler(async (req, res) => {
       .limit(parsedLimit)
       .lean(),
     User.countDocuments(query),
+    User.countDocuments({
+      ...query,
+      accountType: { $nin: ["business", "sadhu", "tirth"] },
+      $or: [
+        { jainAadharStatus: "none" },
+        { jainAadharStatus: { $exists: false } },
+        { jainAadharStatus: null },
+        { jainAadharStatus: "" },
+      ],
+    }),
   ]);
 
   users.forEach((user) => {
@@ -1426,10 +1429,12 @@ const getAllUsers = asyncHandler(async (req, res) => {
       user.profilePicture = convertS3UrlToCDN(user.profilePicture);
     }
   });
+
   return res.status(200).json({
     success: true,
     users,
     totalUsers: total,
+    noCardCount, // ✅ CHANGE 2: response mein add kiya
     currentPage: parsedPage,
     totalPages: Math.ceil(total / parsedLimit),
     limit: parsedLimit,
@@ -1437,7 +1442,6 @@ const getAllUsers = asyncHandler(async (req, res) => {
     hasPrevPage: parsedPage > 1,
   });
 });
-
 
 // Enhanced user profile retrieval
 const getUserById = asyncHandler(async (req, res) => {
