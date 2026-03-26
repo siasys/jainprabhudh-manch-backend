@@ -116,7 +116,7 @@ const registerUser = asyncHandler(async (req, res) => {
       tempUserData: tempData,
     });
 
-    await sendVerificationEmail(email, verificationCode, firstName);
+    await sendVerificationEmail(email, firstName, verificationCode);
     return successResponse(res, {}, "Verification OTP sent on email. Please verify.");
   }
 });
@@ -514,7 +514,7 @@ const sendOtp = asyncHandler(async (req, res) => {
         isVerified: false,
       });
 
-      await sendVerificationEmail(email, verificationCode);
+      await sendVerificationEmail(email, "User", verificationCode);
       return successResponse(res, {}, "Verification OTP sent on email 📧");
     } catch (err) {
       if (err.code === 11000) {
@@ -580,7 +580,7 @@ const resendOtp = asyncHandler(async (req, res) => {
         isVerified: false,
       });
 
-      await sendVerificationEmail(email, verificationCode);
+      await sendVerificationEmail(email, "User", verificationCode);
       return successResponse(res, {}, "OTP resent on email 📧");
     } catch (err) {
       console.error("Email OTP resend error:", err);
