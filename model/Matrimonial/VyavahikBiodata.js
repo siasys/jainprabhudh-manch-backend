@@ -251,15 +251,15 @@ const vyavahikBiodataSchema = new mongoose.Schema(
     specialInformation: {
       type: String,
     },
-    paymentStatus: {
-      type: String,
-      enum: ['pending', 'paid', 'failed'],
-      default: 'pending'
-    },
-    paymentId: {
-      type: String,
-      sparse: true
-    },
+    // paymentStatus: {
+    //   type: String,
+    //   enum: ['pending', 'paid', 'failed'],
+    //   default: 'pending'
+    // },
+    // paymentId: {
+    //   type: String,
+    //   sparse: true
+    // },
     isVisible: {
       type: Boolean,
       default: false

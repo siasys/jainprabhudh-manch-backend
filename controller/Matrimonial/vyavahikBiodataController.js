@@ -9,12 +9,8 @@ const createBiodata = async (req, res) => {
     const passportPhotoS3 = req.files?.passportPhoto?.[0]?.location || null;
     const fullPhotoS3 = req.files?.fullPhoto?.[0]?.location || null;
     const familyPhotoS3 = req.files?.familyPhoto?.[0]?.location || null;
-
     const healthCertificateS3 = req.files?.healthCertificate?.[0]?.location || null;
     const educationCertificateS3 = req.files?.educationCertificate?.[0]?.location || null;
-
-    const paymentScreenshotS3 = req.files?.paymentScreenshot?.[0]?.location || null;
-
     // Divorce Certificate
     const divorceCertificateS3 = req.files?.divorceCertificate?.[0]?.location || null;
 
@@ -24,9 +20,6 @@ const createBiodata = async (req, res) => {
     const familyPhoto = familyPhotoS3 ? convertS3UrlToCDN(familyPhotoS3) : null;
     const healthCertificate = healthCertificateS3 ? convertS3UrlToCDN(healthCertificateS3) : null;
     const educationCertificate = educationCertificateS3 ? convertS3UrlToCDN(educationCertificateS3) : null;
-
-    const paymentScreenshot = paymentScreenshotS3 ? convertS3UrlToCDN(paymentScreenshotS3) : null;
-
     const divorceCertificate = divorceCertificateS3 ? convertS3UrlToCDN(divorceCertificateS3) : null;
 
     // Marriage Info (Clean Handling)
@@ -65,7 +58,6 @@ const createBiodata = async (req, res) => {
       familyPhoto,
       healthCertificate,
       educationCertificate,
-      paymentScreenshot,
       marriageInfo,
     });
 
