@@ -180,7 +180,7 @@ module.exports = {
 ],
 
 "Uttar Pradesh": [
-  "Agra", "Aligarh", "Amroha", "Ayodhya", "Azamgarh", "Baghpat", "Bahraich", "Ballia", "Banda", "Bara Banki",
+  "Agra", "Aligarh", "Amroha", "Amyodhya", "Azamgarh", "Baghpat", "Bahraich", "Ballia", "Banda", "Bara Banki",
   "Bareilly", "Basti", "Bijnor", "Bithur", "Budaun", "Bulandshahr", "Deoria", "Etah", "Etawah",
   "Firozabad","Faizabad", "Farrukhabad-cum-Fatehgarh", "Fatehpur", "Fatehpur Sikri", "Ghaziabad", "Ghazipur",
   "Gonda", "Gorakhpur", "Hamirpur", "Hardoi", "Hathras", "Jalaun", "Jaunpur", "Jhansi", "Kannauj",

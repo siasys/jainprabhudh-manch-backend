@@ -83,7 +83,7 @@ router.post('/verification-email',sendVerificationCode)
 router.post('/verify-email', verifyEmail);
 router.post('/verify-emails', verifyEmails);
 router.post('/resend-code', resendVerificationCode);
-router.post("/register-verify", verifyRegisterOtp);// ui me bhi api change krna he
+router.post("/register-verify", verifyRegisterOtp);
 router.post("/verify-otp", verifyOtp);
 //router.get('/cities', getAllCities);
 router.get('/location', getCitiesByState);

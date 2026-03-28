@@ -19,6 +19,7 @@ const donationSchema = new mongoose.Schema(
       default: "donation",
     },
 
+    // Occasion title (Birthday / Anniversary / etc.)
     title: {
       type: String,
       required: true,
@@ -28,11 +29,11 @@ const donationSchema = new mongoose.Schema(
     purpose: {
       type: String,
     },
+
     onBehalfOf: {
       type: String,
     },
 
-    //  Name of the person
     onBehalfOfName: {
       type: String,
     },
@@ -41,10 +42,12 @@ const donationSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+
     isGuptDan: {
       type: Boolean,
       default: false,
     },
+
     donationPhoto: {
       type: String,
     },
@@ -55,8 +58,43 @@ const donationSchema = new mongoose.Schema(
       default: "pending",
     },
 
+    // Manual QR screenshot (purana flow)
     paymentScreenshot: {
       type: String,
+    },
+
+    // Razorpay Payment Details
+    razorpayOrderId: {
+      type: String,
+      default: "",
+    },
+
+    razorpayPaymentId: {
+      type: String,
+      default: "",
+    },
+
+    razorpaySignature: {
+      type: String,
+      default: "",
+    },
+
+    // Payment method track karne ke liye
+    paymentMethod: {
+      type: String,
+      enum: ["razorpay", "screenshot", "pending"],
+      default: "pending",
+    },
+
+    // Currency
+    currency: {
+      type: String,
+      default: "INR",
+    },
+
+    // Razorpay se aane wala payment timestamp
+    paidAt: {
+      type: Date,
     },
   },
   { timestamps: true },

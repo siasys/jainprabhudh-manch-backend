@@ -1,7 +1,6 @@
-const Donation = require('../../model/Donation/donation');
-const { convertS3UrlToCDN } = require('../../utils/s3Utils');
-const Sangh = require('../../model/SanghModels/hierarchicalSanghModel');
-
+const Donation = require("../../model/Donation/donation");
+const { convertS3UrlToCDN } = require("../../utils/s3Utils");
+const Sangh = require("../../model/SanghModels/hierarchicalSanghModel");
 
 /**
  * CREATE DONATION
@@ -15,46 +14,51 @@ const createDonation = async (req, res) => {
       amount,
       onBehalfOf,
       onBehalfOfName,
-      isGuptDaan
+      isGuptDaan,
+      //Razorpay fields
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
     } = req.body;
 
-    // 🔐 BASIC VALIDATION
-    // if (!userId || !title || !amount || !onBehalfOf || !onBehalfOfName) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: 'Required fields are missing'
-    //   });
-    // }
-
     // 🔒 FETCH FOUNDATION SANGH (ALWAYS FIXED)
-    const foundationSangh = await Sangh.findOne({ level: 'foundation' });
+    const foundationSangh = await Sangh.findOne({ level: "foundation" });
 
     if (!foundationSangh) {
       return res.status(404).json({
         success: false,
-        message: 'Foundation Sangh not found'
+        message: "Foundation Sangh not found",
       });
     }
 
-    let paymentScreenshotUrl = '';
-    let donationPhotoUrl = '';
-    let paymentStatus = 'pending';
+    let paymentScreenshotUrl = "";
+    let donationPhotoUrl = "";
+    let paymentStatus = "pending";
+    let paymentMethod = "pending";
+    let paidAt = null;
 
-    // ✅ Payment Screenshot
+    // ✅ CASE 1: Razorpay payment verified
+    if (razorpayPaymentId && razorpayPaymentId.trim() !== "") {
+      paymentStatus = "success";
+      paymentMethod = "razorpay";
+      paidAt = new Date();
+     // console.log("✅ Donation via Razorpay:", razorpayPaymentId);
+    }
+
+    // ✅ CASE 2: Manual screenshot upload (QR flow)
     if (
       req.files?.paymentScreenshot &&
       req.files.paymentScreenshot.length > 0
     ) {
       const s3Url = req.files.paymentScreenshot[0].location;
       paymentScreenshotUrl = convertS3UrlToCDN(s3Url);
-      paymentStatus = 'success';
+      paymentStatus = "success";
+      paymentMethod = "screenshot";
+      paidAt = new Date();
     }
 
     // ✅ Donation Photo
-    if (
-      req.files?.donationPhoto &&
-      req.files.donationPhoto.length > 0
-    ) {
+    if (req.files?.donationPhoto && req.files.donationPhoto.length > 0) {
       const s3Url = req.files.donationPhoto[0].location;
       donationPhotoUrl = convertS3UrlToCDN(s3Url);
     }
@@ -69,22 +73,28 @@ const createDonation = async (req, res) => {
       onBehalfOf,
       onBehalfOfName,
       paymentStatus,
-      isGuptDan: isGuptDaan === true || isGuptDaan === 'true',
+      paymentMethod,
+      paidAt,
+      isGuptDan: isGuptDaan === true || isGuptDaan === "true",
       paymentScreenshot: paymentScreenshotUrl,
-      donationPhoto: donationPhotoUrl
+      donationPhoto: donationPhotoUrl,
+      // ✅ Razorpay details
+      razorpayOrderId: razorpayOrderId || "",
+      razorpayPaymentId: razorpayPaymentId || "",
+      razorpaySignature: razorpaySignature || "",
+      currency: "INR",
     });
 
     return res.status(201).json({
       success: true,
-      message: 'Donation submitted successfully',
-      data: donation
+      message: "Donation submitted successfully",
+      data: donation,
     });
-
   } catch (error) {
-    console.error('CREATE DONATION ERROR:', error);
+    console.error("CREATE DONATION ERROR:", error);
     return res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -95,22 +105,22 @@ const createDonation = async (req, res) => {
 const getAllDonations = async (req, res) => {
   try {
     const donations = await Donation.find({
-      isGuptDan: { $ne: true } // ✅ Gupt Dan hide
+      isGuptDan: { $ne: true }, // ✅ Gupt Dan hide
     })
-      .populate('userId', 'fullName gender phoneNumber profilePicture')
-      .populate('sanghId', 'name sanghImage')
+      .populate("userId", "fullName gender phoneNumber profilePicture")
+      .populate("sanghId", "name sanghImage")
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
       count: donations.length,
-      data: donations
+      data: donations,
     });
   } catch (error) {
-    console.error('GET ALL DONATIONS ERROR:', error);
+    console.error("GET ALL DONATIONS ERROR:", error);
     return res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -122,25 +132,27 @@ const getDonationById = async (req, res) => {
   try {
     const { donationId } = req.params;
 
-    const donation = await Donation.findById(donationId)
-      .populate('userId', 'fullName gender phoneNumber profilePicture');
+    const donation = await Donation.findById(donationId).populate(
+      "userId",
+      "fullName gender phoneNumber profilePicture",
+    );
 
     if (!donation) {
       return res.status(404).json({
         success: false,
-        message: 'Donation not found'
+        message: "Donation not found",
       });
     }
 
     return res.status(200).json({
       success: true,
-      data: donation
+      data: donation,
     });
   } catch (error) {
-    console.error('GET DONATION BY ID ERROR:', error);
+    console.error("GET DONATION BY ID ERROR:", error);
     return res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -154,7 +166,7 @@ const updateDonation = async (req, res) => {
     if (!donationId) {
       return res.status(400).json({
         success: false,
-        message: 'Donation ID is required'
+        message: "Donation ID is required",
       });
     }
 
@@ -162,17 +174,11 @@ const updateDonation = async (req, res) => {
     if (!donation) {
       return res.status(404).json({
         success: false,
-        message: 'Donation not found'
+        message: "Donation not found",
       });
     }
 
-    const {
-      title,
-      purpose,
-      amount,
-      onBehalfOf,
-      onBehalfOfName
-    } = req.body;
+    const { title, purpose, amount, onBehalfOf, onBehalfOfName } = req.body;
 
     // 🔐 Update fields only if provided
     if (title) donation.title = title;
@@ -188,25 +194,27 @@ const updateDonation = async (req, res) => {
     }
 
     // ✅ Update paymentScreenshot if new file provided
-    if (req.files?.paymentScreenshot && req.files.paymentScreenshot.length > 0) {
+    if (
+      req.files?.paymentScreenshot &&
+      req.files.paymentScreenshot.length > 0
+    ) {
       const s3Url = req.files.paymentScreenshot[0].location;
       donation.paymentScreenshot = convertS3UrlToCDN(s3Url);
-      donation.paymentStatus = 'success'; // mark payment success if screenshot updated
+      donation.paymentStatus = "success"; // mark payment success if screenshot updated
     }
 
     await donation.save();
 
     return res.status(200).json({
       success: true,
-      message: 'Donation updated successfully',
-      data: donation
+      message: "Donation updated successfully",
+      data: donation,
     });
-
   } catch (error) {
-    console.error('UPDATE DONATION ERROR:', error);
+    console.error("UPDATE DONATION ERROR:", error);
     return res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -215,5 +223,5 @@ module.exports = {
   createDonation,
   getAllDonations,
   getDonationById,
-  updateDonation
+  updateDonation,
 };
