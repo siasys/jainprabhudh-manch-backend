@@ -113,8 +113,14 @@ router.get("/:id/activity/:type", getUserActivityByType);
 router.get('/by-jain-aadhar/:number', getUserByJainAadharNumber);
 
 router.post('/change-password', changePassword);
-router.post('/upload-profile-picture', authMiddleware,
-upload.single('profilePicture'),uploadProfilePicture);
+router.post(
+  "/upload-profile-picture",
+  authMiddleware,
+  upload.single("profilePicture"),
+  upload.compressFiles,
+  upload.uploadToS3,
+  uploadProfilePicture,
+);
 router.post('/skip-profile-picture', authMiddleware, skipProfilePicture);
 router.put('/update-privacy/:id', updatePrivacy);
 router.put('/:id', 

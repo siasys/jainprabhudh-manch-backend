@@ -631,7 +631,7 @@ const verifyOtpMobileEmail = asyncHandler(async (req, res) => {
 
 const verifyOtp = asyncHandler(async (req, res) => {
   const { phoneNumber, otp } = req.body;
-  // ✅ Fetch latest OTP request for this number
+  //  Fetch latest OTP request for this number
   const record = await MobileOtpVerification.findOne({ phoneNumber }).sort({ createdAt: -1 });
   if (!record) return errorResponse(res, "No OTP request found for this number", 400);
 
@@ -1781,7 +1781,7 @@ const updatePrivacy = asyncHandler(async (req, res) => {
 
 // Upload profile picture with registration step tracking
 const uploadProfilePicture = asyncHandler(async (req, res) => {
-    try {
+  try {
         const userId = req.user?._id || req.body.userId;
         let imageUrl = null;
 
