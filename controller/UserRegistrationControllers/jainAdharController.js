@@ -288,6 +288,9 @@ const createJainAadhar = asyncHandler(async (req, res) => {
         req.files.userProfile[0].location || req.files.userProfile[0].path;
       jainAadharData.userProfile = convertS3UrlToCDN(profileUrl);
     }
+    if (!req.files?.userProfile?.[0]) {
+      return errorResponse(res, "Profile photo is required", 400);
+    }
 
     // Create application
     const newJainAadhar = await JainAadhar.create(jainAadharData);

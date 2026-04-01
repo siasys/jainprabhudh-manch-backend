@@ -28,7 +28,7 @@ const s3Client = new S3Client({
 const testS3Connection = async () => {
   try {
     await s3Client.config.credentials();
-    console.log('✅ Successfully connected to AWS S3');
+   // console.log('✅ Successfully connected to AWS S3');
     return true;
   } catch (error) {
     console.error('❌ Failed to connect to AWS S3:', {

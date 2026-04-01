@@ -281,7 +281,7 @@ const uploadToS3 = async (req, res, next) => {
       file.key = key;
       delete file.buffer;
 
-      console.log(`✅ Uploaded: ${file.fieldname} → ${file.location}`);
+      // console.log(`✅ Uploaded: ${file.fieldname} → ${file.location}`);
     };
 
     if (req.file) await performUpload(req.file);
