@@ -1,7 +1,6 @@
 const VyavahikBiodata = require('../../model/Matrimonial/VyavahikBiodata');
 const JainAadhar = require('../../model/UserRegistrationModels/jainAadharModel');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
-
 // Create API
 const createBiodata = async (req, res) => {
   try {
@@ -11,7 +10,6 @@ const createBiodata = async (req, res) => {
     const familyPhotoS3 = req.files?.familyPhoto?.[0]?.location || null;
     const healthCertificateS3 = req.files?.healthCertificate?.[0]?.location || null;
     const educationCertificateS3 = req.files?.educationCertificate?.[0]?.location || null;
-    // Divorce Certificate
     const divorceCertificateS3 = req.files?.divorceCertificate?.[0]?.location || null;
 
     // Convert S3 URLs → CDN
@@ -22,12 +20,40 @@ const createBiodata = async (req, res) => {
     const educationCertificate = educationCertificateS3 ? convertS3UrlToCDN(educationCertificateS3) : null;
     const divorceCertificate = divorceCertificateS3 ? convertS3UrlToCDN(divorceCertificateS3) : null;
 
+    // ============= DOB & AGE PROCESSING (BACKEND FIX) =============
+    let processedDob = null;
+    let processedAge = null;
+
+    if (req.body.dob) {
+      // Parse DOB (Expected format: YYYY-MM-DD)
+      const dobDate = new Date(req.body.dob);
+      
+      // Check if valid date
+      if (!isNaN(dobDate.getTime())) {
+        processedDob = dobDate;
+
+        // Calculate Age from DOB
+        const today = new Date();
+        let age = today.getFullYear() - dobDate.getFullYear();
+        const monthDiff = today.getMonth() - dobDate.getMonth();
+
+        // Adjust age if birthday hasn't occurred this year
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) {
+          age--;
+        }
+
+        processedAge = age.toString(); // Store as string to match schema
+      } else {
+        console.warn("⚠️ Invalid DOB received:", req.body.dob);
+      }
+    }
+
     // Marriage Info (Clean Handling)
     let marriageInfo = {
       marriageType: req.body.marriageType,
     };
 
-    //  If Divorced → Add divorcedDetails + divorceCertificate
+    // If Divorced → Add divorcedDetails + divorceCertificate
     if (req.body.marriageType === "Divorced") {
       marriageInfo.divorcedDetails = {
         divorcedCompleted: req.body.divorcedCompleted,
@@ -39,7 +65,8 @@ const createBiodata = async (req, res) => {
         divorceCertificate: divorceCertificate || null,
       };
     }
-    //  If Widowed/widower → Add widowedDetails
+
+    // If Widowed/widower → Add widowedDetails
     if (req.body.marriageType === "Widowed/widower") {
       marriageInfo.widowedDetails = {
         reasonSpouseDeath: req.body.reasonSpouseDeath,
@@ -50,17 +77,21 @@ const createBiodata = async (req, res) => {
       };
     }
 
-    // Save Biodata
-    const biodata = new VyavahikBiodata({
+    // ============= PREPARE DATA FOR SAVING =============
+    const biodataData = {
       ...req.body,
+      dob: processedDob,           // ✅ Override with backend-processed DOB
+      age: processedAge,            // ✅ Override with backend-calculated Age
       passportPhoto,
       fullPhoto,
       familyPhoto,
       healthCertificate,
       educationCertificate,
       marriageInfo,
-    });
+    };
 
+    // Save Biodata
+    const biodata = new VyavahikBiodata(biodataData);
     await biodata.save();
 
     res.status(201).json({
@@ -70,6 +101,7 @@ const createBiodata = async (req, res) => {
     });
 
   } catch (error) {
+    console.error("❌ Biodata Creation Error:", error);
     res.status(500).json({
       success: false,
       message: "Error creating biodata",
