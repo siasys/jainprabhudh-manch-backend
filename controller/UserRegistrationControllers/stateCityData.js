@@ -23,7 +23,7 @@ module.exports = {
   "Chandigarh"
 ],
 "Chhattisgarh": [
-  "Ambikapur", "Bhilai", "Bilaspur", "Chirmiri", "Dhamtari", "Durg", "Jagdalpur", "Raipur", "Rajnandgaon"
+  "Ambikapur", "Bhilai", "Bilaspur", "Chirmiri", "Dhamtari", "Durg", "Gaurela-Pendra-Marwahi", "Jagdalpur", "Raipur", "Rajnandgaon"
 ],
 
 "Daman and Diu": [

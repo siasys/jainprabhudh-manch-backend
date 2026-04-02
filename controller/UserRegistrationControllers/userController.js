@@ -1313,14 +1313,14 @@ const loginUser = [
       }
 
       // ================= VERIFICATION CHECK =================
-      if (!matchedUser.isEmailVerified && !matchedUser.isPhoneVerified) {
-        return errorResponse(
-          res,
-          "Please verify your email or phone number before logging in",
-          401,
-          { requiresVerification: true }
-        );
-      }
+      // if (!matchedUser.isEmailVerified && !matchedUser.isPhoneVerified) {
+      //   return errorResponse(
+      //     res,
+      //     "Please verify your email or phone number before logging in",
+      //     401,
+      //     { requiresVerification: true }
+      //   );
+      // }
 
       // ================= TOKEN =================
       const token = generateToken(matchedUser);
