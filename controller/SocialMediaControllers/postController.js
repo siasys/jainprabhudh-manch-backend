@@ -518,7 +518,7 @@ const searchHashtags = async (req, res) => {
 const getPostsByUser = asyncHandler(async (req, res) => {
   // ✅ FIX 1: userId URL params se lena hai, not query
   const { userId } = req.params; // Changed from req.query
-  
+
   // ✅ FIX 2: Skip aur limit query params se lenge
   const limit = parseInt(req.query.limit) || 10;
   const skip = parseInt(req.query.skip) || 0;
