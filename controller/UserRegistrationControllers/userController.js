@@ -1357,7 +1357,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
     city,
     gender,
     role,
-    accountType, // ✅ ADD THIS LINE
+    accountType, // ✅ CHANGE 1: Add karo
     page = 1,
     limit = 20,
   } = req.query;
@@ -1388,9 +1388,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
 
   if (gender) query.gender = gender;
   if (role) query.role = role;
-
-  // ✅ ADD THIS - accountType filter
-  if (accountType) query.accountType = accountType;
+  if (accountType) query.accountType = accountType; // ✅ CHANGE 2: Add karo
 
   const blockRelations = await Block.find({
     $or: [{ blocker: currentUserId }, { blocked: currentUserId }],
@@ -1402,17 +1400,14 @@ const getAllUsers = asyncHandler(async (req, res) => {
       : rel.blocker.toString(),
   );
 
-  // ✅ CRITICAL FIX: For sadhu listing, skip block filter
-  // Because sadhus should be visible to everyone
-  if (accountType === "sadhu") {
-    query._id = { $ne: currentUserId }; // Only exclude current user
-  } else {
-    query._id = { $nin: [...blockedUserIds, currentUserId] }; // Normal block filter
-  }
+  query._id = { $nin: [...blockedUserIds, currentUserId] };
 
-  const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+  // ✅ CHANGE 3: accountType filter ho to limit cap hatao
+  const maxLimit = accountType ? 10000 : 100;
+  const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), maxLimit);
+
   const parsedPage = Math.max(parseInt(page) || 1, 1);
-  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const skip = (parsedPage - 1) * parsedLimit; // ✅ parsedLimit use karo skip mein bhi
 
   const [users, total, noCardCount] = await Promise.all([
     User.find(query)
