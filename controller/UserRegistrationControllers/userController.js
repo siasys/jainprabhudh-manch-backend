@@ -1357,7 +1357,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
     city,
     gender,
     role,
-    accountType, // ✅ CHANGE 1: Add karo
+    accountType,
     page = 1,
     limit = 20,
   } = req.query;

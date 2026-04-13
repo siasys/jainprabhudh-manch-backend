@@ -6,8 +6,13 @@ const {authenticate} = require('../../middlewares/authMiddlewares')
 // Apply authentication to all routes
 router.use(authenticate);
 
-router.post('/create', upload.single('groupImage'), createGroupChat);
-router.post('/create-gotra-group', upload.single('groupImage'), createOrFindGotraGroup);
+router.post(
+  "/create",
+  upload.single("groupImage"),
+  upload.compressFiles, // ✅ ADD
+  upload.uploadToS3, // ✅ ADD
+  createGroupChat,
+);router.post('/create-gotra-group', upload.single('groupImage'), createOrFindGotraGroup);
 router.post("/create-hierarchical-sangh-group", createOrFindHierarchicalSanghGroup);
 router.post("/create-sangh-global-group", createSanghGlobalGroup);
 router.post('/remove-user', removeUserFromGroup);
@@ -22,14 +27,19 @@ router.get('/:groupId', getGroupDetails);
 // Get all group chats
 router.get('/all-chats', getAllGroupChats);
 // Send Group Message
-router.post('/send-message', upload.single('chatImage'), sendGroupMessage);
-// Get All Messages for a Group
+router.post(
+  "/send-message",
+  upload.single("chatImage"),
+  upload.compressFiles, // ✅ ADD THIS
+  upload.uploadToS3, // ✅ ADD THIS
+  sendGroupMessage,
+);// Get All Messages for a Group
 router.get('/messages/:groupId', getGroupMessages);
 router.delete('/delete/:groupId', deleteGroupChat);
 // Delete Group Message
 router.delete('/messages/onlyme/clearall/:groupId', clearAllGroupMessagesForMe);
 router.delete('/messages/:groupId/:messageId', deleteGroupMessage);
-router.delete('/messages/onlyme/:groupId/:messageId', deleteGroupMessageOnlyForMe); // 🔥 New
+router.delete('/messages/onlyme/:groupId/:messageId', deleteGroupMessageOnlyForMe);
 
 
 // Update Group Details (Name, Image, Members)

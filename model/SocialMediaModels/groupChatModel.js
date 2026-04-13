@@ -58,7 +58,6 @@ const groupMessageSchema = new mongoose.Schema({
     },
     url: {
       type: String,
-      required: true
     },
     name: String,
     size: Number
