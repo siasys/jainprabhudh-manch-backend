@@ -691,30 +691,41 @@ exports.getAllMessages = async (req, res) => {
   try {
     const userId = req.params.userId;
     const cacheKey = `messages:${userId}`;
+    const messages = await getOrSetCache(
+      cacheKey,
+      async () => {
+        return await Message.find({
+          $or: [{ sender: userId }, { receiver: userId }],
+        })
+          .populate(
+            "sender",
+            "firstName lastName profilePicture accountType businessName sadhuName tirthName",
+          )
+          .populate(
+            "receiver",
+            "firstName lastName profilePicture accountType businessName sadhuName tirthName",
+          )
+          .sort({ createdAt: -1 });
+      },
+      60,
+    );
 
-    const messages = await getOrSetCache(cacheKey, async () => {
-      return await Message.find({
-        $or: [{ sender: userId }, { receiver: userId }],
-      })
-        .populate('sender', 'firstName lastName profilePicture accountType businessName sadhuName tirthName')
-        .populate('receiver', 'firstName lastName profilePicture accountType businessName sadhuName tirthName')
-        .sort({ createdAt: -1 });
-    }, 60); // Cache for 1 minute
-
+    // ✅ 404 hatao — empty array bhi valid response hai
     if (!messages || messages.length === 0) {
-      return res.status(404).json({ message: 'No messages found' });
+      return res.status(200).json({ messages: [], unreadCount: 0 });
+      //                  ^^^  200 karo, 404 nahi
     }
 
     const unreadCount = messages.filter(
       (msg) =>
         msg.isRead === false &&
         msg.receiver &&
-        msg.receiver._id.toString() === userId
+        msg.receiver._id.toString() === userId,
     ).length;
-  
+
     res.status(200).json({ messages, unreadCount });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching messages', error });
+    res.status(500).json({ message: "Error fetching messages", error });
   }
 };
 exports.getConversation = async (req, res) => {

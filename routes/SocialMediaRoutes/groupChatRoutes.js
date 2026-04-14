@@ -9,8 +9,8 @@ router.use(authenticate);
 router.post(
   "/create",
   upload.single("groupImage"),
-  upload.compressFiles, // ✅ ADD
-  upload.uploadToS3, // ✅ ADD
+  upload.compressFiles,
+  upload.uploadToS3,
   createGroupChat,
 );router.post('/create-gotra-group', upload.single('groupImage'), createOrFindGotraGroup);
 router.post("/create-hierarchical-sangh-group", createOrFindHierarchicalSanghGroup);
