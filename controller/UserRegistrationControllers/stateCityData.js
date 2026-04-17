@@ -130,7 +130,7 @@ module.exports = {
 "Karnataka": [
   "Badami", "Ballari", "Bengaluru", "Belagavi", "Bhadravati", "Bidar", "Chikkamagaluru", "Chitradurga",
   "Davangere", "Halebid", "Hassan", "Hubballi-Dharwad", "Kalaburagi", "Kolar", "Madikeri", "Mandya",
-  "Mangaluru", "Mysuru", "Raichur", "Shivamogga", "Shravanabelagola", "Shrirangapattana", "Tumakuru",
+  "Mangaluru", "Mysuru", "Raichur", "Rajgira", "Shivamogga", "Shravanabelagola", "Shrirangapattana", "Tumakuru",
   "Vijayapura"
 ],
 
@@ -153,7 +153,7 @@ module.exports = {
   "Ahmadnagar", "Akola", "Amravati", "Aurangabad", "Bhandara", "Bhusawal", "Bid", "Buldhana",
   "Chandrapur", "Daulatabad", "Dhule","Hingoli", "Jalgaon", "Kalyan", "Karli", "Kolhapur", "Mahabaleshwar",
   "Malegaon", "Matheran", "Mumbai","Nandurbar", "Nagpur", "Nanded", "Nashik", "Osmanabad", "Pandharpur",
-  "Parbhani", "Pune", "Ratnagiri", "Sangli", "Satara", "Sevagram", "Solapur", "Thane",
+  "Parbhani", "Palghar", "Pune", "Ratnagiri", "Sangli", "Satara", "Sevagram", "Solapur", "Thane",
   "Ulhasnagar", "Vasai-Virar", "Wardha", "Yavatmal"
 ],
 

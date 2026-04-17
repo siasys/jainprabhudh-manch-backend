@@ -614,7 +614,7 @@ const getPostById = asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'Post not found' });
   }
 
-  // ✅ function to get proper display name
+  // function to get proper display name
   const getDisplayName = (u) => {
     if (!u) return 'User';
     if (u.accountType === 'business') return u.businessName || u.fullName || 'User';

@@ -101,12 +101,12 @@ const messageSchema = new mongoose.Schema(
      attachments: [{
       type: {
         type: String,
-        enum: ['image'],
+        enum: ["image", "video", "file", "text", "poll"],
         required: true
       },
       url: {
         type: String,
-        required: true
+        // required: true
       },
       name: String, // Original file name
       size: Number // File size in bytes
