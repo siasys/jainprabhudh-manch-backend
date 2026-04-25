@@ -1089,11 +1089,13 @@ const getPostById = asyncHandler(async (req, res) => {
 // };
 
 // new pagination filter code
-
 const getAllPosts = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
-    const fetchLimit = limit + 1; // ✅ pagination fix
+
+    // ✅ ONLY CHANGE: fetch more records so filters ke baad bhi enough mil sake
+    const fetchLimit = limit + 20;
+
     const cursor = req.query.cursor;
     const userId = req.query.userId;
 
@@ -1154,7 +1156,7 @@ const getAllPosts = async (req, res) => {
       )
       .populate("sanghId", "name sanghImage")
       .sort({ createdAt: -1 })
-      .limit(fetchLimit) // ✅ changed
+      .limit(fetchLimit) // ✅ updated only
       .lean();
 
     // Remove deactivated users
@@ -1170,6 +1172,7 @@ const getAllPosts = async (req, res) => {
       if (p.pollDuration === "Always") return true;
 
       const createdAt = new Date(p.createdAt);
+
       const durations = {
         "1day": 1,
         "1week": 7,
@@ -1185,13 +1188,13 @@ const getAllPosts = async (req, res) => {
       return now <= expiry;
     });
 
-    // ✅ HAS MORE FIX
-    let hasMore = false;
+    // ------------------------------
+    // ✅ PAGINATION FIX ONLY
+    // ------------------------------
+    let hasMore = normalPosts.length > limit;
 
-    if (normalPosts.length > limit) {
-      hasMore = true;
-      normalPosts = normalPosts.slice(0, limit);
-    }
+    // keep only requested limit
+    normalPosts = normalPosts.slice(0, limit);
 
     // ------------------------------
     // ACTIVE BOOST PLANS
@@ -1221,7 +1224,6 @@ const getAllPosts = async (req, res) => {
     // ------------------------------
     let targetedBoosts = activeBoosts.filter((boost) => {
       if (!boost.post) return false;
-
       if (boost.post.isBoosted !== true) return false;
       if (!boost.post.activeBoost) return false;
 
@@ -1240,7 +1242,6 @@ const getAllPosts = async (req, res) => {
       return isSelf || match;
     });
 
-    // REMOVE duplicates
     const normalIds = new Set(normalPosts.map((p) => p._id.toString()));
 
     targetedBoosts = targetedBoosts.filter(
@@ -1266,7 +1267,6 @@ const getAllPosts = async (req, res) => {
       }
     });
 
-    // Merge self boosted
     normalPosts = [...boostedPostsForSelf, ...normalPosts];
 
     normalPosts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -1401,7 +1401,7 @@ const getAllPosts = async (req, res) => {
         posts: finalFeed,
         pagination: {
           nextCursor,
-          hasMore, // ✅ fixed
+          hasMore,
         },
       },
       "All posts fetched successfully",
