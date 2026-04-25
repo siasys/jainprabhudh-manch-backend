@@ -34,6 +34,7 @@ const escapeRegex = (str = '') => {
 };
 
 // Create Jain Aadhar application with level-based routing
+// Create Jain Aadhar application with level-based routing
 const createJainAadhar = asyncHandler(async (req, res) => {
   try {
     const number = req.body.contactDetails?.number;
@@ -87,12 +88,23 @@ const createJainAadhar = asyncHandler(async (req, res) => {
     let applicationLevel = null;
     let reviewingSanghId = req.body.reviewingSanghId || null;
 
-    // Helper to find sangh
+    // Helper to find main sangh
     const findSangh = async (level, locFilters = {}) => {
       const query = {
         level,
         status: 'active',
         sanghType: 'main',
+        ...locFilters,
+      };
+      return await HierarchicalSangh.findOne(query).exec();
+    };
+
+    // ✅ Helper to find women sangh
+    const findWomenSangh = async (level, locFilters = {}) => {
+      const query = {
+        level,
+        status: 'active',
+        sanghType: 'women',
         ...locFilters,
       };
       return await HierarchicalSangh.findOne(query).exec();
@@ -106,7 +118,7 @@ const createJainAadhar = asyncHandler(async (req, res) => {
     const stateRegex = norm.state ? new RegExp('^' + escapeRegex(norm.state) + '$', 'i') : null;
     const countryRegex = norm.country ? new RegExp('^' + escapeRegex(norm.country) + '$', 'i') : null;
 
-    // ✅ NEW HELPER: Check if a sangh has an active president in officeBearers
+    // ✅ Check if a sangh has an active president in officeBearers
     const hasActivePresident = (sangh) => {
       if (!sangh || !Array.isArray(sangh.officeBearers)) return false;
       return sangh.officeBearers.some(
@@ -152,15 +164,24 @@ const createJainAadhar = asyncHandler(async (req, res) => {
         ) || null;
       }
 
-      // ✅ City sangh found — now check if it has a president
-      if (citySangh) {
-        if (hasActivePresident(citySangh)) {
-          // President exists → assign to city
-          reviewingSangh = citySangh;
+      if (citySangh && hasActivePresident(citySangh)) {
+        // ✅ main city sangh with president → assign
+        reviewingSangh = citySangh;
+        applicationLevel = 'city';
+        reviewingSanghId = citySangh._id;
+      } else {
+        // ✅ main nahi mila ya president nahi → check women city sangh
+        const womenCitySangh = await findWomenSangh('city', {
+          'location.city': cityRegex,
+          'location.district': districtRegex,
+          'location.state': stateRegex,
+        });
+        if (womenCitySangh && hasActivePresident(womenCitySangh)) {
+          reviewingSangh = womenCitySangh;
           applicationLevel = 'city';
-          reviewingSanghId = citySangh._id;
+          reviewingSanghId = womenCitySangh._id;
         }
-        // else: city sangh exists but no president → fall through to district
+        // else: fall through to district
       }
     }
 
@@ -171,13 +192,23 @@ const createJainAadhar = asyncHandler(async (req, res) => {
         'location.state': stateRegex,
       });
 
-      if (districtSangh) {
-        if (hasActivePresident(districtSangh)) {
-          reviewingSangh = districtSangh;
+      if (districtSangh && hasActivePresident(districtSangh)) {
+        // ✅ main district sangh with president → assign
+        reviewingSangh = districtSangh;
+        applicationLevel = 'district';
+        reviewingSanghId = districtSangh._id;
+      } else {
+        // ✅ main nahi ya president nahi → check women district sangh
+        const womenDistrictSangh = await findWomenSangh('district', {
+          'location.district': districtRegex,
+          'location.state': stateRegex,
+        });
+        if (womenDistrictSangh && hasActivePresident(womenDistrictSangh)) {
+          reviewingSangh = womenDistrictSangh;
           applicationLevel = 'district';
-          reviewingSanghId = districtSangh._id;
+          reviewingSanghId = womenDistrictSangh._id;
         }
-        // else: district sangh exists but no president → fall through to state
+        // else: fall through to state
       }
     }
 
@@ -187,17 +218,26 @@ const createJainAadhar = asyncHandler(async (req, res) => {
         'location.state': stateRegex,
       });
 
-      if (stateSangh) {
-        if (hasActivePresident(stateSangh)) {
-          reviewingSangh = stateSangh;
+      if (stateSangh && hasActivePresident(stateSangh)) {
+        // ✅ main state sangh with president → assign
+        reviewingSangh = stateSangh;
+        applicationLevel = 'state';
+        reviewingSanghId = stateSangh._id;
+      } else {
+        // ✅ main nahi ya president nahi → check women state sangh
+        const womenStateSangh = await findWomenSangh('state', {
+          'location.state': stateRegex,
+        });
+        if (womenStateSangh && hasActivePresident(womenStateSangh)) {
+          reviewingSangh = womenStateSangh;
           applicationLevel = 'state';
-          reviewingSanghId = stateSangh._id;
+          reviewingSanghId = womenStateSangh._id;
         }
-        // else: state sangh exists but no president → fall through to country
+        // else: fall through to country
       }
     }
 
-    // 🔹 Step 4: Try Country / Foundation / Superadmin
+    // 🔹 Step 4: Try Country / Foundation / Superadmin (UNCHANGED)
     if (!reviewingSangh) {
       const countrySangh = await findSangh('country', {
         'location.country': countryRegex,
