@@ -1595,23 +1595,28 @@ const getUserByJainAadharNumber = asyncHandler(async (req, res) => {
 
   const user = await User.findOne({
     jainAadharNumber: number,
-    jainAadharStatus: 'verified'
+    jainAadharStatus: 'verified',
   }).populate('jainAadharApplication');
 
   if (!user) {
-    return res.status(404).json({ success: false, message: 'User not found or not verified' });
+    return res.status(404).json({
+      success: false,
+      message: 'User not found or not verified',
+    });
   }
 
   const gender = user?.jainAadharApplication?.gender || '';
-const dob = user?.jainAadharApplication?.dob || '';
-let age = null;
+  const dob = user?.jainAadharApplication?.dob || '';
 
-if (dob) {
-  const dobDate = new Date(dob);
-  const diffMs = Date.now() - dobDate.getTime();
-  const ageDate = new Date(diffMs);
-  age = Math.abs(ageDate.getUTCFullYear() - 1970);
-}
+  let age = null;
+
+  if (dob) {
+    const dobDate = new Date(dob);
+    const diffMs = Date.now() - dobDate.getTime();
+    const ageDate = new Date(diffMs);
+    age = Math.abs(ageDate.getUTCFullYear() - 1970);
+  }
+
   res.json({
     success: true,
     data: {
@@ -1622,7 +1627,16 @@ if (dob) {
       age,
       profileImage: user?.profileImage || '',
       jainAadharNumber: user.jainAadharNumber,
-    }
+
+      // ✅ Location Added
+      location: {
+        country: user?.location?.country || '',
+        state: user?.location?.state || '',
+        district: user?.location?.district || '',
+        address: user?.location?.address || '',
+        pinCode: user?.location?.pinCode || '',
+      },
+    },
   });
 });
 

@@ -1033,8 +1033,7 @@ const getPostById = asyncHandler(async (req, res) => {
 
 //     return { ...post, _score: score };
 //   });
-
-//   // Score ke hisaab se sort karo — boosted slots apni position pe rahenge
+ // Score ke hisaab se sort karo — boosted slots apni position pe rahenge
 //   // Strategy: non-boosted posts ko unke original positions ke beech sort karo
 //   const nonBoostedWithIndex = [];
 //   const boostedWithIndex = [];
