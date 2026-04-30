@@ -1633,6 +1633,7 @@ const getUserByJainAadharNumber = asyncHandler(async (req, res) => {
         country: user?.location?.country || '',
         state: user?.location?.state || '',
         district: user?.location?.district || '',
+        city: user?.location?.city || '',
         address: user?.location?.address || '',
         pinCode: user?.location?.pinCode || '',
       },
