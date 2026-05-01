@@ -158,7 +158,22 @@ module.exports = {
 ],
 
 "Manipur": [
-  "Imphal"
+  "Imphal West",
+  "Imphal East",
+  "Ukhrul",
+  "Senapati",
+  "Thoubal",
+  "Bishnupur",
+  "Tamenglong",
+  "Churachandpur",
+  "Chandel",
+  "Kangpokpi",
+  "Noney",
+  "Kakching",
+  "Jiribam",
+  "Kamjong",
+  "Pherzawl",
+  "Tengnoupal"
 ],
 
 "Meghalaya": [
