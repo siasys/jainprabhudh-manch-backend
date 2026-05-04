@@ -1366,9 +1366,18 @@ const getAllPosts = async (req, res) => {
       }
     });
 
-    nonBoostedWithIndex.sort(
-      (a, b) => (b.post._score || 0) - (a.post._score || 0),
-    );
+ nonBoostedWithIndex.sort((a, b) => {
+   const timeDiff = new Date(b.post.createdAt) - new Date(a.post.createdAt);
+   const sixHours = 6 * 60 * 60 * 1000;
+
+   // same 6hr window → score se decide
+   if (Math.abs(timeDiff) < sixHours) {
+     return (b.post._score || 0) - (a.post._score || 0);
+   }
+
+   // warna recent first
+   return timeDiff;
+ });
 
     const sortedFeed = new Array(finalFeed.length);
 

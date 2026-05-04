@@ -6,52 +6,52 @@ const userSchema = new mongoose.Schema(
   {
     firstName: {
       type: String,
-     // required: [true, 'First name is required'],
-     // trim: true,
+      // required: [true, 'First name is required'],
+      // trim: true,
     },
     lastName: {
       type: String,
-     // required: [true, 'Last name is required'],
+      // required: [true, 'Last name is required'],
     },
     fullName: {
       type: String,
       //required: false,
     },
-    businessName:{
-    type: String,
-    },
-    businessDate:{
-    type: Date,
-    },
-    shravakId:{
+    businessName: {
       type: String,
     },
-     sadhuName: {
+    businessDate: {
+      type: Date,
+    },
+    shravakId: {
       type: String,
-     },
-     tirthName:{
+    },
+    sadhuName: {
       type: String,
-     },
+    },
+    tirthName: {
+      type: String,
+    },
     email: {
-    type: String,
-    // unique: true,
-    // trim: true,
-    // sparse: true,
-    lowercase: true,
-    validate: {
-      validator: function(v) {
-        if (!v) return true;
-        return validator.isEmail(v);
+      type: String,
+      // unique: true,
+      // trim: true,
+      // sparse: true,
+      lowercase: true,
+      validate: {
+        validator: function (v) {
+          if (!v) return true;
+          return validator.isEmail(v);
+        },
+        message: (props) => `${props.value} is not a valid email address!`,
       },
-      message: props => `${props.value} is not a valid email address!`
-    }
-  },
+    },
     isPhoneVerified: {
       type: Boolean,
       default: false,
     },
-    isEmailVerified:{
-       type: Boolean,
+    isEmailVerified: {
+      type: Boolean,
       default: false,
     },
     tempPhoneChange: {
@@ -62,23 +62,23 @@ const userSchema = new mongoose.Schema(
     tempEmailChange: {
       email: { type: String },
       code: { type: String },
-      expiresAt: { type: Date }
+      expiresAt: { type: Date },
     },
     verificationCode: {
       code: String,
-      expiresAt: Date
+      expiresAt: Date,
     },
     resetPasswordCode: {
       code: String,
-      expiresAt: Date
+      expiresAt: Date,
     },
     birthDate: {
       type: Date,
-     // required: [true, 'Birth date is required'],
+      // required: [true, 'Birth date is required'],
     },
     gender: {
       type: String,
-      enum: ['Male', 'Female'],
+      enum: ["Male", "Female"],
     },
     phoneNumber: {
       type: String,
@@ -90,36 +90,36 @@ const userSchema = new mongoose.Schema(
       //   },
       //   message: props => `${props.value} is not a valid phone number!`
       // },
-     // required: [true, 'Phone number is required'],
+      // required: [true, 'Phone number is required'],
     },
     password: {
       type: String,
-     // required: [true, 'Password is required'],
+      // required: [true, 'Password is required'],
     },
-     accountType: {
+    accountType: {
       type: String,
-      enum: ["user", "business", "sadhu","tirth"],
+      enum: ["user", "business", "sadhu", "tirth"],
       default: "user",
     },
-      location: {
+    location: {
       country: {
         type: String,
       },
       state: {
         type: String,
       },
-      district:{
+      district: {
         type: String,
       },
       city: {
         type: String,
-      }
+      },
     },
     profilePicture: {
       type: String,
       default: null,
     },
-    coverPicture:{
+    coverPicture: {
       type: String,
       default: null,
     },
@@ -128,34 +128,34 @@ const userSchema = new mongoose.Schema(
     },
     privacy: {
       type: String,
-      default: 'public',
+      default: "public",
     },
     token: {
       type: String,
-      default: null
+      default: null,
     },
     lastLogin: {
       type: Date,
-      default: null
+      default: null,
     },
     jainAadharNumber: {
       type: String,
     },
     jainAadharStatus: {
       type: String,
-      enum: ['none', 'pending', 'verified', 'rejected'],
-      default: 'none'
+      enum: ["none", "pending", "verified", "rejected"],
+      default: "none",
     },
     jainAadharApplication: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'JainAadhar'
+      ref: "JainAadhar",
     },
-    accountTitle:{
+    accountTitle: {
       type: String,
     },
-  trialPeriodStart: {
-  type: Date,
-  default: Date.now
+    trialPeriodStart: {
+      type: Date,
+      default: Date.now,
     },
     trialPeriodEnd: {
       type: Date,
@@ -163,246 +163,277 @@ const userSchema = new mongoose.Schema(
         const date = new Date();
         date.setDate(date.getDate() + 7);
         return date;
-      }
+      },
     },
     isTrialExpired: {
       type: Boolean,
-      default: false
+      default: false,
     },
     role: {
       type: String,
-      enum: ['user', 'admin', 'superadmin'],
-      default: 'user'
+      enum: ["user", "admin", "superadmin"],
+      default: "user",
     },
     adminVerifiedAt: {
-      type: Date
+      type: Date,
     },
-    adminPermissions: [{
-      type: String,
-      enum: [
-        'manage_users',
-        'verify_jain_aadhar',
-        'manage_content',
-        'manage_reports',
-        'manage_sanghs',
-        'manage_admins'
-      ]
-    }],
+    adminPermissions: [
+      {
+        type: String,
+        enum: [
+          "manage_users",
+          "verify_jain_aadhar",
+          "manage_content",
+          "manage_reports",
+          "manage_sanghs",
+          "manage_admins",
+        ],
+      },
+    ],
     posts: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Post',
+        ref: "Post",
         default: 0,
       },
     ],
     postCount: {
       type: Number,
-      default: 0
+      default: 0,
     },
     activeBoosts: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "BoostPlan"
-      }
+        ref: "BoostPlan",
+      },
     ],
     isBoostActive: {
       type: Boolean,
-      default: false
+      default: false,
     },
     boosts: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "BoostPlan"
-      }
+        ref: "BoostPlan",
+      },
     ],
 
     likedPosts: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Post',
+        ref: "Post",
       },
     ],
-    friends: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    }],
-    followedSanghs: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'HierarchicalSangh'
-    }],
+    friends: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    followedSanghs: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "HierarchicalSangh",
+      },
+    ],
     story: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Story',
+        ref: "Story",
       },
     ],
     mutedStoryUsers: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    }
-  ],
-  hiddenStoriesFrom: [
-  {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User"
-  }
-],
-   activity: {
-  likes: [
-    { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }
-  ],
-  comments: [
-    { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }
-  ],
-  shares: [
-    { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }
-  ],
-  saved: [
-    { postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, createdAt: { type: Date, default: Date.now } }
-  ]
-},
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    hiddenStoriesFrom: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    activity: {
+      likes: [
+        {
+          postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      comments: [
+        {
+          postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      shares: [
+        {
+          postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      saved: [
+        {
+          postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+    },
 
     deletedAt: { type: Date },
     loginAttempts: {
       type: Number,
-      default: 0
+      default: 0,
     },
     lockUntil: {
       type: Date,
-      default: null
+      default: null,
     },
     accountStatus: {
       type: String,
-      enum: ['active', 'deactivated'],
-      default: 'active'
+      enum: ["active", "deactivated", "inactive", "merged"],
+      default: "active",
+    },
+    mergedInto: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
     status: {
-    type: String,
-    enum: ['online', 'offline'],
-    default: 'offline',
-  },
-  lastSeen: {
-    type: Date,
-    default: null,
-  },
-  blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-activityJudge: [
-  {
-    activityId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Activity",
-    },
-    role: {
       type: String,
-      enum: ["judge", "judge1", "judge2", "judge3"],
-      default: "judge",
+      enum: ["online", "offline"],
+      default: "offline",
     },
-  },
-],
+    lastSeen: {
+      type: Date,
+      default: null,
+    },
+    blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    activityJudge: [
+      {
+        activityId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Activity",
+        },
+        role: {
+          type: String,
+          enum: ["judge", "judge1", "judge2", "judge3"],
+          default: "judge",
+        },
+      },
+    ],
 
-    sanghRoles: [{
-      sanghId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'HierarchicalSangh'
+    sanghRoles: [
+      {
+        sanghId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "HierarchicalSangh",
+        },
+        role: {
+          type: String,
+          enum: [
+            "president",
+            "secretary",
+            "treasurer",
+            "member",
+            "honoraryMember",
+            "panchMember",
+            "sanghSarakshak",
+            "sanghMargdarshak",
+            "sanghUpadhyaksh",
+            "sanghSanghthanSachive",
+            "sanghSahsachive",
+            "sanghKoshadhyksha",
+            "sanghPracharak",
+            "sanghKarykarmPramukh",
+            "sanghKaryakariniSadasya",
+          ],
+        },
+        level: {
+          type: String,
+          enum: ["foundation", "country", "state", "district", "city", "area"],
+        },
+        sanghType: {
+          type: String,
+          enum: ["main", "women", "youth"],
+          default: "main",
+        },
       },
-      role: {
-        type: String,
-        enum: [
-        'president',
-        'secretary',
-        'treasurer',
-        'member',
-        'honoraryMember',
-        'panchMember',
-        'sanghSarakshak',
-        'sanghMargdarshak',
-        'sanghUpadhyaksh',
-        'sanghSanghthanSachive',
-        'sanghSahsachive',
-        'sanghKoshadhyksha',
-        'sanghPracharak',
-        'sanghKarykarmPramukh',
-        'sanghKaryakariniSadasya'
-      ]
+    ],
+    // **Panch Roles (With Default Role 'panchMember')**
+    panchRoles: [
+      {
+        panchId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Panch",
+        },
+        sanghId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "HierarchicalSangh",
+        },
+        role: {
+          type: String,
+          default: "panchMember",
+        },
+        level: {
+          type: String,
+          enum: ["city", "district", "state", "country"],
+        },
       },
-      level: {
-        type: String,
-        enum: ['foundation','country', 'state', 'district', 'city', 'area']
+    ],
+    tirthRoles: [
+      {
+        tirthId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Tirth",
+        },
+        role: {
+          type: String,
+          enum: ["manager", "assistant"],
+        },
+        approvedAt: {
+          type: Date,
+          default: Date.now,
+        },
       },
-      sanghType: {
-        type: String,
-        enum: ['main', 'women', 'youth'],
-        default: 'main'
-      }
-    }],
-     // **Panch Roles (With Default Role 'panchMember')**
-  panchRoles: [
-  {
-    panchId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Panch',
-    },
-    sanghId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'HierarchicalSangh',
-    },
-    role: {
-      type: String,
-      default: 'panchMember',
-    },
-    level: {
-      type: String,
-      enum: ['city', 'district', 'state', 'country'],
-    },
-  }
-],
-tirthRoles: [{
-  tirthId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tirth'
-  },
-  role: {
-    type: String,
-    enum: ['manager', 'assistant']
-  },
-  approvedAt: {
-    type: Date,
-    default: Date.now
-  }
-}],
-vyaparRoles: [{
-  vyaparId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Vyapar'
-  },
-  role: {
-    type: String,
-    enum: ['owner', 'manager']
-  },
-  approvedAt: {
-    type: Date,
-    default: Date.now
-  }
-}],
-sadhuRoles: [{
-  sadhuId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Sadhu'
-  },
-  role: {
-    type: String,
-    enum: ['owner', 'manager', 'admin']
-  },
-  approvedAt: {
-    type: Date,
-    default: Date.now
-  }
-}]
+    ],
+    vyaparRoles: [
+      {
+        vyaparId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Vyapar",
+        },
+        role: {
+          type: String,
+          enum: ["owner", "manager"],
+        },
+        approvedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+    sadhuRoles: [
+      {
+        sadhuId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Sadhu",
+        },
+        role: {
+          type: String,
+          enum: ["owner", "manager", "admin"],
+        },
+        approvedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 userSchema.pre('save', hashPassword);
