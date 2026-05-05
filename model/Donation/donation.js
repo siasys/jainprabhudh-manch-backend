@@ -25,6 +25,9 @@ const donationSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    occasionDetails: {
+      type: String,
+    },
 
     purpose: {
       type: String,

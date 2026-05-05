@@ -11,7 +11,7 @@ process.env.PANGOCAIRO_BACKEND = "fontconfig";
 // ================= FONT LOAD =================
 const fontPath = path.resolve(
   __dirname,
-  "../../Public/fonts/NotoSansDevanagari-Regular.ttf"
+  "../../Public/fonts/NotoSansDevanagari-Regular.ttf",
 );
 
 if (fs.existsSync(fontPath)) {
@@ -29,15 +29,15 @@ let templateBack;
 async function loadTemplates() {
   try {
     templateShravak1 = await loadImage(
-      path.join(__dirname, "../../Public/jain_shravak_1.jpeg")
+      path.join(__dirname, "../../Public/jain_shravak_1.jpeg"),
     );
 
     templateShravak2 = await loadImage(
-      path.join(__dirname, "../../Public/jain_shravak_2.jpeg")
+      path.join(__dirname, "../../Public/jain_shravak_2.jpeg"),
     );
 
     templateBack = await loadImage(
-      path.join(__dirname, "../../Public/jain_shravak_3.jpeg")
+      path.join(__dirname, "../../Public/jain_shravak_3.jpeg"),
     );
 
     console.log("✅ Card Templates Loaded");
@@ -105,12 +105,12 @@ const generateJainAadharCard = async (req, res) => {
       const profileRes = await axios.get(application.userProfile, {
         responseType: "arraybuffer",
       });
-    const resizedBuffer = await sharp(profileRes.data)
-      .resize(220, 240)
-      .jpeg({ quality: 80 })
-      .toBuffer();
+      const resizedBuffer = await sharp(profileRes.data)
+        .resize(220, 240)
+        .jpeg({ quality: 80 })
+        .toBuffer();
 
-    const profileImg = await loadImage(resizedBuffer);
+      const profileImg = await loadImage(resizedBuffer);
 
       const imgX = 760;
       const imgY = 170;
@@ -204,13 +204,18 @@ const generateJainAadharCard = async (req, res) => {
 
     yPos = wrapText(ctx, fullAddress, xPos, yPos, maxWidth, 40);
 
-
     // === QR Code ===
     const qrUrl = `https://jainprabhudh-manch-backend.onrender.com/api/generate-card/verify/jain-shravak/${application.jainAadharNumber}`;
-  const qrBuffer = await QRCode.toBuffer(qrUrl, { width: 200 });
-  const qrImage = await loadImage(qrBuffer);
+    const qrBuffer = await QRCode.toBuffer(qrUrl, { width: 200 });
+    const qrImage = await loadImage(qrBuffer);
     ctx.drawImage(qrImage, 750, height + 280, 180, 180);
-
+    ctx.font = "bold 24px Georgia";
+    ctx.fillStyle = "#333333";
+    ctx.fillText(
+      "Reg. No: DL/2025/0487190",
+      350, // ← 310 → 340 (thoda right)
+      height + GAP_BETWEEN_CARDS + 505, // ← 468 → 490 (thoda niche)
+    );
     res.setHeader("Content-Type", "image/jpeg");
     combinedCanvas.createJPEGStream().pipe(res);
   } catch (error) {

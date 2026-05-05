@@ -10,6 +10,7 @@ const createDonation = async (req, res) => {
     const {
       userId,
       title,
+      occasionDetails,
       purpose,
       amount,
       onBehalfOf,
@@ -68,6 +69,7 @@ const createDonation = async (req, res) => {
       userId,
       sanghId: foundationSangh._id,
       title,
+      occasionDetails,
       purpose,
       amount,
       onBehalfOf,

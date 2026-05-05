@@ -175,7 +175,7 @@ const getS3Folder = (fieldname, req) => {
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50 MB maximum
+    fileSize: 50 * 1024 * 1024,
     files: 10,
   },
   fileFilter: fileFilter,
@@ -195,7 +195,7 @@ const compressImage = async (buffer) => {
   }
 };
 const compressVideo = async (inputBuffer) => {
-  // ✅ Presigned URL flow mein video server pe aati hi nahi
+  //  Presigned URL flow mein video server pe aati hi nahi
   // Yeh function ab sirf backup hai — directly original return karo
   console.warn("⚠️ compressVideo called — presigned URL flow use karo");
   return inputBuffer;
