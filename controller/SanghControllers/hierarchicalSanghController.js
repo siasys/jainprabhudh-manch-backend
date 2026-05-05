@@ -2811,11 +2811,11 @@ let memberBackTemplate;
 async function loadMemberTemplates() {
   try {
     memberFrontTemplate = await loadImage(
-      path.join(__dirname, "../../Public/member_front.jpg"),
+      path.join(__dirname, "../../Public/member_front.jpeg"),
     );
 
     memberBackTemplate = await loadImage(
-      path.join(__dirname, "../../Public/member_back.jpg"),
+      path.join(__dirname, "../../Public/member_back.jpeg"),
     );
 
     console.log("✅ Member card templates loaded");
@@ -2909,8 +2909,8 @@ const generateMemberCard = async (req, res) => {
     ctx.fillStyle = "black";
     ctx.font = "26px Georgia";
 
-    ctx.fillText(`${user.name || ""}`, 570, 196);
-    ctx.fillText(`${membershipNumber}`, 570, 260);
+    ctx.fillText(`${user.name || ""}`, 570, 210);
+    ctx.fillText(`${membershipNumber}`, 570, 280);
 
     // ===== postMember logic =====
     let postText = user.postMember || user.description || "";
@@ -2928,26 +2928,17 @@ const generateMemberCard = async (req, res) => {
       }
     }
 
-    ctx.fillText(`${postText}`, 570, 320);
+    ctx.fillText(`${postText}`, 570, 340);
 
     if (user.jainAadharNumber)
-      ctx.fillText(`${user.jainAadharNumber}`, 570, 379);
+      ctx.fillText(`${user.jainAadharNumber}`, 570, 410);
 
     // ===== Bottom Created By =====
-    function getRandomFourDigitNumber() {
-      return Math.floor(1000 + Math.random() * 9000);
-    }
+   ctx.font = "bold 28px Georgia";
+   ctx.textAlign = "center";
+   ctx.fillStyle = "black";
 
-    const createdByText = `Created By: ${
-      sangh.level || "unknown"
-    }/JA${getRandomFourDigitNumber()}`;
-
-    ctx.font = "bold 28px Georgia";
-    ctx.textAlign = "center";
-    ctx.fillStyle = "black";
-
-    ctx.fillText(createdByText, width / 2, height - 90);
-
+   ctx.fillText(`Reg. No: DL/2025/0487190`, width / 2, height - 90);
     // ===== BACK TEMPLATE =====
     ctx.drawImage(memberBackTemplate, 0, height, width, height);
 
