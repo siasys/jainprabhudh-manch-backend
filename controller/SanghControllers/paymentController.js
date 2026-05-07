@@ -15,10 +15,7 @@ const getAmountByLevel = (level, sanghType, age) => {
   const type = sanghType?.toLowerCase();
   const lvl = level?.toLowerCase();
 
-  const isYouthLike =
-    type === "youth" || type === "women" || (type === "main" && age < 35);
-
-  if (isYouthLike) {
+  if (type === "youth" || type === "women") {
     switch (lvl) {
       case "city":
         return 550;
@@ -32,14 +29,16 @@ const getAmountByLevel = (level, sanghType, age) => {
         return 550;
     }
   } else {
+    // main sangh
     switch (lvl) {
+      case "city":
+        return 1100;
       case "district":
         return 2100;
       case "state":
         return 5100;
       case "country":
         return 11000;
-      case "city":
       default:
         return 1100;
     }
