@@ -7,29 +7,28 @@ exports.applyScholarship = async (req, res) => {
   try {
     const data = req.body;
 
-    // Basic validation
     if (!data.categoryType) {
       return res.status(400).json({ message: "Category type is required" });
     }
 
-    // Convert uploaded files
-    const marksheetFiles = (req.files?.lastYearMarksheet || []).map((file) => ({
-      fileUrl: convertS3UrlToCDN(file.location),
-      fileType: file.mimetype,
-    }));
+    // Map helper
+    const mapFiles = (fieldName) =>
+      (req.files?.[fieldName] || []).map((file) => ({
+        fileUrl: convertS3UrlToCDN(file.location),
+        fileType: file.mimetype,
+      }));
 
-    // Prepare Scholarship Details Object
-    const scholarshipDetails = {
-      type: data["scholarshipDetails.type"] || "",
-      declaration: data["scholarshipDetails.declaration"] || "",
-      reason: data["scholarshipDetails.reason"] || ""
-    };
-
-    // Save in DB
     const scholarship = new Scholarship({
       ...data,
-      lastYearMarksheet: marksheetFiles,
-      scholarshipDetails: scholarshipDetails,
+      lastYearMarksheet: mapFiles("lastYearMarksheet"),
+      uploadFeeStructure: mapFiles("uploadFeeStructure"),
+      principalLetter: mapFiles("principalLetter"),
+      schoolAccountDocument: mapFiles("schoolAccountDocument"),
+      scholarshipDetails: {
+        type: data["scholarshipDetails.type"] || "",
+        declaration: data["scholarshipDetails.declaration"] || "",
+        reason: data["scholarshipDetails.reason"] || "",
+      },
     });
 
     await scholarship.save();
@@ -38,7 +37,6 @@ exports.applyScholarship = async (req, res) => {
       message: "Scholarship application submitted successfully",
       scholarship,
     });
-
   } catch (error) {
     res.status(500).json({
       message: "Error applying scholarship",
@@ -116,7 +114,7 @@ exports.updateScholarshipSponsorImage = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // 🔹 Find sponsor
+    // Find sponsor
     const sponsor = await ScholarshipSponsor.findById(id);
     if (!sponsor) {
       return res.status(404).json({ message: "Sponsor not found" });

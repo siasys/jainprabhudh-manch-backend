@@ -226,4 +226,171 @@ const generateJainAadharCard = async (req, res) => {
   }
 };
 
-module.exports = { generateJainAadharCard };
+// ================= MINORITY CARD TEMPLATE PRELOAD =================
+let templateMinority;
+ 
+async function loadMinorityTemplate() {
+  try {
+    templateMinority = await loadImage(
+      path.join(__dirname, "../../Public/minority_card.png"),
+    );
+    console.log("✅ Minority Card Template Loaded");
+  } catch (err) {
+    console.error("❌ Minority Template Load Error:", err);
+  }
+}
+loadMinorityTemplate();
+ 
+// ================= GENERATE MINORITY CARD =================
+const generateMinorityCard = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const application = await JainAadhar.findById(id);
+    if (!application) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+ 
+    // === Canvas size match karo template se (portrait) ===
+    const width = 800;
+    const height = 1300;
+ 
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext("2d");
+ 
+    // === Background: minority_card.png ===
+    const template = templateMinority || await loadImage(
+      path.join(__dirname, "../../Public/minority_card.png"),
+    );
+    ctx.drawImage(template, 0, 0, width, height);
+ 
+    // === PROFILE IMAGE (left box) ===
+    if (application.userProfile) {
+      try {
+        const profileRes = await axios.get(application.userProfile, {
+          responseType: "arraybuffer",
+        });
+        const resizedBuffer = await sharp(profileRes.data)
+          .resize(210, 270)
+          .jpeg({ quality: 80 })
+          .toBuffer();
+        const profileImg = await loadImage(resizedBuffer);
+
+        const imgX = 85;
+        const imgY = 470;
+        const imgWidth = 225;
+        const imgHeight = 268;
+        const radius = 15;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(imgX + radius, imgY);
+        ctx.lineTo(imgX + imgWidth - radius, imgY);
+        ctx.quadraticCurveTo(imgX + imgWidth, imgY, imgX + imgWidth, imgY + radius);
+        ctx.lineTo(imgX + imgWidth, imgY + imgHeight - radius);
+        ctx.quadraticCurveTo(imgX + imgWidth, imgY + imgHeight, imgX + imgWidth - radius, imgY + imgHeight);
+        ctx.lineTo(imgX + radius, imgY + imgHeight);
+        ctx.quadraticCurveTo(imgX, imgY + imgHeight, imgX, imgY + imgHeight - radius);
+        ctx.lineTo(imgX, imgY + radius);
+        ctx.quadraticCurveTo(imgX, imgY, imgX + radius, imgY);
+        ctx.closePath();
+        ctx.clip();
+        ctx.drawImage(profileImg, imgX, imgY, imgWidth, imgHeight);
+        ctx.restore();
+      } catch (imgErr) {
+        console.warn("⚠️ Profile image load failed:", imgErr.message);
+      }
+    }
+ 
+    // === Father's Name ===
+    // Married female → husband name, else father name
+ ctx.fillStyle = "#333333";
+ ctx.font = "bold 24px Georgia";
+ ctx.fillText(application.name || "N/A", 350, 510); // adjust y as needed
+
+ // === Father/Husband Name logic ===
+ let fatherOrHusband = "N/A";
+
+ if (application.gender === "Female") {
+   // Female (married ya unmarried) → pitaOrpatiName → pitaKaNaam → fatherName
+   fatherOrHusband =
+     application.pitaOrpatiName ||
+     application.pitaKaNaam ||
+     application.fatherName ||
+     "N/A";
+ } else {
+   // Male → fatherName → pitaOrpatiName → pitaKaNaam
+   fatherOrHusband =
+     application.fatherName ||
+     application.pitaOrpatiName ||
+     application.pitaKaNaam ||
+     "N/A";
+ }
+    ctx.fillStyle = "#333333";
+    ctx.font = "20px Georgia";
+ 
+    ctx.fillText(fatherOrHusband, 545, 560);       // Father's Name value
+    ctx.fillText(application.gender || "N/A", 545, 610);        // Gender value
+    ctx.fillText(application.dob || "N/A", 545, 655);           // Date of Birth value
+    ctx.fillText(application.jainAadharNumber || "N/A", 545, 705); // Shravak ID value
+ 
+    // === Permanent Address ===
+    const fullAddress = [
+      application.location?.address,
+      application.location?.city,
+      application.location?.pinCode
+        ? `- ${application.location.pinCode}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .trim() || "N/A";
+ 
+    ctx.font = "24px Georgia";
+    wrapTextMinority(ctx, fullAddress, 100, 830, 600, 36);
+ 
+    // === Certify Name (between "certify that" and "belongs") ===
+    ctx.font = "19px Georgia";
+    ctx.fillStyle = "#8B0000"; // dark red to match card style
+    ctx.fillText(application.name || "N/A", 310, 943);
+ 
+    // === Issue Date ===
+    const issueDate = new Date().toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    ctx.fillStyle = "#333333";
+    ctx.font = "20px Georgia";
+    ctx.fillText(issueDate, 100, 1080);
+ 
+    // === Send Response ===
+    res.setHeader("Content-Type", "image/jpeg");
+    canvas.createJPEGStream({ quality: 0.95 }).pipe(res);
+  } catch (error) {
+    console.error("❌ Error generating minority card:", error);
+    res.status(500).json({
+      message: "Failed to generate minority card",
+      error: error.message,
+    });
+  }
+};
+ 
+// Helper: wrap text for address
+function wrapTextMinority(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(" ");
+  let line = "";
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + " ";
+    const testWidth = ctx.measureText(testLine).width;
+    if (testWidth > maxWidth && n > 0) {
+      ctx.fillText(line.trim(), x, y);
+      line = words[n] + " ";
+      y += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line.trim(), x, y);
+}
+
+module.exports = { generateJainAadharCard, generateMinorityCard };

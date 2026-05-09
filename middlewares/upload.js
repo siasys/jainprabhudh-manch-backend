@@ -142,6 +142,12 @@ const getS3Folder = (fieldname, req) => {
       return "sadhu/documents/";
     case "uploadActivity":
       return "activity/uploads/";
+    case "uploadFeeStructure":
+      return "scholarship/fee-structure/";
+    case "principalLetter":
+      return "scholarship/principal-letter/";
+    case "schoolAccountDocument":
+      return "scholarship/school-account/";
     case "entityPhoto":
       if (req && req.baseUrl) {
         if (req.baseUrl.includes("sadhu")) {
@@ -494,7 +500,12 @@ module.exports.uploadActivityFiles = [
   uploadToS3,
 ];
 module.exports.scholarshipUpload = [
-  upload.fields([{ name: "lastYearMarksheet", maxCount: 5 }]),
+  upload.fields([
+    { name: "lastYearMarksheet", maxCount: 5 },
+    { name: "uploadFeeStructure", maxCount: 3 },
+    { name: "principalLetter", maxCount: 1 },
+    { name: "schoolAccountDocument", maxCount: 2 },
+  ]),
   compressFiles,
   uploadToS3,
 ];
