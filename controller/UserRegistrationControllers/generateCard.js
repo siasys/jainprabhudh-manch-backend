@@ -377,14 +377,21 @@ const generateMinorityCard = async (req, res) => {
     ctx.fillText(application.name || "N/A", 310, 943);
  
     // === Issue Date ===
-    const issueDate = new Date().toLocaleDateString("en-IN", {
+const issueDate = application.createdAt
+  ? new Date(application.createdAt).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    })
+  : new Date().toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
     });
-    ctx.fillStyle = "#333333";
-    ctx.font = "20px Georgia";
-    ctx.fillText(issueDate, 100, 1080);
+
+ctx.fillStyle = "#333333";
+ctx.font = "20px Georgia";
+ctx.fillText(issueDate, 100, 1080);
  
     // === Send Response ===
     res.setHeader("Content-Type", "image/jpeg");
