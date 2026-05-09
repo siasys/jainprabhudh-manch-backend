@@ -240,7 +240,15 @@ async function loadMinorityTemplate() {
   }
 }
 loadMinorityTemplate();
- 
+ // Helper: truncate text if exceeds maxWidth
+function truncateText(ctx, text, maxWidth) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let truncated = text;
+  while (ctx.measureText(truncated + '...').width > maxWidth && truncated.length > 0) {
+    truncated = truncated.slice(0, -1);
+  }
+  return truncated + '...';
+}
 // ================= GENERATE MINORITY CARD =================
 const generateMinorityCard = async (req, res) => {
   try {
@@ -328,24 +336,39 @@ const generateMinorityCard = async (req, res) => {
     ctx.fillStyle = "#333333";
     ctx.font = "20px Georgia";
  
-    ctx.fillText(fatherOrHusband, 545, 560);       // Father's Name value
-    ctx.fillText(application.gender || "N/A", 545, 610);        // Gender value
-    ctx.fillText(application.dob || "N/A", 545, 655);           // Date of Birth value
-    ctx.fillText(application.jainAadharNumber || "N/A", 545, 705); // Shravak ID value
- 
+   const maxFieldWidth = 220; // colon ke baad available space
+
+   ctx.fillText(truncateText(ctx, fatherOrHusband, maxFieldWidth), 545, 560);
+   ctx.fillText(
+     truncateText(ctx, application.gender || "N/A", maxFieldWidth),
+     545,
+     610,
+   );
+   ctx.fillText(
+     truncateText(ctx, application.dob || "N/A", maxFieldWidth),
+     545,
+     655,
+   );
+   ctx.fillText(
+     truncateText(ctx, application.jainAadharNumber || "N/A", maxFieldWidth),
+     545,
+     705,
+   );
     // === Permanent Address ===
-    const fullAddress = [
-      application.location?.address,
-      application.location?.city,
-      application.location?.pinCode
-        ? `- ${application.location.pinCode}`
-        : "",
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .trim() || "N/A";
+    const fullAddress =
+      [
+        application.location?.address,
+        application.location?.city,
+        application.location?.state,
+        application.location?.pinCode
+          ? `- ${application.location.pinCode}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || "N/A";
  
-    ctx.font = "24px Georgia";
+    ctx.font = "23px Georgia";
     wrapTextMinority(ctx, fullAddress, 100, 830, 600, 36);
  
     // === Certify Name (between "certify that" and "belongs") ===
