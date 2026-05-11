@@ -232,9 +232,9 @@ let templateMinority;
 async function loadMinorityTemplate() {
   try {
     templateMinority = await loadImage(
-      path.join(__dirname, "../../Public/minority_card.png"),
+      path.join(__dirname, "../../Public/minority.png"),
     );
-    console.log("✅ Minority Card Template Loaded");
+    console.log("Minority Card Template Loaded");
   } catch (err) {
     console.error("❌ Minority Template Load Error:", err);
   }
@@ -257,20 +257,20 @@ const generateMinorityCard = async (req, res) => {
     if (!application) {
       return res.status(404).json({ message: "Application not found" });
     }
- 
+
     // === Canvas size match karo template se (portrait) ===
     const width = 800;
     const height = 1300;
- 
+
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
- 
+
     // === Background: minority_card.png ===
     const template = templateMinority || await loadImage(
       path.join(__dirname, "../../Public/minority_card.png"),
     );
     ctx.drawImage(template, 0, 0, width, height);
- 
+
     // === PROFILE IMAGE (left box) ===
     if (application.userProfile) {
       try {
@@ -372,9 +372,9 @@ const generateMinorityCard = async (req, res) => {
     wrapTextMinority(ctx, fullAddress, 100, 830, 600, 36);
  
     // === Certify Name (between "certify that" and "belongs") ===
-    ctx.font = "19px Georgia";
+    ctx.font = "25px bold Georgia";
     ctx.fillStyle = "#8B0000"; // dark red to match card style
-    ctx.fillText(application.name || "N/A", 310, 943);
+    ctx.fillText(application.name || "N/A", 320, 959);
  
     // === Issue Date ===
 const issueDate = application.createdAt
@@ -392,7 +392,6 @@ const issueDate = application.createdAt
 ctx.fillStyle = "#333333";
 ctx.font = "20px Georgia";
 ctx.fillText(issueDate, 100, 1080);
- 
     // === Send Response ===
     res.setHeader("Content-Type", "image/jpeg");
     canvas.createJPEGStream({ quality: 0.95 }).pipe(res);
