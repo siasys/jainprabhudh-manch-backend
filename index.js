@@ -1,7 +1,7 @@
 const dotenv = require("dotenv");
 dotenv.config();
 
-require('newrelic');
+// require('newrelic');
 const logger = require('./config/logger');
 const express = require("express");
 const http = require("http");
@@ -210,19 +210,19 @@ app.use('/api/block', blockRoutes);
 // Admin API routes
 app.use("/api/admin", adminRouter);
 app.use('/api', deleteAccountRoutes);
-app.use((err, req, res, next) => {
-  const newrelic = require("newrelic");
-  newrelic.noticeError(err);
+// app.use((err, req, res, next) => {
+//   const newrelic = require("newrelic");
+//   newrelic.noticeError(err);
 
-  logger.error({
-    message: err.message,
-    stack: err.stack,
-    path: req.path,
-    method: req.method,
-  });
+//   logger.error({
+//     message: err.message,
+//     stack: err.stack,
+//     path: req.path,
+//     method: req.method,
+//   });
 
-  res.status(500).json({ success: false, error: "Server Error" });
-});
+//   res.status(500).json({ success: false, error: "Server Error" });
+// });
 // Error handling
 app.use(notFound);
 app.use(errorHandler);

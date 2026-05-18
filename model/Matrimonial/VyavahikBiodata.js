@@ -269,3 +269,162 @@ const vyavahikBiodataSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model('VyavahikBiodata', vyavahikBiodataSchema);
+
+// const mongoose = require("mongoose");
+
+// const vyavahikBiodataSchema = new mongoose.Schema(
+//   {
+//     userId: {
+//       type: mongoose.Schema.Types.ObjectId,
+//       ref: "User",
+//     },
+
+//     // ─── Profile Type ───────────────────────────────────────────
+//     profile: {
+//       type: String,
+//       enum: ["mySelf", "someoneElse"],
+//     },
+
+//     // filled only if profile === 'someoneElse'
+//     relationWithCandidate: { type: String },
+//     creatorName: { type: String },
+
+//     // ─── Basic Info ──────────────────────────────────────────────
+//     shravakId: { type: String },
+//     jainShravak: { type: String },
+//     fullName: { type: String },
+//     gender: { type: String },
+//     dob: { type: Date },
+//     timeOfBirth: { type: String },
+//     birthPlace: { type: String },
+
+//     // ─── Personal Details ────────────────────────────────────────
+//     height: { type: Number }, // in cm
+//     complexion: { type: String },
+//     dietPreference: { type: String }, // veg / jain / vegan etc.
+//     hobbies: { type: String },
+//     physicalCondition: {
+//       type: String,
+//       enum: ["Normal", "Special Abled"],
+//     },
+//     physicalConditionDescribe: { type: String },
+
+//     // ─── Marriage Info ───────────────────────────────────────────
+//     marriageInfo: {
+//       marriageType: {
+//         type: String,
+//         enum: ["Single", "Divorced", "Widowed/widower"],
+//       },
+
+//       divorcedDetails: {
+//         isDivorceComplete: { type: String },
+//         reasonForDivorce: { type: String },
+//         divorceCertificate: { type: String }, // file URL
+//         spouseName: { type: String },
+//         spouseFatherName: { type: String },
+//         spouseMotherName: { type: String },
+//         numberOfChildren: { type: Number },
+//       },
+
+//       widowedDetails: {
+//         spouseName: { type: String },
+//         spouseFatherName: { type: String },
+//         spouseMotherName: { type: String },
+//         reasonSpouseDeath: { type: String },
+//         numberOfChildren: { type: Number },
+//       },
+//     },
+
+//     // ─── Education ───────────────────────────────────────────────
+//     education: {
+//       highestEducation: { type: String },
+//       collegeUniversity: { type: String },
+//       degreeName: { type: String },
+//       yearOfPassing: { type: String },
+//       educationCertificate: { type: String }, // file URL
+//     },
+
+//     // ─── Work ────────────────────────────────────────────────────
+//     workInfo: {
+//       workStatus: {
+//         type: String,
+//         enum: ["Employed", "SelfEmployed", "Unemployed"],
+//       },
+//       companyName: { type: String }, // for Employed
+//       businessName: { type: String }, // for SelfEmployed
+//       workingIndustry: { type: String },
+//       workLocation: { type: String },
+//       annualIncome: { type: String },
+//     },
+
+//     // ─── Family Background ───────────────────────────────────────
+//     familyInfo: {
+//       fatherName: { type: String },
+//       fatherOccupation: { type: String },
+//       motherName: { type: String },
+//       motherOccupation: { type: String },
+//       nativePlace: { type: String },
+//       familyType: { type: String },
+//       familyIncome: { type: String },
+//       noOfBrothers: { type: Number },
+//       noOfSisters: { type: Number },
+//     },
+
+//     // ─── Religion & Community ────────────────────────────────────
+//     communityInfo: {
+//       mulJain: { type: String },
+//       panth: { type: String },
+//       gotra: { type: String },
+//       subGotra: { type: String },
+//       caste: { type: String },
+//       subCaste: { type: String },
+//       mamaGotra: { type: String },
+//       manglik: { type: String },
+//       motherTongue: { type: String },
+//     },
+
+//     // ─── Address ─────────────────────────────────────────────────
+//     addressInfo: {
+//       country: { type: String, default: "India" },
+//       state: { type: String },
+//       district: { type: String },
+//       city: { type: String },
+//       fullAddress: { type: String },
+//     },
+
+//     // ─── Contact Details ─────────────────────────────────────────
+//     contactInfo: {
+//       mobileNumber: { type: String },
+//       contactPerson: { type: String },
+//       email: { type: String },
+//       alternativeNumber: { type: String },
+//       contactPersonRelation: { type: String },
+//     },
+
+//     // ─── Uploaded Photos ─────────────────────────────────────────
+//     uploadedPhotos: [
+//       {
+//         label: { type: String }, // e.g. "passport", "full", "family"
+//         url: { type: String },
+//       },
+//     ],
+
+//     // ─── Partner Preference ──────────────────────────────────────
+//     partnerPreference: {
+//       preferredAgeFrom: { type: Number },
+//       preferredAgeTo: { type: Number },
+//       heightFrom: { type: Number }, // in cm
+//       heightTo: { type: Number },
+//       incomePreference: { type: String },
+//       maritalStatus: { type: String }, // Single / Divorced / Any
+//       educationPreference: { type: String },
+//       locationPreference: { type: String },
+//       additionalPreference: { type: String },
+//     },
+
+//     isVisible: { type: Boolean, default: false },
+//   },
+//   { timestamps: true },
+// );
+
+// module.exports = mongoose.model("VyavahikBiodata", vyavahikBiodataSchema);

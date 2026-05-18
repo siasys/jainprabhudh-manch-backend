@@ -34,7 +34,6 @@ const escapeRegex = (str = '') => {
 };
 
 // Create Jain Aadhar application with level-based routing
-// Create Jain Aadhar application with level-based routing
 const createJainAadhar = asyncHandler(async (req, res) => {
   try {
     const number = req.body.contactDetails?.number;

@@ -181,8 +181,8 @@ const getS3Folder = (fieldname, req) => {
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 50 * 1024 * 1024,
-    files: 10,
+    fileSize: 30 * 1024 * 1024,
+    files: 5,
   },
   fileFilter: fileFilter,
 });
@@ -466,6 +466,17 @@ module.exports.biodataImageUpload = [
   compressFiles,
   uploadToS3,
 ];
+
+// module.exports.biodataImageUpload = [
+//   upload.fields([
+//     { name: "uploadedPhotos", maxCount: 10 },
+//     { name: "educationCertificate", maxCount: 1 },
+//     { name: "divorceCertificate", maxCount: 1 },
+//     { name: "paymentScreenshot", maxCount: 1 },
+//   ]),
+//   compressFiles,
+//   uploadToS3,
+// ];
 module.exports.sadhuDocs = [
   upload.fields([
     { name: "entityPhoto", maxCount: 5 },

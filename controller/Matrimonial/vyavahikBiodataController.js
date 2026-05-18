@@ -109,9 +109,220 @@ const createBiodata = async (req, res) => {
     });
   }
 };
+// // ─── Helper: safe CDN convert ────────────────────────────────────────────────
+// const toCDN = (files, key) => {
+//   const loc = files?.[key]?.[0]?.location;
+//   return loc ? convertS3UrlToCDN(loc) : null;
+// };
+ 
+// // ─── CREATE ──────────────────────────────────────────────────────────────────
+// const createBiodata = async (req, res) => {
+//   try {
+//     const { body, files } = req;
+ 
+//     // ── File uploads → CDN URLs ──────────────────────────────────
+//     const educationCertificateUrl = toCDN(files, 'educationCertificate');
+//     const divorceCertificateUrl   = toCDN(files, 'divorceCertificate');
+ 
+//     // uploadedPhotos: multer field name = 'uploadedPhotos', max 10
+//     const uploadedPhotos = (files?.uploadedPhotos || [])
+//       .slice(0, 10)
+//       .map((f, i) => ({
+//         label: f.originalname || `photo_${i}`,
+//         url: convertS3UrlToCDN(f.location),
+//       }))
+//       .filter((p) => p.url);
+ 
+//     // ── DOB processing ───────────────────────────────────────────
+//     let processedDob = null;
+//     if (body.dob) {
+//       const d = new Date(body.dob);
+//       if (!isNaN(d.getTime())) processedDob = d;
+//       else console.warn('⚠️ Invalid DOB:', body.dob);
+//     }
+ 
+//     // ── Marriage Info ────────────────────────────────────────────
+//     const marriageInfo = { marriageType: body.marriageType };
+ 
+//     if (body.marriageType === 'Divorced') {
+//       marriageInfo.divorcedDetails = {
+//         isDivorceComplete:  body.isDivorceComplete,
+//         reasonForDivorce:   body.reasonForDivorce,
+//         divorceCertificate: divorceCertificateUrl,
+//         spouseName:         body.spouseName,
+//         spouseFatherName:   body.spouseFatherName,
+//         spouseMotherName:   body.spouseMotherName,
+//         numberOfChildren:   body.numberOfChildren,
+//       };
+//     }
+ 
+//     if (body.marriageType === 'Widowed/widower') {
+//       marriageInfo.widowedDetails = {
+//         spouseName:        body.spouseName,
+//         spouseFatherName:  body.spouseFatherName,
+//         spouseMotherName:  body.spouseMotherName,
+//         reasonSpouseDeath: body.reasonSpouseDeath,
+//         numberOfChildren:  body.numberOfChildren,
+//       };
+//     }
+ 
+//     // ── Education ────────────────────────────────────────────────
+//     const education = {
+//       highestEducation:     body.highestEducation,
+//       collegeUniversity:    body.collegeUniversity,
+//       degreeName:           body.degreeName,
+//       yearOfPassing:        body.yearOfPassing,
+//       educationCertificate: educationCertificateUrl,
+//     };
+ 
+//     // ── Work Info ────────────────────────────────────────────────
+//     const workInfo = {
+//       workStatus:      body.workStatus,
+//       companyName:     body.companyName,
+//       businessName:    body.businessName,
+//       workingIndustry: body.workingIndustry,
+//       workLocation:    body.workLocation,
+//       annualIncome:    body.annualIncome,
+//     };
+ 
+//     // ── Family Info ──────────────────────────────────────────────
+//     const familyInfo = {
+//       fatherName:       body.fatherName,
+//       fatherOccupation: body.fatherOccupation,
+//       motherName:       body.motherName,
+//       motherOccupation: body.motherOccupation,
+//       nativePlace:      body.nativePlace,
+//       familyType:       body.familyType,
+//       familyIncome:     body.familyIncome,
+//       noOfBrothers:     body.noOfBrothers,
+//       noOfSisters:      body.noOfSisters,
+//     };
+ 
+//     // ── Community / Religion ─────────────────────────────────────
+//     const communityInfo = {
+//       mulJain:      body.mulJain,
+//       panth:        body.panth,
+//       gotra:        body.gotra,
+//       subGotra:     body.subGotra,
+//       caste:        body.caste,
+//       subCaste:     body.subCaste,
+//       mamaGotra:    body.mamaGotra,
+//       manglik:      body.manglik,
+//       motherTongue: body.motherTongue,
+//     };
+ 
+//     // ── Address ──────────────────────────────────────────────────
+//     const addressInfo = {
+//       country:     body.country || 'India',
+//       state:       body.state,
+//       district:    body.district,
+//       city:        body.city,
+//       fullAddress: body.fullAddress,
+//     };
+ 
+//     // ── Contact ──────────────────────────────────────────────────
+//     const contactInfo = {
+//       mobileNumber:          body.contactMobile || body.mobileNumber,
+//       contactPerson:         body.contactPerson,
+//       email:                 body.email,
+//       alternativeNumber:     body.alternativeNumber,
+//       contactPersonRelation: body.contactPersonRelation,
+//     };
+ 
+//     // ── Partner Preference ───────────────────────────────────────
+//     const partnerPreference = {
+//       preferredAgeFrom:    body.preferredAgeFrom,
+//       preferredAgeTo:      body.preferredAgeTo,
+//       heightFrom:          body.heightFrom,
+//       heightTo:            body.heightTo,
+//       incomePreference:    body.incomePreference,
+//       maritalStatus:       body.partnerMaritalStatus,
+//       educationPreference: body.educationPreference,
+//       locationPreference:  body.locationPreference,
+//       additionalPreference:body.additionalPreference,
+//     };
+ 
+//     // ── Health Report ────────────────────────────────────────────
+//     const healthReport = {
+//       wearsSpectacles: body.wearsSpectacles,
+//       diabetes:        body.diabetes,
+//       bloodPressure:   body.bloodPressure,
+//       thyroid:         body.thyroid,
+//       asthma:          body.asthma,
+//       migraine:        body.migraine,
+//       heartIssue:      body.heartIssue,
+//       hearingIssue:    body.hearingIssue,
+//       skinIssue:       body.skinIssue,
+//       anyAddiction:    body.anyAddiction,
+//       previousSurgery: body.previousSurgery,
+//       tongueIssue:     body.tongueIssue,
+//       menstrualIssue:  body.menstrualIssue,
+//     };
+ 
+//     // ── Assemble Document ────────────────────────────────────────
+//     const biodataData = {
+//       userId: req.user?._id,
+ 
+//       // profile
+//       profile:                body.profile,
+//       relationWithCandidate:  body.relationWithCandidate,
+//       creatorName:            body.creatorName,
+ 
+//       // basic
+//       shravakId:   body.shravakId,
+//       jainShravak: body.jainShravak,
+//       fullName:    body.fullName,
+//       gender:      body.gender,
+//       dob:         processedDob,
+//       timeOfBirth: body.timeOfBirth,
+//       birthPlace:  body.birthPlace,
+//       mobileNumber:body.mobileNumber,
+ 
+//       // personal
+//       height:                   body.height,
+//       complexion:               body.complexion,
+//       dietPreference:           body.dietPreference,
+//       hobbies:                  body.hobbies,
+//       physicalCondition:        body.physicalCondition,
+//       physicalConditionDescribe:body.physicalConditionDescribe,
+ 
+//       // nested
+//       marriageInfo,
+//       education,
+//       workInfo,
+//       familyInfo,
+//       communityInfo,
+//       addressInfo,
+//       contactInfo,
+//       uploadedPhotos,
+//       healthReport,
+//       partnerPreference,
+ 
+//       specialInformation: body.specialInformation,
+//       paymentScreenshot:  toCDN(files, 'paymentScreenshot'),
+//       isVisible:          false,
+//     };
+ 
+//     const biodata = new VyavahikBiodata(biodataData);
+//     await biodata.save();
+ 
+//     res.status(201).json({
+//       success: true,
+//       message: 'Biodata created successfully!',
+//       data: biodata,
+//     });
+ 
+//   } catch (error) {
+//     console.error('❌ Biodata Creation Error:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Error creating biodata',
+//       error: error.message,
+//     });
+//   }
+// };
 
 
-// Update API
 // Update API for details only
 const updateBiodata = async (req, res) => {
   try {
