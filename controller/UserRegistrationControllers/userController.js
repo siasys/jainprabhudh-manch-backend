@@ -1348,6 +1348,105 @@ const loginUser = [
   }),
 ];
 
+// const getAllUsers = asyncHandler(async (req, res) => {
+//   const {
+//     search,
+//     country,
+//     state,
+//     district,
+//     city,
+//     gender,
+//     role,
+//     accountType,
+//     page = 1,
+//     limit = 20,
+//   } = req.query;
+
+//   const currentUserId = req.user._id.toString();
+//   let query = {};
+
+//   if (search) {
+//     const searchRegex = new RegExp(search, "i");
+//     query.$or = [
+//       { firstName: searchRegex },
+//       { lastName: searchRegex },
+//       { fullName: searchRegex },
+//       { businessName: searchRegex },
+//       { tirthName: searchRegex },
+//       { sadhuName: searchRegex },
+//       { "location.country": searchRegex },
+//       { "location.state": searchRegex },
+//       { "location.district": searchRegex },
+//       { "location.city": searchRegex },
+//     ];
+//   }
+
+//   if (country) query["location.country"] = new RegExp(country, "i");
+//   if (state) query["location.state"] = new RegExp(state, "i");
+//   if (district) query["location.district"] = new RegExp(district, "i");
+//   if (city) query["location.city"] = new RegExp(city, "i");
+
+//   if (gender) query.gender = gender;
+//   if (role) query.role = role;
+//   if (accountType) query.accountType = accountType; // ✅ CHANGE 2: Add karo
+
+//   const blockRelations = await Block.find({
+//     $or: [{ blocker: currentUserId }, { blocked: currentUserId }],
+//   }).lean();
+
+//   const blockedUserIds = blockRelations.map((rel) =>
+//     rel.blocker.toString() === currentUserId
+//       ? rel.blocked.toString()
+//       : rel.blocker.toString(),
+//   );
+
+//   query._id = { $nin: [...blockedUserIds, currentUserId] };
+
+//   // ✅ CHANGE 3: accountType filter ho to limit cap hatao
+//   const maxLimit = accountType ? 10000 : 100;
+//   const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), maxLimit);
+
+//   const parsedPage = Math.max(parseInt(page) || 1, 1);
+//   const skip = (parsedPage - 1) * parsedLimit; // ✅ parsedLimit use karo skip mein bhi
+
+//   const [users, total, noCardCount] = await Promise.all([
+//     User.find(query)
+//       .select("-password -__v")
+//       .sort({ createdAt: -1 })
+//       .skip(skip)
+//       .limit(parsedLimit)
+//       .lean(),
+//     User.countDocuments(query),
+//     User.countDocuments({
+//       ...query,
+//       accountType: { $nin: ["business", "sadhu", "tirth"] },
+//       $or: [
+//         { jainAadharStatus: "none" },
+//         { jainAadharStatus: { $exists: false } },
+//         { jainAadharStatus: null },
+//         { jainAadharStatus: "" },
+//       ],
+//     }),
+//   ]);
+
+//   users.forEach((user) => {
+//     if (user.profilePicture) {
+//       user.profilePicture = convertS3UrlToCDN(user.profilePicture);
+//     }
+//   });
+
+//   return res.status(200).json({
+//     success: true,
+//     users,
+//     totalUsers: total,
+//     noCardCount,
+//     currentPage: parsedPage,
+//     totalPages: Math.ceil(total / parsedLimit),
+//     limit: parsedLimit,
+//     hasNextPage: parsedPage < Math.ceil(total / parsedLimit),
+//     hasPrevPage: parsedPage > 1,
+//   });
+// });
 const getAllUsers = asyncHandler(async (req, res) => {
   const {
     search,
@@ -1367,6 +1466,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
 
   if (search) {
     const searchRegex = new RegExp(search, "i");
+
     query.$or = [
       { firstName: searchRegex },
       { lastName: searchRegex },
@@ -1387,8 +1487,13 @@ const getAllUsers = asyncHandler(async (req, res) => {
   if (city) query["location.city"] = new RegExp(city, "i");
 
   if (gender) query.gender = gender;
+
   if (role) query.role = role;
-  if (accountType) query.accountType = accountType; // ✅ CHANGE 2: Add karo
+
+  // ✅ EXISTING LOGIC SAME
+  if (accountType) {
+    query.accountType = accountType;
+  }
 
   const blockRelations = await Block.find({
     $or: [{ blocker: currentUserId }, { blocked: currentUserId }],
@@ -1402,12 +1507,29 @@ const getAllUsers = asyncHandler(async (req, res) => {
 
   query._id = { $nin: [...blockedUserIds, currentUserId] };
 
-  // ✅ CHANGE 3: accountType filter ho to limit cap hatao
-  const maxLimit = accountType ? 10000 : 100;
-  const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), maxLimit);
+  // ✅ NEW SADHU LOGIC
+  // Frontend se ?limit=10000 aa raha hai
+  // To sadhu accounts ke liye limit cap remove karo
+  let parsedLimit;
+
+  const requestedLimit = parseInt(limit) || 20;
+
+  const hasSadhuUsers = await User.exists({
+    ...query,
+    accountType: "sadhu",
+  });
+
+  if (hasSadhuUsers && requestedLimit >= 10000) {
+    parsedLimit = 10000;
+  } else {
+    const maxLimit = accountType ? 10000 : 100;
+
+    parsedLimit = Math.min(Math.max(requestedLimit, 1), maxLimit);
+  }
 
   const parsedPage = Math.max(parseInt(page) || 1, 1);
-  const skip = (parsedPage - 1) * parsedLimit; // ✅ parsedLimit use karo skip mein bhi
+
+  const skip = (parsedPage - 1) * parsedLimit;
 
   const [users, total, noCardCount] = await Promise.all([
     User.find(query)
@@ -1416,7 +1538,9 @@ const getAllUsers = asyncHandler(async (req, res) => {
       .skip(skip)
       .limit(parsedLimit)
       .lean(),
+
     User.countDocuments(query),
+
     User.countDocuments({
       ...query,
       accountType: { $nin: ["business", "sadhu", "tirth"] },
@@ -1447,7 +1571,6 @@ const getAllUsers = asyncHandler(async (req, res) => {
     hasPrevPage: parsedPage > 1,
   });
 });
-
 // Enhanced user profile retrieval
 const getUserById = asyncHandler(async (req, res) => {
   const { id } = req.params;

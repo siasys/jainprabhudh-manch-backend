@@ -81,6 +81,7 @@ app.set('trust proxy',1);
 // connect to databse
 dbConnect();
 app.use(helmet());
+
 // Middleware
 app.use(cors({
   origin: "*",
