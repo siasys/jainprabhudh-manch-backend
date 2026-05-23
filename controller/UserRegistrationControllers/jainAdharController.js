@@ -34,41 +34,362 @@ const escapeRegex = (str = '') => {
 };
 
 // Create Jain Aadhar application with level-based routing
+// const createJainAadhar = asyncHandler(async (req, res) => {
+//   try {
+//     const number = req.body.contactDetails?.number;
+//     const enteredOtp = req.body.otp;
+
+//     if (!number || !enteredOtp) {
+//       return errorResponse(res, 'Mobile number and OTP are required for verification', 400);
+//     }
+
+//     // Fetch OTP record
+//     const otpEntry = await SharavakOtpVerification.findOne({ phoneNumber: number });
+//     if (!otpEntry) return errorResponse(res, 'No OTP sent to this mobile number', 404);
+//     if (otpEntry.code !== enteredOtp) return errorResponse(res, 'Incorrect OTP', 400);
+//     if (new Date() > otpEntry.expiresAt) return errorResponse(res, 'OTP expired', 400);
+
+//     // Mark OTP as verified
+//     otpEntry.isVerified = true;
+//     await otpEntry.save();
+//     req.body.isPhoneVerified = true;
+
+//     const { location } = req.body;
+//     if (!location || !location.state) {
+//       return errorResponse(res, 'State is required in location data', 400);
+//     }
+
+//     // ✅ Name Formatting Logic
+//     if (req.body.name) {
+//       let fullName = req.body.name.trim();
+//       const nameParts = fullName.split(' ');
+//       if (nameParts.length >= 2) {
+//         const firstName = nameParts[0];
+//         const lastName = nameParts[nameParts.length - 1];
+//         const lowerFull = fullName.toLowerCase();
+
+//         if (!lowerFull.includes('jain')) {
+//           req.body.name = `${firstName} Jain (${lastName})`;
+//         } else {
+//           req.body.name = fullName;
+//         }
+//       }
+//     }
+
+//     // Normalize input strings
+//     const norm = {
+//       country: (location.country || 'India').trim(),
+//       state: (location.state || '').trim(),
+//       district: (location.district || '').trim(),
+//       city: (location.city || '').trim(),
+//     };
+
+//     let applicationLevel = null;
+//     let reviewingSanghId = req.body.reviewingSanghId || null;
+
+//     // Helper to find main sangh
+//     const findSangh = async (level, locFilters = {}) => {
+//       const query = {
+//         level,
+//         status: 'active',
+//         sanghType: 'main',
+//         ...locFilters,
+//       };
+//       return await HierarchicalSangh.findOne(query).exec();
+//     };
+
+//     // ✅ Helper to find women sangh
+//     const findWomenSangh = async (level, locFilters = {}) => {
+//       const query = {
+//         level,
+//         status: 'active',
+//         sanghType: 'women',
+//         ...locFilters,
+//       };
+//       return await HierarchicalSangh.findOne(query).exec();
+//     };
+
+//     // Escape regex helper
+//     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+//     const cityRegex = norm.city ? new RegExp('^' + escapeRegex(norm.city) + '$', 'i') : null;
+//     const districtRegex = norm.district ? new RegExp('^' + escapeRegex(norm.district) + '$', 'i') : null;
+//     const stateRegex = norm.state ? new RegExp('^' + escapeRegex(norm.state) + '$', 'i') : null;
+//     const countryRegex = norm.country ? new RegExp('^' + escapeRegex(norm.country) + '$', 'i') : null;
+
+//     // ✅ Check if a sangh has an active president in officeBearers
+//     const hasActivePresident = (sangh) => {
+//       if (!sangh || !Array.isArray(sangh.officeBearers)) return false;
+//       return sangh.officeBearers.some(
+//         (ob) => ob.role === 'president' && ob.status === 'active' && ob.userId
+//       );
+//     };
+
+//     let reviewingSangh = null;
+
+//     // 🔹 Step 1: Try City (strict + fuzzy)
+//     if (norm.city && norm.district && norm.state) {
+//       // 1A) Exact match
+//       let citySangh = await HierarchicalSangh.findOne({
+//         level: 'city',
+//         sanghType: 'main',
+//         status: 'active',
+//         'location.city': { $regex: new RegExp(`^${escapeRegex(norm.city)}$`, 'i') },
+//         'location.district': districtRegex,
+//         'location.state': stateRegex,
+//       });
+
+//       // 1B) Fuzzy match if exact not found
+//       if (!citySangh) {
+//         const allCitySanghs = await HierarchicalSangh.find({
+//           level: 'city',
+//           sanghType: 'main',
+//           status: 'active',
+//           'location.district': districtRegex,
+//           'location.state': stateRegex,
+//         });
+
+//         const stringSimilarity = (a, b) => {
+//           a = a.toLowerCase().trim();
+//           b = b.toLowerCase().trim();
+//           const longer = a.length > b.length ? a : b;
+//           const shorter = a.length > b.length ? b : a;
+//           const common = [...shorter].filter((ch) => longer.includes(ch)).length;
+//           return common / longer.length;
+//         };
+
+//         citySangh = allCitySanghs.find(
+//           (s) => stringSimilarity(norm.city, s.location.city) > 0.7
+//         ) || null;
+//       }
+
+//       if (citySangh && hasActivePresident(citySangh)) {
+//         // ✅ main city sangh with president → assign
+//         reviewingSangh = citySangh;
+//         applicationLevel = 'city';
+//         reviewingSanghId = citySangh._id;
+//       } else {
+//         // ✅ main nahi mila ya president nahi → check women city sangh
+//         const womenCitySangh = await findWomenSangh('city', {
+//           'location.city': cityRegex,
+//           'location.district': districtRegex,
+//           'location.state': stateRegex,
+//         });
+//         if (womenCitySangh && hasActivePresident(womenCitySangh)) {
+//           reviewingSangh = womenCitySangh;
+//           applicationLevel = 'city';
+//           reviewingSanghId = womenCitySangh._id;
+//         }
+//         // else: fall through to district
+//       }
+//     }
+
+//     // 🔹 Step 2: Try District (if city had no president or city sangh not found)
+//     if (!reviewingSangh && norm.district && norm.state) {
+//       const districtSangh = await findSangh('district', {
+//         'location.district': districtRegex,
+//         'location.state': stateRegex,
+//       });
+
+//       if (districtSangh && hasActivePresident(districtSangh)) {
+//         // ✅ main district sangh with president → assign
+//         reviewingSangh = districtSangh;
+//         applicationLevel = 'district';
+//         reviewingSanghId = districtSangh._id;
+//       } else {
+//         // ✅ main nahi ya president nahi → check women district sangh
+//         const womenDistrictSangh = await findWomenSangh('district', {
+//           'location.district': districtRegex,
+//           'location.state': stateRegex,
+//         });
+//         if (womenDistrictSangh && hasActivePresident(womenDistrictSangh)) {
+//           reviewingSangh = womenDistrictSangh;
+//           applicationLevel = 'district';
+//           reviewingSanghId = womenDistrictSangh._id;
+//         }
+//         // else: fall through to state
+//       }
+//     }
+
+//     // 🔹 Step 3: Try State (if district had no president or not found)
+//     if (!reviewingSangh && norm.state) {
+//       const stateSangh = await findSangh('state', {
+//         'location.state': stateRegex,
+//       });
+
+//       if (stateSangh && hasActivePresident(stateSangh)) {
+//         // ✅ main state sangh with president → assign
+//         reviewingSangh = stateSangh;
+//         applicationLevel = 'state';
+//         reviewingSanghId = stateSangh._id;
+//       } else {
+//         // ✅ main nahi ya president nahi → check women state sangh
+//         const womenStateSangh = await findWomenSangh('state', {
+//           'location.state': stateRegex,
+//         });
+//         if (womenStateSangh && hasActivePresident(womenStateSangh)) {
+//           reviewingSangh = womenStateSangh;
+//           applicationLevel = 'state';
+//           reviewingSanghId = womenStateSangh._id;
+//         }
+//         // else: fall through to country
+//       }
+//     }
+
+//     // 🔹 Step 4: Try Country / Foundation / Superadmin (UNCHANGED)
+//     if (!reviewingSangh) {
+//       const countrySangh = await findSangh('country', {
+//         'location.country': countryRegex,
+//       });
+
+//       if (countrySangh) {
+//         if (hasActivePresident(countrySangh)) {
+//           reviewingSangh = countrySangh;
+//           applicationLevel = 'country';
+//           reviewingSanghId = countrySangh._id;
+//         } else {
+//           // Country sangh exists but no president → go to foundation
+//           const foundationSangh = await HierarchicalSangh.findOne({
+//             level: 'foundation',
+//             status: 'active',
+//           }).exec();
+
+//           if (foundationSangh) {
+//             reviewingSangh = foundationSangh;
+//             applicationLevel = 'foundation';
+//             reviewingSanghId = foundationSangh._id;
+//           } else {
+//             applicationLevel = 'superadmin';
+//             reviewingSanghId = null;
+//           }
+//         }
+//       } else {
+//         // No country sangh at all
+//         const foundationSangh = await HierarchicalSangh.findOne({
+//           level: 'foundation',
+//           status: 'active',
+//         }).exec();
+
+//         if (foundationSangh) {
+//           reviewingSangh = foundationSangh;
+//           applicationLevel = 'foundation';
+//           reviewingSanghId = foundationSangh._id;
+//         } else {
+//           applicationLevel = 'superadmin';
+//           reviewingSanghId = null;
+//         }
+//       }
+//     }
+
+//     // 🔹 Special case: Country office bearer
+//     if (req.body.isOfficeBearer && applicationLevel === 'country') {
+//       applicationLevel = 'superadmin';
+//       reviewingSanghId = null;
+//     }
+
+//     // Safety fallback
+//     if (!applicationLevel) {
+//       applicationLevel = 'superadmin';
+//       reviewingSanghId = null;
+//     }
+
+//     // Prepare data
+//     const applicantUserId = req.body.applicantUserId || req.user._id;
+//     const jainAadharData = {
+//       ...req.body,
+//       userId: applicantUserId,
+//       createdBy: req.user._id,
+//       applicationLevel,
+//       reviewingSanghId,
+//       status: 'pending',
+//       location: {
+//         country: norm.country,
+//         state: norm.state,
+//         district: norm.district,
+//         city: norm.city,
+//         address: location.address || '',
+//         pinCode: location.pinCode || '',
+//       },
+//       reviewHistory: [
+//         {
+//           action: 'submitted',
+//           by: req.user._id,
+//           level: 'user',
+//           remarks: 'Application submitted',
+//           timestamp: new Date(),
+//         },
+//       ],
+//     };
+
+//     // Files handling
+//     if (req.files?.userProfile?.[0]) {
+//       const profileUrl =
+//         req.files.userProfile[0].location || req.files.userProfile[0].path;
+//       jainAadharData.userProfile = convertS3UrlToCDN(profileUrl);
+//     }
+//     if (!req.files?.userProfile?.[0]) {
+//       return errorResponse(res, "Profile photo is required", 400);
+//     }
+
+//     // Create application
+//     const newJainAadhar = await JainAadhar.create(jainAadharData);
+
+//     // Update user's jainAadhar status
+//     const user = await User.findById(req.user._id);
+//     if (user && user.jainAadharStatus !== 'verified') {
+//       await User.findByIdAndUpdate(req.user._id, {
+//         jainAadharStatus: 'pending',
+//         jainAadharApplication: newJainAadhar._id,
+//       });
+//     }
+
+//     return successResponse(res, newJainAadhar, 'Application submitted successfully', 201);
+//   } catch (error) {
+//     return errorResponse(res, error.message, 500);
+//   }
+// });
+
 const createJainAadhar = asyncHandler(async (req, res) => {
   try {
     const number = req.body.contactDetails?.number;
     const enteredOtp = req.body.otp;
 
     if (!number || !enteredOtp) {
-      return errorResponse(res, 'Mobile number and OTP are required for verification', 400);
+      return errorResponse(
+        res,
+        "Mobile number and OTP are required for verification",
+        400,
+      );
     }
 
-    // Fetch OTP record
-    const otpEntry = await SharavakOtpVerification.findOne({ phoneNumber: number });
-    if (!otpEntry) return errorResponse(res, 'No OTP sent to this mobile number', 404);
-    if (otpEntry.code !== enteredOtp) return errorResponse(res, 'Incorrect OTP', 400);
-    if (new Date() > otpEntry.expiresAt) return errorResponse(res, 'OTP expired', 400);
+    const otpEntry = await SharavakOtpVerification.findOne({
+      phoneNumber: number,
+    });
+    if (!otpEntry)
+      return errorResponse(res, "No OTP sent to this mobile number", 404);
+    if (otpEntry.code !== enteredOtp)
+      return errorResponse(res, "Incorrect OTP", 400);
+    if (new Date() > otpEntry.expiresAt)
+      return errorResponse(res, "OTP expired", 400);
 
-    // Mark OTP as verified
     otpEntry.isVerified = true;
     await otpEntry.save();
     req.body.isPhoneVerified = true;
 
     const { location } = req.body;
     if (!location || !location.state) {
-      return errorResponse(res, 'State is required in location data', 400);
+      return errorResponse(res, "State is required in location data", 400);
     }
 
-    // ✅ Name Formatting Logic
+    // ✅ Name Formatting
     if (req.body.name) {
       let fullName = req.body.name.trim();
-      const nameParts = fullName.split(' ');
+      const nameParts = fullName.split(" ");
       if (nameParts.length >= 2) {
         const firstName = nameParts[0];
         const lastName = nameParts[nameParts.length - 1];
         const lowerFull = fullName.toLowerCase();
-
-        if (!lowerFull.includes('jain')) {
+        if (!lowerFull.includes("jain")) {
           req.body.name = `${firstName} Jain (${lastName})`;
         } else {
           req.body.name = fullName;
@@ -76,252 +397,255 @@ const createJainAadhar = asyncHandler(async (req, res) => {
       }
     }
 
-    // Normalize input strings
+    // ✅ Gender + Age → targetSanghType
+    const gender = (req.body.gender || "").toLowerCase().trim();
+    if (!gender) return errorResponse(res, "Gender is required", 400);
+
+    const dob = req.body.dob || req.body.dateOfBirth;
+    if (!dob) return errorResponse(res, "Date of birth is required", 400);
+
+    const birthDate = new Date(dob);
+    if (isNaN(birthDate.getTime())) {
+      return errorResponse(
+        res,
+        "Invalid date of birth format. Use YYYY-MM-DD",
+        400,
+      );
+    }
+
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < birthDate.getDate())
+    ) {
+      age--;
+    }
+
+    // Male + age >= 35   → main
+    // Female + age >= 35 → women
+    // Any + age < 35     → youth
+    let targetSanghType;
+    if (age < 35) {
+      targetSanghType = "youth";
+    } else if (gender === "female") {
+      targetSanghType = "women";
+    } else {
+      targetSanghType = "main";
+    }
+
+    // ✅ Normalize location
     const norm = {
-      country: (location.country || 'India').trim(),
-      state: (location.state || '').trim(),
-      district: (location.district || '').trim(),
-      city: (location.city || '').trim(),
+      country: (location.country || "India").trim(),
+      state: (location.state || "").trim(),
+      district: (location.district || "").trim(),
+      city: (location.city || "").trim(),
+    };
+
+    const districtRegex = norm.district
+      ? new RegExp("^" + escapeRegex(norm.district) + "$", "i")
+      : null;
+    const stateRegex = norm.state
+      ? new RegExp("^" + escapeRegex(norm.state) + "$", "i")
+      : null;
+    const countryRegex = norm.country
+      ? new RegExp("^" + escapeRegex(norm.country) + "$", "i")
+      : null;
+
+    // ✅ findSangh — targetSanghType auto use
+    const findSangh = async (level, locFilters = {}) => {
+      return await HierarchicalSangh.findOne({
+        level,
+        status: "active",
+        sanghType: targetSanghType,
+        ...locFilters,
+      }).exec();
+    };
+
+    //Key check — officeBearers empty ho, president na ho, ya inactive ho → false → upper level
+    const hasActivePresident = (sangh) => {
+      if (!sangh) return false;
+      if (
+        !Array.isArray(sangh.officeBearers) ||
+        sangh.officeBearers.length === 0
+      )
+        return false;
+      return sangh.officeBearers.some(
+        (ob) =>
+          ob.role === "president" &&
+          ob.userId != null,
+      );
+    };
+
+    // ✅ Fuzzy string similarity for city match
+    const stringSimilarity = (a, b) => {
+      a = a.toLowerCase().trim();
+      b = b.toLowerCase().trim();
+      const longer = a.length > b.length ? a : b;
+      const shorter = a.length > b.length ? b : a;
+      const common = [...shorter].filter((ch) => longer.includes(ch)).length;
+      return common / longer.length;
     };
 
     let applicationLevel = null;
     let reviewingSanghId = req.body.reviewingSanghId || null;
-
-    // Helper to find main sangh
-    const findSangh = async (level, locFilters = {}) => {
-      const query = {
-        level,
-        status: 'active',
-        sanghType: 'main',
-        ...locFilters,
-      };
-      return await HierarchicalSangh.findOne(query).exec();
-    };
-
-    // ✅ Helper to find women sangh
-    const findWomenSangh = async (level, locFilters = {}) => {
-      const query = {
-        level,
-        status: 'active',
-        sanghType: 'women',
-        ...locFilters,
-      };
-      return await HierarchicalSangh.findOne(query).exec();
-    };
-
-    // Escape regex helper
-    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-    const cityRegex = norm.city ? new RegExp('^' + escapeRegex(norm.city) + '$', 'i') : null;
-    const districtRegex = norm.district ? new RegExp('^' + escapeRegex(norm.district) + '$', 'i') : null;
-    const stateRegex = norm.state ? new RegExp('^' + escapeRegex(norm.state) + '$', 'i') : null;
-    const countryRegex = norm.country ? new RegExp('^' + escapeRegex(norm.country) + '$', 'i') : null;
-
-    // ✅ Check if a sangh has an active president in officeBearers
-    const hasActivePresident = (sangh) => {
-      if (!sangh || !Array.isArray(sangh.officeBearers)) return false;
-      return sangh.officeBearers.some(
-        (ob) => ob.role === 'president' && ob.status === 'active' && ob.userId
-      );
-    };
-
     let reviewingSangh = null;
 
-    // 🔹 Step 1: Try City (strict + fuzzy)
+    // ─────────────────────────────────────────
+    // 🔹 Step 1: City
+    // officeBearers empty / no president → district
+    // ─────────────────────────────────────────
     if (norm.city && norm.district && norm.state) {
       // 1A) Exact match
       let citySangh = await HierarchicalSangh.findOne({
-        level: 'city',
-        sanghType: 'main',
-        status: 'active',
-        'location.city': { $regex: new RegExp(`^${escapeRegex(norm.city)}$`, 'i') },
-        'location.district': districtRegex,
-        'location.state': stateRegex,
+        level: "city",
+        sanghType: targetSanghType,
+        status: "active",
+        "location.city": {
+          $regex: new RegExp(`^${escapeRegex(norm.city)}$`, "i"),
+        },
+        "location.district": districtRegex,
+        "location.state": stateRegex,
       });
 
-      // 1B) Fuzzy match if exact not found
+      // 1B) Fuzzy match
       if (!citySangh) {
         const allCitySanghs = await HierarchicalSangh.find({
-          level: 'city',
-          sanghType: 'main',
-          status: 'active',
-          'location.district': districtRegex,
-          'location.state': stateRegex,
+          level: "city",
+          sanghType: targetSanghType,
+          status: "active",
+          "location.district": districtRegex,
+          "location.state": stateRegex,
         });
-
-        const stringSimilarity = (a, b) => {
-          a = a.toLowerCase().trim();
-          b = b.toLowerCase().trim();
-          const longer = a.length > b.length ? a : b;
-          const shorter = a.length > b.length ? b : a;
-          const common = [...shorter].filter((ch) => longer.includes(ch)).length;
-          return common / longer.length;
-        };
-
-        citySangh = allCitySanghs.find(
-          (s) => stringSimilarity(norm.city, s.location.city) > 0.7
-        ) || null;
+        citySangh =
+          allCitySanghs.find(
+            (s) => stringSimilarity(norm.city, s.location.city) > 0.7,
+          ) || null;
       }
 
       if (citySangh && hasActivePresident(citySangh)) {
-        // ✅ main city sangh with president → assign
+        // ✅ City sangh mila + president active → assign
         reviewingSangh = citySangh;
-        applicationLevel = 'city';
+        applicationLevel = "city";
         reviewingSanghId = citySangh._id;
-      } else {
-        // ✅ main nahi mila ya president nahi → check women city sangh
-        const womenCitySangh = await findWomenSangh('city', {
-          'location.city': cityRegex,
-          'location.district': districtRegex,
-          'location.state': stateRegex,
-        });
-        if (womenCitySangh && hasActivePresident(womenCitySangh)) {
-          reviewingSangh = womenCitySangh;
-          applicationLevel = 'city';
-          reviewingSanghId = womenCitySangh._id;
-        }
-        // else: fall through to district
       }
+      // ❌ City sangh nahi mila / officeBearers empty / no active president → district
     }
 
-    // 🔹 Step 2: Try District (if city had no president or city sangh not found)
+    // ─────────────────────────────────────────
+    // 🔹 Step 2: District
+    // officeBearers empty / no president → state
+    // ─────────────────────────────────────────
     if (!reviewingSangh && norm.district && norm.state) {
-      const districtSangh = await findSangh('district', {
-        'location.district': districtRegex,
-        'location.state': stateRegex,
+      const districtSangh = await findSangh("district", {
+        "location.district": districtRegex,
+        "location.state": stateRegex,
       });
 
       if (districtSangh && hasActivePresident(districtSangh)) {
-        // ✅ main district sangh with president → assign
+        // ✅ District sangh mila + president active → assign
         reviewingSangh = districtSangh;
-        applicationLevel = 'district';
+        applicationLevel = "district";
         reviewingSanghId = districtSangh._id;
-      } else {
-        // ✅ main nahi ya president nahi → check women district sangh
-        const womenDistrictSangh = await findWomenSangh('district', {
-          'location.district': districtRegex,
-          'location.state': stateRegex,
-        });
-        if (womenDistrictSangh && hasActivePresident(womenDistrictSangh)) {
-          reviewingSangh = womenDistrictSangh;
-          applicationLevel = 'district';
-          reviewingSanghId = womenDistrictSangh._id;
-        }
-        // else: fall through to state
       }
+      // ❌ officeBearers empty / no active president → state
     }
 
-    // 🔹 Step 3: Try State (if district had no president or not found)
+    // ─────────────────────────────────────────
+    // 🔹 Step 3: State
+    // officeBearers empty / no president → country
+    // ─────────────────────────────────────────
     if (!reviewingSangh && norm.state) {
-      const stateSangh = await findSangh('state', {
-        'location.state': stateRegex,
+      const stateSangh = await findSangh("state", {
+        "location.state": stateRegex,
       });
 
       if (stateSangh && hasActivePresident(stateSangh)) {
-        // ✅ main state sangh with president → assign
+        // ✅ State sangh mila + president active → assign
         reviewingSangh = stateSangh;
-        applicationLevel = 'state';
+        applicationLevel = "state";
         reviewingSanghId = stateSangh._id;
-      } else {
-        // ✅ main nahi ya president nahi → check women state sangh
-        const womenStateSangh = await findWomenSangh('state', {
-          'location.state': stateRegex,
-        });
-        if (womenStateSangh && hasActivePresident(womenStateSangh)) {
-          reviewingSangh = womenStateSangh;
-          applicationLevel = 'state';
-          reviewingSanghId = womenStateSangh._id;
-        }
-        // else: fall through to country
       }
+      // ❌ officeBearers empty / no active president → country
     }
 
-    // 🔹 Step 4: Try Country / Foundation / Superadmin (UNCHANGED)
+    // ─────────────────────────────────────────
+    // 🔹 Step 4: Country → Foundation → Superadmin
+    // ─────────────────────────────────────────
     if (!reviewingSangh) {
-      const countrySangh = await findSangh('country', {
-        'location.country': countryRegex,
+      const countrySangh = await findSangh("country", {
+        "location.country": countryRegex,
       });
 
-      if (countrySangh) {
-        if (hasActivePresident(countrySangh)) {
-          reviewingSangh = countrySangh;
-          applicationLevel = 'country';
-          reviewingSanghId = countrySangh._id;
-        } else {
-          // Country sangh exists but no president → go to foundation
-          const foundationSangh = await HierarchicalSangh.findOne({
-            level: 'foundation',
-            status: 'active',
-          }).exec();
-
-          if (foundationSangh) {
-            reviewingSangh = foundationSangh;
-            applicationLevel = 'foundation';
-            reviewingSanghId = foundationSangh._id;
-          } else {
-            applicationLevel = 'superadmin';
-            reviewingSanghId = null;
-          }
-        }
+      if (countrySangh && hasActivePresident(countrySangh)) {
+        // ✅ Country sangh mila + president active → assign
+        reviewingSangh = countrySangh;
+        applicationLevel = "country";
+        reviewingSanghId = countrySangh._id;
       } else {
-        // No country sangh at all
+        // ❌ Country nahi / officeBearers empty / no president → Foundation
         const foundationSangh = await HierarchicalSangh.findOne({
-          level: 'foundation',
-          status: 'active',
+          level: "foundation",
+          status: "active",
         }).exec();
 
         if (foundationSangh) {
           reviewingSangh = foundationSangh;
-          applicationLevel = 'foundation';
+          applicationLevel = "foundation";
           reviewingSanghId = foundationSangh._id;
         } else {
-          applicationLevel = 'superadmin';
+          // ❌ Foundation bhi nahi → Superadmin
+          applicationLevel = "superadmin";
           reviewingSanghId = null;
         }
       }
     }
 
-    // 🔹 Special case: Country office bearer
-    if (req.body.isOfficeBearer && applicationLevel === 'country') {
-      applicationLevel = 'superadmin';
+    // 🔹 Special: Country office bearer → superadmin
+    if (req.body.isOfficeBearer && applicationLevel === "country") {
+      applicationLevel = "superadmin";
       reviewingSanghId = null;
     }
 
     // Safety fallback
     if (!applicationLevel) {
-      applicationLevel = 'superadmin';
+      applicationLevel = "superadmin";
       reviewingSanghId = null;
     }
 
-    // Prepare data
+    // ─────────────────────────────────────────
+    // Prepare & Save
+    // ─────────────────────────────────────────
     const applicantUserId = req.body.applicantUserId || req.user._id;
+
     const jainAadharData = {
       ...req.body,
       userId: applicantUserId,
       createdBy: req.user._id,
       applicationLevel,
       reviewingSanghId,
-      status: 'pending',
+      targetSanghType,
+      status: "pending",
       location: {
         country: norm.country,
         state: norm.state,
         district: norm.district,
         city: norm.city,
-        address: location.address || '',
-        pinCode: location.pinCode || '',
+        address: location.address || "",
+        pinCode: location.pinCode || "",
       },
       reviewHistory: [
         {
-          action: 'submitted',
+          action: "submitted",
           by: req.user._id,
-          level: 'user',
-          remarks: 'Application submitted',
+          level: "user",
+          remarks: "Application submitted",
           timestamp: new Date(),
         },
       ],
     };
 
-    // Files handling
     if (req.files?.userProfile?.[0]) {
       const profileUrl =
         req.files.userProfile[0].location || req.files.userProfile[0].path;
@@ -331,24 +655,26 @@ const createJainAadhar = asyncHandler(async (req, res) => {
       return errorResponse(res, "Profile photo is required", 400);
     }
 
-    // Create application
     const newJainAadhar = await JainAadhar.create(jainAadharData);
 
-    // Update user's jainAadhar status
     const user = await User.findById(req.user._id);
-    if (user && user.jainAadharStatus !== 'verified') {
+    if (user && user.jainAadharStatus !== "verified") {
       await User.findByIdAndUpdate(req.user._id, {
-        jainAadharStatus: 'pending',
+        jainAadharStatus: "pending",
         jainAadharApplication: newJainAadhar._id,
       });
     }
 
-    return successResponse(res, newJainAadhar, 'Application submitted successfully', 201);
+    return successResponse(
+      res,
+      newJainAadhar,
+      "Application submitted successfully",
+      201,
+    );
   } catch (error) {
     return errorResponse(res, error.message, 500);
   }
 });
-
 const sendSharavakOtp = asyncHandler(async (req, res) => {
   let { phoneNumber, name } = req.body;
 

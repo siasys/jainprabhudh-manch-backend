@@ -148,6 +148,48 @@ const getS3Folder = (fieldname, req) => {
       return "scholarship/principal-letter/";
     case "schoolAccountDocument":
       return "scholarship/school-account/";
+    case "meeting_0_image_0":
+    case "meeting_0_image_1":
+    case "meeting_1_image_0":
+    case "meeting_1_image_1":
+    case "meeting_2_image_0":
+    case "meeting_2_image_1":
+    case "meeting_3_image_0":
+    case "meeting_3_image_1":
+    case "meeting_4_image_0":
+    case "meeting_4_image_1":
+      return "reporting/meetings/";
+
+    case "event_0_image_0":
+    case "event_0_image_1":
+    case "event_1_image_0":
+    case "event_1_image_1":
+    case "event_2_image_0":
+    case "event_2_image_1":
+    case "event_3_image_0":
+    case "event_3_image_1":
+    case "event_4_image_0":
+    case "event_4_image_1":
+      return "reporting/events/";
+
+    case "visit_0_image_0":
+    case "visit_0_image_1":
+    case "visit_1_image_0":
+    case "visit_1_image_1":
+    case "visit_2_image_0":
+    case "visit_2_image_1":
+    case "visit_3_image_0":
+    case "visit_3_image_1":
+    case "visit_4_image_0":
+    case "visit_4_image_1":
+      return "reporting/visits/images/";
+
+    case "visit_0_pdf":
+    case "visit_1_pdf":
+    case "visit_2_pdf":
+    case "visit_3_pdf":
+    case "visit_4_pdf":
+      return "reporting/visits/pdfs/";
     case "entityPhoto":
       if (req && req.baseUrl) {
         if (req.baseUrl.includes("sadhu")) {
@@ -181,7 +223,7 @@ const getS3Folder = (fieldname, req) => {
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 30 * 1024 * 1024,
+    fileSize: 50 * 1024 * 1024,
     files: 5,
   },
   fileFilter: fileFilter,
@@ -477,6 +519,51 @@ module.exports.biodataImageUpload = [
 //   compressFiles,
 //   uploadToS3,
 // ];
+
+module.exports.reportingUpload = [
+  upload.fields([
+    // Meetings - 5 meetings × 2 images
+    { name: "meeting_0_image_0", maxCount: 1 },
+    { name: "meeting_0_image_1", maxCount: 1 },
+    { name: "meeting_1_image_0", maxCount: 1 },
+    { name: "meeting_1_image_1", maxCount: 1 },
+    { name: "meeting_2_image_0", maxCount: 1 },
+    { name: "meeting_2_image_1", maxCount: 1 },
+    { name: "meeting_3_image_0", maxCount: 1 },
+    { name: "meeting_3_image_1", maxCount: 1 },
+    { name: "meeting_4_image_0", maxCount: 1 },
+    { name: "meeting_4_image_1", maxCount: 1 },
+    // Events - 5 × 2
+    { name: "event_0_image_0", maxCount: 1 },
+    { name: "event_0_image_1", maxCount: 1 },
+    { name: "event_1_image_0", maxCount: 1 },
+    { name: "event_1_image_1", maxCount: 1 },
+    { name: "event_2_image_0", maxCount: 1 },
+    { name: "event_2_image_1", maxCount: 1 },
+    { name: "event_3_image_0", maxCount: 1 },
+    { name: "event_3_image_1", maxCount: 1 },
+    { name: "event_4_image_0", maxCount: 1 },
+    { name: "event_4_image_1", maxCount: 1 },
+    // Visits - 5 × 2 images + 1 pdf
+    { name: "visit_0_image_0", maxCount: 1 },
+    { name: "visit_0_image_1", maxCount: 1 },
+    { name: "visit_0_pdf", maxCount: 1 },
+    { name: "visit_1_image_0", maxCount: 1 },
+    { name: "visit_1_image_1", maxCount: 1 },
+    { name: "visit_1_pdf", maxCount: 1 },
+    { name: "visit_2_image_0", maxCount: 1 },
+    { name: "visit_2_image_1", maxCount: 1 },
+    { name: "visit_2_pdf", maxCount: 1 },
+    { name: "visit_3_image_0", maxCount: 1 },
+    { name: "visit_3_image_1", maxCount: 1 },
+    { name: "visit_3_pdf", maxCount: 1 },
+    { name: "visit_4_image_0", maxCount: 1 },
+    { name: "visit_4_image_1", maxCount: 1 },
+    { name: "visit_4_pdf", maxCount: 1 },
+  ]),
+  compressFiles,
+  uploadToS3,
+];
 module.exports.sadhuDocs = [
   upload.fields([
     { name: "entityPhoto", maxCount: 5 },

@@ -1,162 +1,85 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-// Define a schema for visit details - Simplified
-const visitSchema = new mongoose.Schema({
-  date: {
-    type: Date,
-    required: true
-  },
-  visitorName: {
-    type: String,
-    required: true
-  },
-  visitorLevel: {
-    type: String,
-    enum: ['national', 'state', 'district', 'city', 'area'],
-    required: true
-  },
-  purpose: {
-    type: String,
-    required: true
-  }
-}, { _id: true });
+// ── Sub-schemas ──────────────────────────────────────────────
 
-// Define a schema for meeting details
 const meetingSchema = new mongoose.Schema({
-  meetingNumber: {
-    type: Number,
-    required: true,
-    min: 1
-  },
-  date: {
-    type: Date,
-    required: true
-  },
-  attendanceCount: {
-    type: Number,
-    required: true,
-    min: 0
-  }
-}, { _id: true });
+  meetingType: { type: String }, // annual_general_meeting | board_meeting | etc.
+  agmSubType: { type: String }, // monthly | half_yearly | yearly (AGM only)
+  date: { type: Date },
+  attendanceCount: { type: String },
+  description: { type: String },
+  images: [{ uri: String, fileName: String, type: String }],
+});
 
-// Define a schema for project/event details
 const projectSchema = new mongoose.Schema({
-  eventName: {
-    type: String,
-    required: true
-  },
-  memberCount: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  eventDate: {
-    type: Date,
-    required: true
-  }
-}, { _id: true });
+  eventName: { type: String },
+  description: { type: String },
+  memberCount: { type: Number, default: 0 },
+  eventDate: { type: Date },
+  images: [{ uri: String, fileName: String, type: String }],
+});
+
+const visitSchema = new mongoose.Schema({
+  visitorName: { type: String },
+  visitorPostName: { type: String }, // designation
+  visitorLevel: { type: String }, // national | state | district | city
+  sanghName: { type: String },
+  summary: { type: String },
+  pdf: { uri: String, name: String },
+  images: [{ uri: String, fileName: String, type: String }],
+});
+
+// ── Main Schema ──────────────────────────────────────────────
 
 const reportingSchema = new mongoose.Schema(
   {
-    // Sangh Information
-    submittingSanghId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'HierarchicalSangh',
-      required: true
-    },
-    recipientSanghId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'HierarchicalSangh',
-      required: true
-    },
-    // Basic Information
-    sanghName: { 
-      type: String, 
-      required: true 
-    },
-    presidentName: { 
-      type: String, 
-      required: true 
-    },
-    secretaryName: { 
-      type: String, 
-      required: true 
-    },
-    treasurerName: { 
-      type: String, 
-      required: true 
-    },
-    // Reporting Period
-    reportMonth: { 
-      type: Number, 
-      required: true,
-      min: 1,
-      max: 12
-    },
-    reportYear: { 
-      type: Number, 
-      required: true 
-    },
-    // Meeting Information
-    generalMeetings: {
-      count: {
-        type: Number,
-        required: true,
-        default: 0
-      },
-      details: [meetingSchema]
-    },
-    boardMeetings: {
-      count: {
-        type: Number,
-        required: true,
-        default: 0
-      },
-      details: [meetingSchema]
-    },
-    // Visits Information (Super Simplified)
-    visits: [visitSchema],
-    // Membership Information
-    membershipCount: { 
-      type: Number, 
-      required: true,
-      min: 0
-    },
-    jainAadharCount: {
-      type: Number,
-      required: true,
-      default: 0
-    },
-    // Projects/Events Information
+    // Sangh Info
+    sanghName: { type: String },
+    presidentName: { type: String, required: true },
+    secretaryName: { type: String, required: true },
+    treasurerName: { type: String, required: true },
+
+    // Counts
+    membershipCount: { type: String },
+    jainAadharCount: { type: String },
+    sanghCreateCount: { type: String },
+    membersCreateCount: { type: String },
+    businessRegisterCount: { type: String },
+    sadhuRegisterCount: { type: String },
+    tirthRegisterCount: { type: String },
+    matrimonyCount: { type: String },
+    scholarshipCount: { type: String },
+    panchActivityCount: { type: String },
+    membershipFeesCount: { type: String },
+    employmentCount: { type: String },
+
+    // Report Period
+    reportMonth: { type: Number, required: true },
+    reportYear: { type: Number, required: true },
+
+    // Meetings
+    meetings: [meetingSchema],
+    meetingsHeld: { type: String },
+    meetingsAttended: { type: String },
+
+    // Projects / Events
     projects: [projectSchema],
-    // Status
-    status: {
-      type: String,
-      enum: ['submitted', 'reviewed', 'approved'],
-      default: 'submitted'
-    },
-    feedback: {
-      type: String,
-      default: ''
-    },
-    // Submission Information
-    submittedById: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
-    }
+    events: { type: String }, // joined string (legacy compat)
+    members: { type: String }, // joined string (legacy compat)
+    eventDate: { type: Date },
+
+    // Official Visits
+    visits: [visitSchema],
+
+    // Training
+    trainingHeld: { type: Boolean, default: null },
+    trainingInput: { type: String },
+
+    // Misc
+    selectedOption: { type: String },
+    fieldBy: { type: String },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-// Add to the bottom of your schema definition
-reportingSchema.index({ submittingSanghId: 1 });
-reportingSchema.index({ recipientSanghId: 1 });
-reportingSchema.index({ status: 1 });
-reportingSchema.index({ reportMonth: 1, reportYear: 1 });
-reportingSchema.index({ submittedById: 1 });
-// Compound indexes
-reportingSchema.index({ recipientSanghId: 1, status: 1 });
-reportingSchema.index({ reportMonth: 1, reportYear: 1, status: 1 });
-
-module.exports = mongoose.model('Reporting', reportingSchema);
+module.exports = mongoose.model("Reporting", reportingSchema);

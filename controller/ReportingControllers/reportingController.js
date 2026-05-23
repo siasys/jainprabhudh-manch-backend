@@ -1,85 +1,146 @@
 const Reporting = require('../../model/ReportingModels/ReportingModel');
 const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
+const { convertS3UrlToCDN } = require("../../utils/s3Utils");
 
 // Create a new report
 exports.createReport = async (req, res) => {
   try {
+    const data = JSON.parse(req.body.data);
+
     const {
+      sanghId,
       sanghName,
       presidentName,
       secretaryName,
       treasurerName,
       reportMonth,
       reportYear,
-      generalMeetings,
-      boardMeetings,
       membershipCount,
       jainAadharCount,
-      projects,
-      visits
-    } = req.body;
+      sanghCreateCount,
+      membersCreateCount,
+      businessRegisterCount,
+      sadhuRegisterCount,
+      tirthRegisterCount,
+      matrimonyCount,
+      scholarshipCount,
+      panchActivityCount,
+      membershipFeesCount,
+      employmentCount,
+      meetings: meetingsData,
+      meetingsHeld,
+      meetingsAttended,
+      projects: projectsData,
+      events,
+      members,
+      eventDate,
+      visits: visitsData,
+      selectedOption,
+      fieldBy,
+      trainingHeld,
+      trainingInput,
+    } = data;
 
-        const user = req.user;
-    const presidentRole = user.sanghRoles?.find(role => role.role === 'president');
-
-    if (!presidentRole) {
-      return errorResponse(res, 'Only presidents can submit reports', 403);
-    }
+    const user = req.user;
+    const presidentRole = user.sanghRoles?.find((r) => r.role === "president");
+    if (!presidentRole)
+      return errorResponse(res, "Only presidents can submit reports", 403);
 
     const submittingSanghId = presidentRole.sanghId;
-
-    // 🔎 Fetch the submitting sangh from DB
     const submittingSangh = await HierarchicalSangh.findById(submittingSanghId);
-    if (!submittingSangh) {
-      return errorResponse(res, 'Submitting Sangh not found', 404);
-    }
+    if (!submittingSangh)
+      return errorResponse(res, "Submitting Sangh not found", 404);
 
     const recipientSanghId = submittingSangh.parentSangh || submittingSanghId;
+
+    // ── Helper: S3 → CDN URL ──
+    const getUrl = (fieldName) => {
+      const file = req.files?.[fieldName]?.[0];
+      if (!file?.location) return null;
+      return convertS3UrlToCDN(file.location);
+    };
+
+    // ── Meetings ──
+    const meetings = (meetingsData || []).map((m, mi) => ({
+      meetingType: m.meetingType,
+      agmSubType: m.agmSubType,
+      date: m.date,
+      attendanceCount: m.attendanceCount,
+      description: m.description,
+      images: [
+        getUrl(`meeting_${mi}_image_0`),
+        getUrl(`meeting_${mi}_image_1`),
+      ].filter(Boolean),
+    }));
+
+    // ── Projects ──
+    const projects = (projectsData || []).map((p, pi) => ({
+      eventName: p.eventName,
+      description: p.description,
+      memberCount: p.memberCount,
+      eventDate: p.eventDate,
+      images: [
+        getUrl(`event_${pi}_image_0`),
+        getUrl(`event_${pi}_image_1`),
+      ].filter(Boolean),
+    }));
+
+    // ── Visits ──
+    const visits = (visitsData || []).map((v, vi) => ({
+      visitorName: v.visitorName,
+      visitorPostName: v.visitorPostName,
+      visitorLevel: v.visitorLevel,
+      sanghName: v.sanghName,
+      summary: v.summary,
+      pdf: getUrl(`visit_${vi}_pdf`),
+      images: [
+        getUrl(`visit_${vi}_image_0`),
+        getUrl(`visit_${vi}_image_1`),
+      ].filter(Boolean),
+    }));
 
     const newReport = new Reporting({
       submittingSanghId,
       recipientSanghId,
+      submittedById: user._id,
       sanghName,
       presidentName,
       secretaryName,
       treasurerName,
       reportMonth,
       reportYear,
-      generalMeetings: {
-       // count: generalMeetings?.details?.length || 0,
-        details: generalMeetings?.details?.map(meeting => ({
-          meetingNumber: meeting.meetingNumber,
-          date: meeting.date,
-          attendanceCount: meeting.attendanceCount
-        })) || []
-      },
-      boardMeetings: {
-//count: boardMeetings?.details?.length || 0,
-        details: boardMeetings?.details?.map(meeting => ({
-          meetingNumber: meeting.meetingNumber,
-          date: meeting.date,
-          attendanceCount: meeting.attendanceCount
-        })) || []
-      },
       membershipCount,
       jainAadharCount,
-      projects: projects || [],
-      visits: visits?.map(visit => ({
-        date: visit.date,
-        visitorName: visit.visitorName,
-        visitorLevel: visit.visitorLevel,
-        purpose: visit.purpose
-      })) || [],
-      submittedById: user._id
+      sanghCreateCount,
+      membersCreateCount,
+      businessRegisterCount,
+      sadhuRegisterCount,
+      tirthRegisterCount,
+      matrimonyCount,
+      scholarshipCount,
+      panchActivityCount,
+      membershipFeesCount,
+      employmentCount,
+      meetings,
+      meetingsHeld,
+      meetingsAttended,
+      projects,
+      events,
+      members,
+      eventDate,
+      visits,
+      selectedOption,
+      fieldBy,
+      trainingHeld,
+      trainingInput,
     });
 
     await newReport.save();
-
-    return successResponse(res, 'Report created successfully', newReport, 201);
+    return successResponse(res, "Report created successfully", newReport, 201);
   } catch (err) {
-    console.error('Error creating report:', err);
-    return errorResponse(res, 'Server error', 500);
+    console.error("Error creating report:", err);
+    return errorResponse(res, "Server error", 500);
   }
 };
 // Get a single report by ID

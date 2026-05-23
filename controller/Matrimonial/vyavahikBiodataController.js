@@ -114,16 +114,16 @@ const createBiodata = async (req, res) => {
 //   const loc = files?.[key]?.[0]?.location;
 //   return loc ? convertS3UrlToCDN(loc) : null;
 // };
- 
+
 // // ─── CREATE ──────────────────────────────────────────────────────────────────
 // const createBiodata = async (req, res) => {
 //   try {
 //     const { body, files } = req;
- 
+
 //     // ── File uploads → CDN URLs ──────────────────────────────────
 //     const educationCertificateUrl = toCDN(files, 'educationCertificate');
 //     const divorceCertificateUrl   = toCDN(files, 'divorceCertificate');
- 
+
 //     // uploadedPhotos: multer field name = 'uploadedPhotos', max 10
 //     const uploadedPhotos = (files?.uploadedPhotos || [])
 //       .slice(0, 10)
@@ -132,7 +132,7 @@ const createBiodata = async (req, res) => {
 //         url: convertS3UrlToCDN(f.location),
 //       }))
 //       .filter((p) => p.url);
- 
+
 //     // ── DOB processing ───────────────────────────────────────────
 //     let processedDob = null;
 //     if (body.dob) {
@@ -140,10 +140,10 @@ const createBiodata = async (req, res) => {
 //       if (!isNaN(d.getTime())) processedDob = d;
 //       else console.warn('⚠️ Invalid DOB:', body.dob);
 //     }
- 
+
 //     // ── Marriage Info ────────────────────────────────────────────
 //     const marriageInfo = { marriageType: body.marriageType };
- 
+
 //     if (body.marriageType === 'Divorced') {
 //       marriageInfo.divorcedDetails = {
 //         isDivorceComplete:  body.isDivorceComplete,
@@ -155,7 +155,7 @@ const createBiodata = async (req, res) => {
 //         numberOfChildren:   body.numberOfChildren,
 //       };
 //     }
- 
+
 //     if (body.marriageType === 'Widowed/widower') {
 //       marriageInfo.widowedDetails = {
 //         spouseName:        body.spouseName,
@@ -165,7 +165,7 @@ const createBiodata = async (req, res) => {
 //         numberOfChildren:  body.numberOfChildren,
 //       };
 //     }
- 
+
 //     // ── Education ────────────────────────────────────────────────
 //     const education = {
 //       highestEducation:     body.highestEducation,
@@ -174,7 +174,7 @@ const createBiodata = async (req, res) => {
 //       yearOfPassing:        body.yearOfPassing,
 //       educationCertificate: educationCertificateUrl,
 //     };
- 
+
 //     // ── Work Info ────────────────────────────────────────────────
 //     const workInfo = {
 //       workStatus:      body.workStatus,
@@ -184,7 +184,7 @@ const createBiodata = async (req, res) => {
 //       workLocation:    body.workLocation,
 //       annualIncome:    body.annualIncome,
 //     };
- 
+
 //     // ── Family Info ──────────────────────────────────────────────
 //     const familyInfo = {
 //       fatherName:       body.fatherName,
@@ -197,7 +197,7 @@ const createBiodata = async (req, res) => {
 //       noOfBrothers:     body.noOfBrothers,
 //       noOfSisters:      body.noOfSisters,
 //     };
- 
+
 //     // ── Community / Religion ─────────────────────────────────────
 //     const communityInfo = {
 //       mulJain:      body.mulJain,
@@ -210,7 +210,7 @@ const createBiodata = async (req, res) => {
 //       manglik:      body.manglik,
 //       motherTongue: body.motherTongue,
 //     };
- 
+
 //     // ── Address ──────────────────────────────────────────────────
 //     const addressInfo = {
 //       country:     body.country || 'India',
@@ -219,7 +219,7 @@ const createBiodata = async (req, res) => {
 //       city:        body.city,
 //       fullAddress: body.fullAddress,
 //     };
- 
+
 //     // ── Contact ──────────────────────────────────────────────────
 //     const contactInfo = {
 //       mobileNumber:          body.contactMobile || body.mobileNumber,
@@ -228,7 +228,7 @@ const createBiodata = async (req, res) => {
 //       alternativeNumber:     body.alternativeNumber,
 //       contactPersonRelation: body.contactPersonRelation,
 //     };
- 
+
 //     // ── Partner Preference ───────────────────────────────────────
 //     const partnerPreference = {
 //       preferredAgeFrom:    body.preferredAgeFrom,
@@ -241,33 +241,17 @@ const createBiodata = async (req, res) => {
 //       locationPreference:  body.locationPreference,
 //       additionalPreference:body.additionalPreference,
 //     };
- 
-//     // ── Health Report ────────────────────────────────────────────
-//     const healthReport = {
-//       wearsSpectacles: body.wearsSpectacles,
-//       diabetes:        body.diabetes,
-//       bloodPressure:   body.bloodPressure,
-//       thyroid:         body.thyroid,
-//       asthma:          body.asthma,
-//       migraine:        body.migraine,
-//       heartIssue:      body.heartIssue,
-//       hearingIssue:    body.hearingIssue,
-//       skinIssue:       body.skinIssue,
-//       anyAddiction:    body.anyAddiction,
-//       previousSurgery: body.previousSurgery,
-//       tongueIssue:     body.tongueIssue,
-//       menstrualIssue:  body.menstrualIssue,
-//     };
- 
+
+
 //     // ── Assemble Document ────────────────────────────────────────
 //     const biodataData = {
 //       userId: req.user?._id,
- 
+
 //       // profile
 //       profile:                body.profile,
 //       relationWithCandidate:  body.relationWithCandidate,
 //       creatorName:            body.creatorName,
- 
+
 //       // basic
 //       shravakId:   body.shravakId,
 //       jainShravak: body.jainShravak,
@@ -277,7 +261,7 @@ const createBiodata = async (req, res) => {
 //       timeOfBirth: body.timeOfBirth,
 //       birthPlace:  body.birthPlace,
 //       mobileNumber:body.mobileNumber,
- 
+
 //       // personal
 //       height:                   body.height,
 //       complexion:               body.complexion,
@@ -285,7 +269,7 @@ const createBiodata = async (req, res) => {
 //       hobbies:                  body.hobbies,
 //       physicalCondition:        body.physicalCondition,
 //       physicalConditionDescribe:body.physicalConditionDescribe,
- 
+
 //       // nested
 //       marriageInfo,
 //       education,
@@ -297,21 +281,21 @@ const createBiodata = async (req, res) => {
 //       uploadedPhotos,
 //       healthReport,
 //       partnerPreference,
- 
+
 //       specialInformation: body.specialInformation,
 //       paymentScreenshot:  toCDN(files, 'paymentScreenshot'),
 //       isVisible:          false,
 //     };
- 
+
 //     const biodata = new VyavahikBiodata(biodataData);
 //     await biodata.save();
- 
-//     res.status(201).json({
+
+//    res.status(201).json({
 //       success: true,
 //       message: 'Biodata created successfully!',
 //       data: biodata,
 //     });
- 
+
 //   } catch (error) {
 //     console.error('❌ Biodata Creation Error:', error);
 //     res.status(500).json({
