@@ -378,11 +378,18 @@ const createBiodatas = async (req, res) => {
       }))
       .filter((p) => p.url);
 
-    // ── DOB processing ───────────────────────────────────────────
+    // ── DOB processing + Age calculation ─────────────────────────
     let processedDob = null;
+    let age = null;
     if (body.dob) {
       const d = new Date(body.dob);
-      if (!isNaN(d.getTime())) processedDob = d;
+      if (!isNaN(d.getTime())) {
+        processedDob = d;
+        const today = new Date();
+        age = today.getFullYear() - d.getFullYear();
+        const m = today.getMonth() - d.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
+      }
       else console.warn('⚠️ Invalid DOB:', body.dob);
     }
 
@@ -476,44 +483,44 @@ const createBiodatas = async (req, res) => {
 
     // ── Partner Preference ───────────────────────────────────────
     const partnerPreference = {
-      preferredAgeFrom:    body.preferredAgeFrom,
-      preferredAgeTo:      body.preferredAgeTo,
-      heightFrom:          body.heightFrom,
-      heightTo:            body.heightTo,
-      incomePreference:    body.incomePreference,
-      maritalStatus:       body.partnerMaritalStatus,
-      educationPreference: body.educationPreference,
-      locationPreference:  body.locationPreference,
-      additionalPreference:body.additionalPreference,
+      preferredAgeFrom:     body.preferredAgeFrom,
+      preferredAgeTo:       body.preferredAgeTo,
+      heightFrom:           body.heightFrom,
+      heightTo:             body.heightTo,
+      incomePreference:     body.incomePreference,
+      maritalStatus:        body.partnerMaritalStatus,
+      educationPreference:  body.educationPreference,
+      locationPreference:   body.locationPreference,
+      additionalPreference: body.additionalPreference,
     };
-
 
     // ── Assemble Document ────────────────────────────────────────
     const biodataData = {
       userId: req.user?._id,
 
       // profile
-      profile:                body.profile,
-      relationWithCandidate:  body.relationWithCandidate,
-      creatorName:            body.creatorName,
+      profile: body.profile,
+      relationWithCandidate: body.relationWithCandidate,
+      creatorName: body.creatorName,
 
       // basic
-      shravakId:   body.shravakId,
+      shravakId: body.shravakId,
       jainShravak: body.jainShravak,
-      fullName:    body.fullName,
-      gender:      body.gender,
-      dob:         processedDob,
+      name: body.name,
+      gender: body.gender,
+      dob: processedDob,
+      age: age, // ← calculated from dob
       timeOfBirth: body.timeOfBirth,
-      birthPlace:  body.birthPlace,
-      mobileNumber:body.mobileNumber,
+      birthPlace: body.birthPlace,
+      mobileNumber: body.mobileNumber,
 
       // personal
-      height:                   body.height,
-      complexion:               body.complexion,
-      dietPreference:           body.dietPreference,
-      hobbies:                  body.hobbies,
-      physicalCondition:        body.physicalCondition,
-      physicalConditionDescribe:body.physicalConditionDescribe,
+      height: body.height,
+      complexion: body.complexion,
+      dietPreference: body.dietPreference,
+      hobbies: body.hobbies,
+      physicalCondition: body.physicalCondition,
+      physicalConditionDescribe: body.physicalConditionDescribe,
 
       // nested
       marriageInfo,
@@ -528,14 +535,14 @@ const createBiodatas = async (req, res) => {
       partnerPreference,
 
       specialInformation: body.specialInformation,
-      paymentScreenshot:  toCDN(files, 'paymentScreenshot'),
-      isVisible:          false,
+      paymentScreenshot: toCDN(files, "paymentScreenshot"),
+      isVisible: false,
     };
 
     const biodata = new VyavahikBiodata(biodataData);
     await biodata.save();
 
-   res.status(201).json({
+    res.status(201).json({
       success: true,
       message: 'Biodata created successfully!',
       data: biodata,
@@ -633,9 +640,9 @@ const getBiodataById = async (req, res) => {
     const { id } = req.params;
  
     const biodata = await VyavahikBiodata.findOne({ _id: id, isVisible: true })
-      .populate("likedProfiles", "fullName gender dob uploadedPhotos")
-      .populate("interestsSent.profileId", "fullName gender dob uploadedPhotos")
-      .populate("interestsReceived.profileId", "fullName gender dob uploadedPhotos")
+      .populate("likedProfiles", "name gender dob uploadedPhotos")
+      .populate("interestsSent.profileId", "name gender dob uploadedPhotos")
+      .populate("interestsReceived.profileId", "name gender dob uploadedPhotos")
       .lean();
  
     if (!biodata) {
@@ -664,9 +671,9 @@ const getBiodataById = async (req, res) => {
 const getMyBiodata = async (req, res) => {
   try {
     const biodata = await VyavahikBiodata.findOne({ userId: req.user._id })
-      .populate("likedProfiles", "fullName gender dob uploadedPhotos")
-      .populate("interestsSent.profileId", "fullName gender dob uploadedPhotos")
-      .populate("interestsReceived.profileId", "fullName gender dob uploadedPhotos")
+      .populate("likedProfiles", "name gender dob uploadedPhotos")
+      .populate("interestsSent.profileId", "name gender dob uploadedPhotos")
+      .populate("interestsReceived.profileId", "name gender dob uploadedPhotos")
       .lean();
  
     if (!biodata) {
@@ -803,7 +810,7 @@ const getLikedProfiles = async (req, res) => {
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
       .populate(
         "likedProfiles",
-        "fullName gender dob height complexion addressInfo uploadedPhotos communityInfo marriageInfo"
+        "name gender dob height complexion addressInfo uploadedPhotos communityInfo marriageInfo"
       )
       .lean();
  
@@ -949,7 +956,7 @@ const respondToInterest = async (req, res) => {
 const getSentInterests = async (req, res) => {
   try {
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
-      .populate("interestsSent.profileId", "fullName gender dob uploadedPhotos addressInfo")
+      .populate("interestsSent.profileId", "name gender dob uploadedPhotos addressInfo")
       .lean();
  
     if (!myBiodata) {
@@ -973,7 +980,7 @@ const getSentInterests = async (req, res) => {
 const getReceivedInterests = async (req, res) => {
   try {
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
-      .populate("interestsReceived.profileId", "fullName gender dob uploadedPhotos addressInfo")
+      .populate("interestsReceived.profileId", "name gender dob uploadedPhotos addressInfo")
       .lean();
  
     if (!myBiodata) {

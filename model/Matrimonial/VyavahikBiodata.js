@@ -293,9 +293,10 @@ module.exports = mongoose.model("VyavahikBiodata", vyavahikBiodataSchema);
 //     // ─── Basic Info ──────────────────────────────────────────────
 //     shravakId: { type: String },
 //     jainShravak: { type: String },
-//     fullName: { type: String },
+//     name: { type: String },
 //     gender: { type: String },
 //     dob: { type: Date },
+//     age:{type: String},
 //     timeOfBirth: { type: String },
 //     birthPlace: { type: String },
 
