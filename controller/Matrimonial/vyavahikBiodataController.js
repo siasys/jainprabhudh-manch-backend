@@ -110,202 +110,6 @@ const createBiodata = async (req, res) => {
   }
 };
 // // ─── Helper: safe CDN convert ────────────────────────────────────────────────
-// const toCDN = (files, key) => {
-//   const loc = files?.[key]?.[0]?.location;
-//   return loc ? convertS3UrlToCDN(loc) : null;
-// };
-
-// // ─── CREATE ──────────────────────────────────────────────────────────────────
-// const createBiodata = async (req, res) => {
-//   try {
-//     const { body, files } = req;
-
-//     // ── File uploads → CDN URLs ──────────────────────────────────
-//     const educationCertificateUrl = toCDN(files, 'educationCertificate');
-//     const divorceCertificateUrl   = toCDN(files, 'divorceCertificate');
-
-//     // uploadedPhotos: multer field name = 'uploadedPhotos', max 10
-//     const uploadedPhotos = (files?.uploadedPhotos || [])
-//       .slice(0, 10)
-//       .map((f, i) => ({
-//         label: f.originalname || `photo_${i}`,
-//         url: convertS3UrlToCDN(f.location),
-//       }))
-//       .filter((p) => p.url);
-
-//     // ── DOB processing ───────────────────────────────────────────
-//     let processedDob = null;
-//     if (body.dob) {
-//       const d = new Date(body.dob);
-//       if (!isNaN(d.getTime())) processedDob = d;
-//       else console.warn('⚠️ Invalid DOB:', body.dob);
-//     }
-
-//     // ── Marriage Info ────────────────────────────────────────────
-//     const marriageInfo = { marriageType: body.marriageType };
-
-//     if (body.marriageType === 'Divorced') {
-//       marriageInfo.divorcedDetails = {
-//         isDivorceComplete:  body.isDivorceComplete,
-//         reasonForDivorce:   body.reasonForDivorce,
-//         divorceCertificate: divorceCertificateUrl,
-//         spouseName:         body.spouseName,
-//         spouseFatherName:   body.spouseFatherName,
-//         spouseMotherName:   body.spouseMotherName,
-//         numberOfChildren:   body.numberOfChildren,
-//       };
-//     }
-
-//     if (body.marriageType === 'Widowed/widower') {
-//       marriageInfo.widowedDetails = {
-//         spouseName:        body.spouseName,
-//         spouseFatherName:  body.spouseFatherName,
-//         spouseMotherName:  body.spouseMotherName,
-//         reasonSpouseDeath: body.reasonSpouseDeath,
-//         numberOfChildren:  body.numberOfChildren,
-//       };
-//     }
-
-//     // ── Education ────────────────────────────────────────────────
-//     const education = {
-//       highestEducation:     body.highestEducation,
-//       collegeUniversity:    body.collegeUniversity,
-//       degreeName:           body.degreeName,
-//       yearOfPassing:        body.yearOfPassing,
-//       educationCertificate: educationCertificateUrl,
-//     };
-
-//     // ── Work Info ────────────────────────────────────────────────
-//     const workInfo = {
-//       workStatus:      body.workStatus,
-//       companyName:     body.companyName,
-//       businessName:    body.businessName,
-//       workingIndustry: body.workingIndustry,
-//       workLocation:    body.workLocation,
-//       annualIncome:    body.annualIncome,
-//     };
-
-//     // ── Family Info ──────────────────────────────────────────────
-//     const familyInfo = {
-//       fatherName:       body.fatherName,
-//       fatherOccupation: body.fatherOccupation,
-//       motherName:       body.motherName,
-//       motherOccupation: body.motherOccupation,
-//       nativePlace:      body.nativePlace,
-//       familyType:       body.familyType,
-//       familyIncome:     body.familyIncome,
-//       noOfBrothers:     body.noOfBrothers,
-//       noOfSisters:      body.noOfSisters,
-//     };
-
-//     // ── Community / Religion ─────────────────────────────────────
-//     const communityInfo = {
-//       mulJain:      body.mulJain,
-//       panth:        body.panth,
-//       gotra:        body.gotra,
-//       subGotra:     body.subGotra,
-//       caste:        body.caste,
-//       subCaste:     body.subCaste,
-//       mamaGotra:    body.mamaGotra,
-//       manglik:      body.manglik,
-//       motherTongue: body.motherTongue,
-//     };
-
-//     // ── Address ──────────────────────────────────────────────────
-//     const addressInfo = {
-//       country:     body.country || 'India',
-//       state:       body.state,
-//       district:    body.district,
-//       city:        body.city,
-//       fullAddress: body.fullAddress,
-//     };
-
-//     // ── Contact ──────────────────────────────────────────────────
-//     const contactInfo = {
-//       mobileNumber:          body.contactMobile || body.mobileNumber,
-//       contactPerson:         body.contactPerson,
-//       email:                 body.email,
-//       alternativeNumber:     body.alternativeNumber,
-//       contactPersonRelation: body.contactPersonRelation,
-//     };
-
-//     // ── Partner Preference ───────────────────────────────────────
-//     const partnerPreference = {
-//       preferredAgeFrom:    body.preferredAgeFrom,
-//       preferredAgeTo:      body.preferredAgeTo,
-//       heightFrom:          body.heightFrom,
-//       heightTo:            body.heightTo,
-//       incomePreference:    body.incomePreference,
-//       maritalStatus:       body.partnerMaritalStatus,
-//       educationPreference: body.educationPreference,
-//       locationPreference:  body.locationPreference,
-//       additionalPreference:body.additionalPreference,
-//     };
-
-
-//     // ── Assemble Document ────────────────────────────────────────
-//     const biodataData = {
-//       userId: req.user?._id,
-
-//       // profile
-//       profile:                body.profile,
-//       relationWithCandidate:  body.relationWithCandidate,
-//       creatorName:            body.creatorName,
-
-//       // basic
-//       shravakId:   body.shravakId,
-//       jainShravak: body.jainShravak,
-//       fullName:    body.fullName,
-//       gender:      body.gender,
-//       dob:         processedDob,
-//       timeOfBirth: body.timeOfBirth,
-//       birthPlace:  body.birthPlace,
-//       mobileNumber:body.mobileNumber,
-
-//       // personal
-//       height:                   body.height,
-//       complexion:               body.complexion,
-//       dietPreference:           body.dietPreference,
-//       hobbies:                  body.hobbies,
-//       physicalCondition:        body.physicalCondition,
-//       physicalConditionDescribe:body.physicalConditionDescribe,
-
-//       // nested
-//       marriageInfo,
-//       education,
-//       workInfo,
-//       familyInfo,
-//       communityInfo,
-//       addressInfo,
-//       contactInfo,
-//       uploadedPhotos,
-//       healthReport,
-//       partnerPreference,
-
-//       specialInformation: body.specialInformation,
-//       paymentScreenshot:  toCDN(files, 'paymentScreenshot'),
-//       isVisible:          false,
-//     };
-
-//     const biodata = new VyavahikBiodata(biodataData);
-//     await biodata.save();
-
-//    res.status(201).json({
-//       success: true,
-//       message: 'Biodata created successfully!',
-//       data: biodata,
-//     });
-
-//   } catch (error) {
-//     console.error('❌ Biodata Creation Error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Error creating biodata',
-//       error: error.message,
-//     });
-//   }
-// };
-
 
 // Update API for details only
 const updateBiodata = async (req, res) => {
@@ -551,7 +355,642 @@ const getBiodataByUserId = async (req, res) => {
   }
 };
 
+const toCDN = (files, key) => {
+  const loc = files?.[key]?.[0]?.location;
+  return loc ? convertS3UrlToCDN(loc) : null;
+};
 
+// ─── CREATE ──────────────────────────────────────────────────────────────────
+const createBiodatas = async (req, res) => {
+  try {
+    const { body, files } = req;
+
+    // ── File uploads → CDN URLs ──────────────────────────────────
+    const educationCertificateUrl = toCDN(files, 'educationCertificate');
+    const divorceCertificateUrl   = toCDN(files, 'divorceCertificate');
+
+    // uploadedPhotos: multer field name = 'uploadedPhotos', max 10
+    const uploadedPhotos = (files?.uploadedPhotos || [])
+      .slice(0, 10)
+      .map((f, i) => ({
+        label: f.originalname || `photo_${i}`,
+        url: convertS3UrlToCDN(f.location),
+      }))
+      .filter((p) => p.url);
+
+    // ── DOB processing ───────────────────────────────────────────
+    let processedDob = null;
+    if (body.dob) {
+      const d = new Date(body.dob);
+      if (!isNaN(d.getTime())) processedDob = d;
+      else console.warn('⚠️ Invalid DOB:', body.dob);
+    }
+
+    // ── Marriage Info ────────────────────────────────────────────
+    const marriageInfo = { marriageType: body.marriageType };
+
+    if (body.marriageType === 'Divorced') {
+      marriageInfo.divorcedDetails = {
+        isDivorceComplete:  body.isDivorceComplete,
+        reasonForDivorce:   body.reasonForDivorce,
+        divorceCertificate: divorceCertificateUrl,
+        spouseName:         body.spouseName,
+        spouseFatherName:   body.spouseFatherName,
+        spouseMotherName:   body.spouseMotherName,
+        numberOfChildren:   body.numberOfChildren,
+      };
+    }
+
+    if (body.marriageType === 'Widowed/widower') {
+      marriageInfo.widowedDetails = {
+        spouseName:        body.spouseName,
+        spouseFatherName:  body.spouseFatherName,
+        spouseMotherName:  body.spouseMotherName,
+        reasonSpouseDeath: body.reasonSpouseDeath,
+        numberOfChildren:  body.numberOfChildren,
+      };
+    }
+
+    // ── Education ────────────────────────────────────────────────
+    const education = {
+      highestEducation:     body.highestEducation,
+      collegeUniversity:    body.collegeUniversity,
+      degreeName:           body.degreeName,
+      yearOfPassing:        body.yearOfPassing,
+      educationCertificate: educationCertificateUrl,
+    };
+
+    // ── Work Info ────────────────────────────────────────────────
+    const workInfo = {
+      workStatus:      body.workStatus,
+      companyName:     body.companyName,
+      businessName:    body.businessName,
+      workingIndustry: body.workingIndustry,
+      workLocation:    body.workLocation,
+      annualIncome:    body.annualIncome,
+    };
+
+    // ── Family Info ──────────────────────────────────────────────
+    const familyInfo = {
+      fatherName:       body.fatherName,
+      fatherOccupation: body.fatherOccupation,
+      motherName:       body.motherName,
+      motherOccupation: body.motherOccupation,
+      nativePlace:      body.nativePlace,
+      familyType:       body.familyType,
+      familyIncome:     body.familyIncome,
+      noOfBrothers:     body.noOfBrothers,
+      noOfSisters:      body.noOfSisters,
+    };
+
+    // ── Community / Religion ─────────────────────────────────────
+    const communityInfo = {
+      mulJain:      body.mulJain,
+      panth:        body.panth,
+      gotra:        body.gotra,
+      subGotra:     body.subGotra,
+      caste:        body.caste,
+      subCaste:     body.subCaste,
+      mamaGotra:    body.mamaGotra,
+      manglik:      body.manglik,
+      motherTongue: body.motherTongue,
+    };
+
+    // ── Address ──────────────────────────────────────────────────
+    const addressInfo = {
+      country:     body.country || 'India',
+      state:       body.state,
+      district:    body.district,
+      city:        body.city,
+      fullAddress: body.fullAddress,
+    };
+
+    // ── Contact ──────────────────────────────────────────────────
+    const contactInfo = {
+      mobileNumber:          body.contactMobile || body.mobileNumber,
+      contactPerson:         body.contactPerson,
+      email:                 body.email,
+      alternativeNumber:     body.alternativeNumber,
+      contactPersonRelation: body.contactPersonRelation,
+    };
+
+    // ── Partner Preference ───────────────────────────────────────
+    const partnerPreference = {
+      preferredAgeFrom:    body.preferredAgeFrom,
+      preferredAgeTo:      body.preferredAgeTo,
+      heightFrom:          body.heightFrom,
+      heightTo:            body.heightTo,
+      incomePreference:    body.incomePreference,
+      maritalStatus:       body.partnerMaritalStatus,
+      educationPreference: body.educationPreference,
+      locationPreference:  body.locationPreference,
+      additionalPreference:body.additionalPreference,
+    };
+
+
+    // ── Assemble Document ────────────────────────────────────────
+    const biodataData = {
+      userId: req.user?._id,
+
+      // profile
+      profile:                body.profile,
+      relationWithCandidate:  body.relationWithCandidate,
+      creatorName:            body.creatorName,
+
+      // basic
+      shravakId:   body.shravakId,
+      jainShravak: body.jainShravak,
+      fullName:    body.fullName,
+      gender:      body.gender,
+      dob:         processedDob,
+      timeOfBirth: body.timeOfBirth,
+      birthPlace:  body.birthPlace,
+      mobileNumber:body.mobileNumber,
+
+      // personal
+      height:                   body.height,
+      complexion:               body.complexion,
+      dietPreference:           body.dietPreference,
+      hobbies:                  body.hobbies,
+      physicalCondition:        body.physicalCondition,
+      physicalConditionDescribe:body.physicalConditionDescribe,
+
+      // nested
+      marriageInfo,
+      education,
+      workInfo,
+      familyInfo,
+      communityInfo,
+      addressInfo,
+      contactInfo,
+      uploadedPhotos,
+      healthReport,
+      partnerPreference,
+
+      specialInformation: body.specialInformation,
+      paymentScreenshot:  toCDN(files, 'paymentScreenshot'),
+      isVisible:          false,
+    };
+
+    const biodata = new VyavahikBiodata(biodataData);
+    await biodata.save();
+
+   res.status(201).json({
+      success: true,
+      message: 'Biodata created successfully!',
+      data: biodata,
+    });
+
+  } catch (error) {
+    console.error('❌ Biodata Creation Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating biodata',
+      error: error.message,
+    });
+  }
+};
+//─── GET ALL BIODATAS ─────────────────────────────────────────────────────────
+const getAllBiodata = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      gender,
+      city,
+      state,
+      mulJain,
+      panth,
+      caste,
+      maritalStatus,
+      ageFrom,
+      ageTo,
+      heightFrom,
+      heightTo,
+    } = req.query;
+ 
+    const filter = { isVisible: true };
+ 
+    // ── Filters ──────────────────────────────────────────────────
+    if (gender)        filter.gender = gender;
+    if (city)          filter["addressInfo.city"]         = new RegExp(city, "i");
+    if (state)         filter["addressInfo.state"]        = new RegExp(state, "i");
+    if (mulJain)       filter["communityInfo.mulJain"]    = new RegExp(mulJain, "i");
+    if (panth)         filter["communityInfo.panth"]      = new RegExp(panth, "i");
+    if (caste)         filter["communityInfo.caste"]      = new RegExp(caste, "i");
+    if (maritalStatus) filter["marriageInfo.marriageType"]= maritalStatus;
+ 
+    // age filter via dob range
+    if (ageFrom || ageTo) {
+      filter.dob = {};
+      if (ageTo)   filter.dob.$gte = new Date(new Date().setFullYear(new Date().getFullYear() - ageTo));
+      if (ageFrom) filter.dob.$lte = new Date(new Date().setFullYear(new Date().getFullYear() - ageFrom));
+    }
+ 
+    // height filter
+    if (heightFrom || heightTo) {
+      filter.height = {};
+      if (heightFrom) filter.height.$gte = Number(heightFrom);
+      if (heightTo)   filter.height.$lte = Number(heightTo);
+    }
+ 
+    const skip = (Number(page) - 1) * Number(limit);
+ 
+    const [biodatas, total] = await Promise.all([
+      VyavahikBiodata.find(filter)
+        .select("-interestsSent -interestsReceived -contactInfo") // hide sensitive fields in listing
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      VyavahikBiodata.countDocuments(filter),
+    ]);
+ 
+    res.status(200).json({
+      success: true,
+      message: "Biodatas fetched successfully",
+      data: biodatas,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)),
+      },
+    });
+  } catch (error) {
+    console.error("❌ Get All Biodata Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching biodatas",
+      error: error.message,
+    });
+  }
+};
+ 
+// ─── GET SINGLE BIODATA BY ID ─────────────────────────────────────────────────
+const getBiodataById = async (req, res) => {
+  try {
+    const { id } = req.params;
+ 
+    const biodata = await VyavahikBiodata.findOne({ _id: id, isVisible: true })
+      .populate("likedProfiles", "fullName gender dob uploadedPhotos")
+      .populate("interestsSent.profileId", "fullName gender dob uploadedPhotos")
+      .populate("interestsReceived.profileId", "fullName gender dob uploadedPhotos")
+      .lean();
+ 
+    if (!biodata) {
+      return res.status(404).json({
+        success: false,
+        message: "Biodata not found",
+      });
+    }
+ 
+    res.status(200).json({
+      success: true,
+      message: "Biodata fetched successfully",
+      data: biodata,
+    });
+  } catch (error) {
+    console.error("❌ Get Biodata By ID Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching biodata",
+      error: error.message,
+    });
+  }
+};
+ 
+// ─── GET MY OWN BIODATA (logged in user) ─────────────────────────────────────
+const getMyBiodata = async (req, res) => {
+  try {
+    const biodata = await VyavahikBiodata.findOne({ userId: req.user._id })
+      .populate("likedProfiles", "fullName gender dob uploadedPhotos")
+      .populate("interestsSent.profileId", "fullName gender dob uploadedPhotos")
+      .populate("interestsReceived.profileId", "fullName gender dob uploadedPhotos")
+      .lean();
+ 
+    if (!biodata) {
+      return res.status(404).json({
+        success: false,
+        message: "Biodata not found for this user",
+      });
+    }
+ 
+    res.status(200).json({
+      success: true,
+      message: "My biodata fetched successfully",
+      data: biodata,
+    });
+  } catch (error) {
+    console.error("❌ Get My Biodata Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching your biodata",
+      error: error.message,
+    });
+  }
+};
+// ─── LIKE A PROFILE ───────────────────────────────────────────────────────────
+// POST /biodata/like/:targetId
+const likeProfile = async (req, res) => {
+  try {
+    const { targetId } = req.params;
+ 
+    // apna biodata dhundo
+    const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id });
+    if (!myBiodata) {
+      return res.status(404).json({
+        success: false,
+        message: "Your biodata not found",
+      });
+    }
+ 
+    // target exist karta he?
+    const targetExists = await VyavahikBiodata.exists({ _id: targetId, isVisible: true });
+    if (!targetExists) {
+      return res.status(404).json({
+        success: false,
+        message: "Target profile not found",
+      });
+    }
+ 
+    // apne aap ko like nahi kar sakte
+    if (myBiodata._id.toString() === targetId) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot like your own profile",
+      });
+    }
+ 
+    // pehle se liked he?
+    const alreadyLiked = myBiodata.likedProfiles.some(
+      (id) => id.toString() === targetId
+    );
+    if (alreadyLiked) {
+      return res.status(400).json({
+        success: false,
+        message: "Profile already liked",
+      });
+    }
+ 
+    // push karo
+    myBiodata.likedProfiles.push(targetId);
+    await myBiodata.save();
+ 
+    res.status(200).json({
+      success: true,
+      message: "Profile liked successfully",
+      totalLikes: myBiodata.likedProfiles.length,
+    });
+  } catch (error) {
+    console.error("❌ Like Profile Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error liking profile",
+      error: error.message,
+    });
+  }
+};
+ 
+// ─── UNLIKE A PROFILE ─────────────────────────────────────────────────────────
+// DELETE /biodata/like/:targetId
+const unlikeProfile = async (req, res) => {
+  try {
+    const { targetId } = req.params;
+ 
+    const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id });
+    if (!myBiodata) {
+      return res.status(404).json({
+        success: false,
+        message: "Your biodata not found",
+      });
+    }
+ 
+    // liked he?
+    const likedIndex = myBiodata.likedProfiles.findIndex(
+      (id) => id.toString() === targetId
+    );
+    if (likedIndex === -1) {
+      return res.status(400).json({
+        success: false,
+        message: "Profile not in your liked list",
+      });
+    }
+ 
+    // pull karo
+    myBiodata.likedProfiles.splice(likedIndex, 1);
+    await myBiodata.save();
+ 
+    res.status(200).json({
+      success: true,
+      message: "Profile unliked successfully",
+      totalLikes: myBiodata.likedProfiles.length,
+    });
+  } catch (error) {
+    console.error("❌ Unlike Profile Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error unliking profile",
+      error: error.message,
+    });
+  }
+};
+ 
+// ─── GET MY LIKED PROFILES ────────────────────────────────────────────────────
+// GET /biodata/liked
+const getLikedProfiles = async (req, res) => {
+  try {
+    const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
+      .populate(
+        "likedProfiles",
+        "fullName gender dob height complexion addressInfo uploadedPhotos communityInfo marriageInfo"
+      )
+      .lean();
+ 
+    if (!myBiodata) {
+      return res.status(404).json({
+        success: false,
+        message: "Your biodata not found",
+      });
+    }
+ 
+    res.status(200).json({
+      success: true,
+      message: "Liked profiles fetched successfully",
+      total: myBiodata.likedProfiles.length,
+      data: myBiodata.likedProfiles,
+    });
+  } catch (error) {
+    console.error("❌ Get Liked Profiles Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching liked profiles",
+      error: error.message,
+    });
+  }
+};
+ // ─── SEND INTEREST ────────────────────────────────────────────────────────────
+// POST /biodata/interest/:targetId
+const sendInterest = async (req, res) => {
+  try {
+    const { targetId } = req.params;
+    const { message } = req.body;
+ 
+    // apna biodata
+    const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id });
+    if (!myBiodata) {
+      return res.status(404).json({ success: false, message: "Your biodata not found" });
+    }
+ 
+    // target exist?
+    const targetBiodata = await VyavahikBiodata.findOne({ _id: targetId, isVisible: true });
+    if (!targetBiodata) {
+      return res.status(404).json({ success: false, message: "Target profile not found" });
+    }
+ 
+    // apne aap ko interest nahi
+    if (myBiodata._id.toString() === targetId) {
+      return res.status(400).json({ success: false, message: "Cannot send interest to yourself" });
+    }
+ 
+    // pehle se interest bheja?
+    const alreadySent = myBiodata.interestsSent.some(
+      (i) => i.profileId.toString() === targetId
+    );
+    if (alreadySent) {
+      return res.status(400).json({ success: false, message: "Interest already sent to this profile" });
+    }
+ 
+    // sender ke interestsSent mein add
+    myBiodata.interestsSent.push({
+      profileId: targetId,
+      status: "pending",
+      message: message || "",
+      sentAt: new Date(),
+    });
+ 
+    // receiver ke interestsReceived mein add
+    targetBiodata.interestsReceived.push({
+      profileId: myBiodata._id,
+      status: "pending",
+      message: message || "",
+      receivedAt: new Date(),
+    });
+ 
+    await Promise.all([myBiodata.save(), targetBiodata.save()]);
+ 
+    res.status(200).json({
+      success: true,
+      message: "Interest sent successfully",
+    });
+  } catch (error) {
+    console.error("❌ Send Interest Error:", error);
+    res.status(500).json({ success: false, message: "Error sending interest", error: error.message });
+  }
+};
+ 
+// ─── RESPOND TO INTEREST (accept / reject) ───────────────────────────────────
+// PATCH /biodata/interest/:senderBiodataId/respond
+// body: { status: "accepted" | "rejected" }
+const respondToInterest = async (req, res) => {
+  try {
+    const { senderBiodataId } = req.params;
+    const { status } = req.body;
+ 
+    if (!["accepted", "rejected"].includes(status)) {
+      return res.status(400).json({ success: false, message: "Status must be 'accepted' or 'rejected'" });
+    }
+ 
+    // apna biodata (receiver)
+    const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id });
+    if (!myBiodata) {
+      return res.status(404).json({ success: false, message: "Your biodata not found" });
+    }
+ 
+    // apne received mein entry dhundo
+    const receivedEntry = myBiodata.interestsReceived.find(
+      (i) => i.profileId.toString() === senderBiodataId
+    );
+    if (!receivedEntry) {
+      return res.status(404).json({ success: false, message: "Interest request not found" });
+    }
+ 
+    if (receivedEntry.status !== "pending") {
+      return res.status(400).json({ success: false, message: `Interest already ${receivedEntry.status}` });
+    }
+ 
+    // apna received update
+    receivedEntry.status = status;
+ 
+    // sender ke interestsSent mein bhi sync
+    const senderBiodata = await VyavahikBiodata.findById(senderBiodataId);
+    if (senderBiodata) {
+      const sentEntry = senderBiodata.interestsSent.find(
+        (i) => i.profileId.toString() === myBiodata._id.toString()
+      );
+      if (sentEntry) sentEntry.status = status;
+      await senderBiodata.save();
+    }
+ 
+    await myBiodata.save();
+ 
+    res.status(200).json({
+      success: true,
+      message: `Interest ${status} successfully`,
+    });
+  } catch (error) {
+    console.error("❌ Respond Interest Error:", error);
+    res.status(500).json({ success: false, message: "Error responding to interest", error: error.message });
+  }
+};
+ 
+// ─── GET MY SENT INTERESTS ────────────────────────────────────────────────────
+// GET /biodata/interests/sent
+const getSentInterests = async (req, res) => {
+  try {
+    const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
+      .populate("interestsSent.profileId", "fullName gender dob uploadedPhotos addressInfo")
+      .lean();
+ 
+    if (!myBiodata) {
+      return res.status(404).json({ success: false, message: "Your biodata not found" });
+    }
+ 
+    res.status(200).json({
+      success: true,
+      message: "Sent interests fetched successfully",
+      total: myBiodata.interestsSent.length,
+      data: myBiodata.interestsSent,
+    });
+  } catch (error) {
+    console.error("❌ Get Sent Interests Error:", error);
+    res.status(500).json({ success: false, message: "Error fetching sent interests", error: error.message });
+  }
+};
+ 
+// ─── GET MY RECEIVED INTERESTS ────────────────────────────────────────────────
+// GET /biodata/interests/received
+const getReceivedInterests = async (req, res) => {
+  try {
+    const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
+      .populate("interestsReceived.profileId", "fullName gender dob uploadedPhotos addressInfo")
+      .lean();
+ 
+    if (!myBiodata) {
+      return res.status(404).json({ success: false, message: "Your biodata not found" });
+    }
+ 
+    res.status(200).json({
+      success: true,
+      message: "Received interests fetched successfully",
+      total: myBiodata.interestsReceived.length,
+      data: myBiodata.interestsReceived,
+    });
+  } catch (error) {
+    console.error("❌ Get Received Interests Error:", error);
+    res.status(500).json({ success: false, message: "Error fetching received interests", error: error.message });
+  }
+};
 module.exports = {
   createBiodata,
   updateBiodata,
@@ -560,5 +999,16 @@ module.exports = {
   getAllBiodatas,
   checkUserBiodata,
   deleteBiodata,
-  updateBiodataImages
+  updateBiodataImages,
+  getMyBiodata,
+  getAllBiodata,
+  getBiodataById,
+  createBiodatas,
+  getLikedProfiles,
+  unlikeProfile,
+  likeProfile,
+  sendInterest,
+  respondToInterest,
+  getSentInterests,
+  getReceivedInterests,
 };

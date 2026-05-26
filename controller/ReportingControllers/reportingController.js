@@ -3,11 +3,10 @@ const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghMode
 const { successResponse, errorResponse } = require('../../utils/apiResponse');
 const { convertS3UrlToCDN } = require("../../utils/s3Utils");
 
-// Create a new report
 exports.createReport = async (req, res) => {
   try {
     const data = JSON.parse(req.body.data);
-
+    console.log("Received report data:", data);
     const {
       sanghId,
       sanghName,
@@ -43,25 +42,18 @@ exports.createReport = async (req, res) => {
     } = data;
 
     const user = req.user;
-    const presidentRole = user.sanghRoles?.find((r) => r.role === "president");
-    if (!presidentRole)
-      return errorResponse(res, "Only presidents can submit reports", 403);
 
-    const submittingSanghId = presidentRole.sanghId;
-    const submittingSangh = await HierarchicalSangh.findById(submittingSanghId);
-    if (!submittingSangh)
-      return errorResponse(res, "Submitting Sangh not found", 404);
+    const submittingSangh = await HierarchicalSangh.findById(sanghId);
+    if (!submittingSangh) return errorResponse(res, "Sangh not found", 404);
 
-    const recipientSanghId = submittingSangh.parentSangh || submittingSanghId;
+    const recipientSanghId = submittingSangh.parentSangh || sanghId;
 
-    // ── Helper: S3 → CDN URL ──
     const getUrl = (fieldName) => {
       const file = req.files?.[fieldName]?.[0];
       if (!file?.location) return null;
       return convertS3UrlToCDN(file.location);
     };
 
-    // ── Meetings ──
     const meetings = (meetingsData || []).map((m, mi) => ({
       meetingType: m.meetingType,
       agmSubType: m.agmSubType,
@@ -74,7 +66,6 @@ exports.createReport = async (req, res) => {
       ].filter(Boolean),
     }));
 
-    // ── Projects ──
     const projects = (projectsData || []).map((p, pi) => ({
       eventName: p.eventName,
       description: p.description,
@@ -86,12 +77,12 @@ exports.createReport = async (req, res) => {
       ].filter(Boolean),
     }));
 
-    // ── Visits ──
     const visits = (visitsData || []).map((v, vi) => ({
       visitorName: v.visitorName,
       visitorPostName: v.visitorPostName,
       visitorLevel: v.visitorLevel,
       sanghName: v.sanghName,
+      sanghId: v.sanghId,
       summary: v.summary,
       pdf: getUrl(`visit_${vi}_pdf`),
       images: [
@@ -101,7 +92,8 @@ exports.createReport = async (req, res) => {
     }));
 
     const newReport = new Reporting({
-      submittingSanghId,
+      sanghId,
+      submittingSanghId: sanghId,
       recipientSanghId,
       submittedById: user._id,
       sanghName,

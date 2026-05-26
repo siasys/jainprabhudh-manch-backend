@@ -24,9 +24,10 @@ const visitSchema = new mongoose.Schema({
   visitorPostName: { type: String },
   visitorLevel: { type: String },
   sanghName: { type: String },
+  sanghId: { type: mongoose.Schema.Types.ObjectId, ref: "HierarchicalSangh" }, // ← ADD
   summary: { type: String },
-  pdf: { type: String }, // ← String URL, not object
-  images: [{ type: String }], // ← String URLs
+  pdf: { type: String },
+  images: [{ type: String }],
 });
 // ── Main Schema ──────────────────────────────────────────────
 
@@ -35,9 +36,9 @@ const reportingSchema = new mongoose.Schema(
     // Sangh Info
     sanghId: { type: mongoose.Schema.Types.ObjectId, ref: "HierarchicalSangh" },
     sanghName: { type: String },
-    presidentName: { type: String, required: true },
-    secretaryName: { type: String, required: true },
-    treasurerName: { type: String, required: true },
+    presidentName: { type: String},
+    secretaryName: { type: String},
+    treasurerName: { type: String },
 
     // Counts
     membershipCount: { type: String },
@@ -54,8 +55,8 @@ const reportingSchema = new mongoose.Schema(
     employmentCount: { type: String },
 
     // Report Period
-    reportMonth: { type: Number, required: true },
-    reportYear: { type: Number, required: true },
+    reportMonth: { type: Number },
+    reportYear: { type: Number },
 
     // Meetings
     meetings: [meetingSchema],

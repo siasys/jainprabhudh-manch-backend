@@ -1,10 +1,10 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const vyavahikBiodataSchema = new mongoose.Schema(
-   {
+  {
     userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
     jainShravak: {
       type: String,
@@ -52,7 +52,7 @@ const vyavahikBiodataSchema = new mongoose.Schema(
       type: String,
     },
     physicalCondition: {
-      type: String,            // "Normal" or "Special Abled"
+      type: String, // "Normal" or "Special Abled"
       enum: ["Normal", "Special Abled"],
     },
 
@@ -75,10 +75,10 @@ const vyavahikBiodataSchema = new mongoose.Schema(
       type: String,
     },
     annualIncome: {
-        type: String,
+      type: String,
     },
     workLocation: {
-        type: String,
+      type: String,
     },
     mulJain: {
       type: String,
@@ -95,7 +95,7 @@ const vyavahikBiodataSchema = new mongoose.Schema(
     gotra: {
       type: String,
     },
-    subGotra:{
+    subGotra: {
       type: String,
     },
     mamaGotra: {
@@ -107,80 +107,80 @@ const vyavahikBiodataSchema = new mongoose.Schema(
     motherTongue: {
       type: String,
     },
-       familyInfo: {
-        fatherName: {
-          type: String,
-        },
-        fatherOccupation: {
-          type: String,
-        },
-        motherName: {
-          type: String,
-        },
-        motherOccupation: {
-          type: String,
-        },
-        brothers: [
-          {
-            name: { type: String },                 // brother ka naam
-            married: { type: String },             // yes/no
-            wifeName: { type: String },             // agar married hai to wife name
-            occupation: { type: String },           // unmarried brother ke liye
-          }
-        ],
-        sisters: [
-          {
-            name: { type: String },                 // sister ka naam
-            married: { type: String },             // yes/no
-            husbandName: { type: String },          // married hai to husband ka naam
-            location: { type: String },             // married sister ke liye husband location
-            occupation: { type: String },           // unmarried sister ke liye
-          }
-        ],
-        nativePlace: {
-          type: String,
-        },
-        familyType: {
-          type: String,
-        },
-        familyIncome: {
-          type: String,
-        }
+    familyInfo: {
+      fatherName: {
+        type: String,
       },
-    addressInfo:{
-        country: {
+      fatherOccupation: {
+        type: String,
+      },
+      motherName: {
+        type: String,
+      },
+      motherOccupation: {
+        type: String,
+      },
+      brothers: [
+        {
+          name: { type: String }, // brother ka naam
+          married: { type: String }, // yes/no
+          wifeName: { type: String }, // agar married hai to wife name
+          occupation: { type: String }, // unmarried brother ke liye
+        },
+      ],
+      sisters: [
+        {
+          name: { type: String }, // sister ka naam
+          married: { type: String }, // yes/no
+          husbandName: { type: String }, // married hai to husband ka naam
+          location: { type: String }, // married sister ke liye husband location
+          occupation: { type: String }, // unmarried sister ke liye
+        },
+      ],
+      nativePlace: {
+        type: String,
+      },
+      familyType: {
+        type: String,
+      },
+      familyIncome: {
+        type: String,
+      },
+    },
+    addressInfo: {
+      country: {
         type: String,
         default: "India",
-     },
-        state: {
+      },
+      state: {
         type: String,
-     },
-        district: {
+      },
+      district: {
         type: String,
-     },
+      },
       city: {
         type: String,
-     },
+      },
       address: {
         type: String,
-     },
+      },
     },
-    contactInfo:{
-        number: {
+    contactInfo: {
+      number: {
         type: String,
-     },
-     contactPerson: {
+      },
+      contactPerson: {
         type: String,
-     },
-    alternativeNumber: {
-      type: String,
-    },
-    contactNameRelation: {
-    type: String,
-    },
-    email: {
+      },
+      alternativeNumber: {
         type: String,
-     },
+      },
+      contactNameRelation: {
+        type: String,
+      },
+      email: {
+        type: String,
+      },
     },
     marriageInfo: {
       marriageType: {
@@ -228,19 +228,19 @@ const vyavahikBiodataSchema = new mongoose.Schema(
       type: String,
     },
     healthReport: {
-    wearsSpectacles: { type: String, enum: ["yes", "no"], default: "no" },
-    diabetes: { type: String, enum: ["yes", "no"], default: "no" },
-    bloodPressure: { type: String, enum: ["yes", "no"], default: "no" },
-    thyroid: { type: String, enum: ["yes", "no"], default: "no" },
-    asthma: { type: String, enum: ["yes", "no"], default: "no" },
-    migraine: { type: String, enum: ["yes", "no"], default: "no" },
-    heartIssue: { type: String, enum: ["yes", "no"], default: "no" },
-    hearingIssue: { type: String, enum: ["yes", "no"], default: "no" },
-    skinIssue: { type: String, enum: ["yes", "no"], default: "no" },
-    anyAddiction: { type: String, enum: ["yes", "no"], default: "no" },
-    previousSurgery: { type: String, enum: ["yes", "no"], default: "no" },
-    tongueIssue: { type: String, enum: ["yes", "no"], default: "no" },
-    menstrualIssue: { type: String, enum: ["yes", "no"], default: "no" }     // "yes"/"no"
+      wearsSpectacles: { type: String, enum: ["yes", "no"], default: "no" },
+      diabetes: { type: String, enum: ["yes", "no"], default: "no" },
+      bloodPressure: { type: String, enum: ["yes", "no"], default: "no" },
+      thyroid: { type: String, enum: ["yes", "no"], default: "no" },
+      asthma: { type: String, enum: ["yes", "no"], default: "no" },
+      migraine: { type: String, enum: ["yes", "no"], default: "no" },
+      heartIssue: { type: String, enum: ["yes", "no"], default: "no" },
+      hearingIssue: { type: String, enum: ["yes", "no"], default: "no" },
+      skinIssue: { type: String, enum: ["yes", "no"], default: "no" },
+      anyAddiction: { type: String, enum: ["yes", "no"], default: "no" },
+      previousSurgery: { type: String, enum: ["yes", "no"], default: "no" },
+      tongueIssue: { type: String, enum: ["yes", "no"], default: "no" },
+      menstrualIssue: { type: String, enum: ["yes", "no"], default: "no" }, // "yes"/"no"
     },
     paymentScreenshot: {
       type: String,
@@ -262,16 +262,17 @@ const vyavahikBiodataSchema = new mongoose.Schema(
     // },
     isVisible: {
       type: Boolean,
-      default: false
+      default: false,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-module.exports = mongoose.model('VyavahikBiodata', vyavahikBiodataSchema);
+module.exports = mongoose.model("VyavahikBiodata", vyavahikBiodataSchema);
 
 // const mongoose = require("mongoose");
 
+// // ─── Vyavahik Biodata Schema ──────────────────────────────────────────────────
 // const vyavahikBiodataSchema = new mongoose.Schema(
 //   {
 //     userId: {
@@ -423,8 +424,58 @@ module.exports = mongoose.model('VyavahikBiodata', vyavahikBiodataSchema);
 //     },
 
 //     isVisible: { type: Boolean, default: false },
+
+//     // ─── Liked Profiles ──────────────────────────────────────────
+//     // profiles jisko is user ne like kiya
+//     likedProfiles: [
+//       {
+//         type: mongoose.Schema.Types.ObjectId,
+//         ref: "VyavahikBiodata",
+//       },
+//     ],
+
+//     // ─── Interests Sent (maine kisiko interest bheja) ─────────────
+//     interestsSent: [
+//       {
+//         profileId: {
+//           type: mongoose.Schema.Types.ObjectId,
+//           ref: "VyavahikBiodata",
+//           required: true,
+//         },
+//         status: {
+//           type: String,
+//           enum: ["pending", "accepted", "rejected"],
+//           default: "pending",
+//         },
+//         message: { type: String }, // optional note
+//         sentAt: { type: Date, default: Date.now },
+//       },
+//     ],
+
+//     // ─── Interests Received (koi mujhe interest bheja) ────────────
+//     interestsReceived: [
+//       {
+//         profileId: {
+//           type: mongoose.Schema.Types.ObjectId,
+//           ref: "VyavahikBiodata",
+//           required: true,
+//         },
+//         status: {
+//           type: String,
+//           enum: ["pending", "accepted", "rejected"],
+//           default: "pending",
+//         },
+//         message: { type: String }, // optional note from sender
+//         receivedAt: { type: Date, default: Date.now },
+//       },
+//     ],
 //   },
 //   { timestamps: true },
 // );
 
-// module.exports = mongoose.model("VyavahikBiodata", vyavahikBiodataSchema);
+// const VyavahikBiodata = mongoose.model(
+//   "VyavahikBiodata",
+//   vyavahikBiodataSchema,
+// );
+
+// module.exports = { VyavahikBiodata };
