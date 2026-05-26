@@ -39,7 +39,7 @@ router.post("/create", upload.biodataImageUpload, createBiodatas);
 router.post('/create-payment', createBiodataPaymentOrder);
 router.post('/verify-payment', verifyBiodataPayment);
 router.post('/complete-registration/:orderId', upload.biodataImageUpload, completeBiodataRegistration);
-router.get("/", getAllBiodata);
+router.get("/getall", getAllBiodata);
 router.get("/me", getMyBiodata);
 router.get("/:id", getBiodataById);
 router.post("/like/:targetId", likeProfile);
@@ -56,7 +56,7 @@ router.patch(
 router.get("/interests/sent", getSentInterests);
 router.get("/interests/received", getReceivedInterests);
 // Get a single biodata by ID
-router.get('/:id', getBiodata);
+router.get('/get/:id', getBiodata);
 router.get('/user/:userId', getBiodataByUserId);
 router.delete('/delete/:id', deleteBiodata);
 router.delete("/like/:targetId", unlikeProfile);
