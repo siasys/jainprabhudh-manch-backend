@@ -366,8 +366,8 @@ const createBiodatas = async (req, res) => {
     const { body, files } = req;
 
     // ── File uploads → CDN URLs ──────────────────────────────────
-    const educationCertificateUrl = toCDN(files, 'educationCertificate');
-    const divorceCertificateUrl   = toCDN(files, 'divorceCertificate');
+    const educationCertificateUrl = toCDN(files, "educationCertificate");
+    const divorceCertificateUrl = toCDN(files, "divorceCertificate");
 
     // uploadedPhotos: multer field name = 'uploadedPhotos', max 10
     const uploadedPhotos = (files?.uploadedPhotos || [])
@@ -389,112 +389,111 @@ const createBiodatas = async (req, res) => {
         age = today.getFullYear() - d.getFullYear();
         const m = today.getMonth() - d.getMonth();
         if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
-      }
-      else console.warn('⚠️ Invalid DOB:', body.dob);
+      } else console.warn("⚠️ Invalid DOB:", body.dob);
     }
 
     // ── Marriage Info ────────────────────────────────────────────
     const marriageInfo = { marriageType: body.marriageType };
 
-    if (body.marriageType === 'Divorced') {
+    if (body.marriageType === "Divorced") {
       marriageInfo.divorcedDetails = {
-        isDivorceComplete:  body.isDivorceComplete,
-        reasonForDivorce:   body.reasonForDivorce,
+        isDivorceComplete: body.isDivorceComplete,
+        reasonForDivorce: body.reasonForDivorce,
         divorceCertificate: divorceCertificateUrl,
-        spouseName:         body.spouseName,
-        spouseFatherName:   body.spouseFatherName,
-        spouseMotherName:   body.spouseMotherName,
-        numberOfChildren:   body.numberOfChildren,
+        spouseName: body.spouseName,
+        spouseFatherName: body.spouseFatherName,
+        spouseMotherName: body.spouseMotherName,
+        numberOfChildren: body.numberOfChildren,
       };
     }
 
-    if (body.marriageType === 'Widowed/widower') {
+    if (body.marriageType === "Widowed/widower") {
       marriageInfo.widowedDetails = {
-        spouseName:        body.spouseName,
-        spouseFatherName:  body.spouseFatherName,
-        spouseMotherName:  body.spouseMotherName,
+        spouseName: body.spouseName,
+        spouseFatherName: body.spouseFatherName,
+        spouseMotherName: body.spouseMotherName,
         reasonSpouseDeath: body.reasonSpouseDeath,
-        numberOfChildren:  body.numberOfChildren,
+        numberOfChildren: body.numberOfChildren,
       };
     }
 
     // ── Education ────────────────────────────────────────────────
     const education = {
-      highestEducation:     body.highestEducation,
-      collegeUniversity:    body.collegeUniversity,
-      degreeName:           body.degreeName,
-      yearOfPassing:        body.yearOfPassing,
+      highestEducation: body.highestEducation,
+      collegeUniversity: body.collegeUniversity,
+      degreeName: body.degreeName,
+      yearOfPassing: body.yearOfPassing,
       educationCertificate: educationCertificateUrl,
     };
 
     // ── Work Info ────────────────────────────────────────────────
     const workInfo = {
-      workStatus:      body.workStatus,
-      companyName:     body.companyName,
-      businessName:    body.businessName,
+      workStatus: body.workStatus,
+      companyName: body.companyName,
+      businessName: body.businessName,
       workingIndustry: body.workingIndustry,
-      workLocation:    body.workLocation,
-      annualIncome:    body.annualIncome,
+      workLocation: body.workLocation,
+      annualIncome: body.annualIncome,
     };
 
     // ── Family Info ──────────────────────────────────────────────
     const familyInfo = {
-      fatherName:       body.fatherName,
+      fatherName: body.fatherName,
       fatherOccupation: body.fatherOccupation,
-      motherName:       body.motherName,
+      motherName: body.motherName,
       motherOccupation: body.motherOccupation,
-      nativePlace:      body.nativePlace,
-      familyType:       body.familyType,
-      familyIncome:     body.familyIncome,
-      noOfBrothers:     body.noOfBrothers,
-      noOfSisters:      body.noOfSisters,
+      nativePlace: body.nativePlace,
+      familyType: body.familyType,
+      familyIncome: body.familyIncome,
+      noOfBrothers: body.noOfBrothers,
+      noOfSisters: body.noOfSisters,
     };
 
     // ── Community / Religion ─────────────────────────────────────
     const communityInfo = {
-      mulJain:      body.mulJain,
-      panth:        body.panth,
-      gotra:        body.gotra,
-      subGotra:     body.subGotra,
-      caste:        body.caste,
-      subCaste:     body.subCaste,
-      mamaGotra:    body.mamaGotra,
-      manglik:      body.manglik,
+      mulJain: body.mulJain,
+      panth: body.panth,
+      gotra: body.gotra,
+      subGotra: body.subGotra,
+      caste: body.caste,
+      subCaste: body.subCaste,
+      mamaGotra: body.mamaGotra,
+      manglik: body.manglik,
       motherTongue: body.motherTongue,
     };
 
     // ── Address ──────────────────────────────────────────────────
     const addressInfo = {
-      country:     body.country || 'India',
-      state:       body.state,
-      district:    body.district,
-      city:        body.city,
+      country: body.country || "India",
+      state: body.state,
+      district: body.district,
+      city: body.city,
       fullAddress: body.fullAddress,
     };
 
     // ── Contact ──────────────────────────────────────────────────
     const contactInfo = {
-      mobileNumber:          body.contactMobile || body.mobileNumber,
-      contactPerson:         body.contactPerson,
-      email:                 body.email,
-      alternativeNumber:     body.alternativeNumber,
+      mobileNumber: body.contactMobile || body.mobileNumber,
+      contactPerson: body.contactPerson,
+      email: body.email,
+      alternativeNumber: body.alternativeNumber,
       contactPersonRelation: body.contactPersonRelation,
     };
 
     // ── Partner Preference ───────────────────────────────────────
     const partnerPreference = {
-      preferredAgeFrom:     body.preferredAgeFrom,
-      preferredAgeTo:       body.preferredAgeTo,
-      heightFrom:           body.heightFrom,
-      heightTo:             body.heightTo,
-      incomePreference:     body.incomePreference,
-      maritalStatus:        body.partnerMaritalStatus,
-      educationPreference:  body.educationPreference,
-      locationPreference:   body.locationPreference,
+      preferredAgeFrom: body.preferredAgeFrom,
+      preferredAgeTo: body.preferredAgeTo,
+      heightFrom: body.heightFrom,
+      heightTo: body.heightTo,
+      incomePreference: body.incomePreference,
+      maritalStatus: body.partnerMaritalStatus,
+      educationPreference: body.educationPreference,
+      locationPreference: body.locationPreference,
       additionalPreference: body.additionalPreference,
     };
 
-    // ── Assemble Document ────────────────────────────────────────
+    // ── Assemble Document (schema ke exact fields) ────────────────
     const biodataData = {
       userId: req.user?._id,
 
@@ -503,16 +502,15 @@ const createBiodatas = async (req, res) => {
       relationWithCandidate: body.relationWithCandidate,
       creatorName: body.creatorName,
 
-      // basic
+      // basic info — schema mein 'name' hai, 'fullName' nahi
       shravakId: body.shravakId,
       jainShravak: body.jainShravak,
       name: body.name,
       gender: body.gender,
       dob: processedDob,
-      age: age, // ← calculated from dob
+      age: age, // calculated from dob
       timeOfBirth: body.timeOfBirth,
       birthPlace: body.birthPlace,
-      mobileNumber: body.mobileNumber,
 
       // personal
       height: body.height,
@@ -522,7 +520,7 @@ const createBiodatas = async (req, res) => {
       physicalCondition: body.physicalCondition,
       physicalConditionDescribe: body.physicalConditionDescribe,
 
-      // nested
+      // nested — schema ke according exact match
       marriageInfo,
       education,
       workInfo,
@@ -531,11 +529,8 @@ const createBiodatas = async (req, res) => {
       addressInfo,
       contactInfo,
       uploadedPhotos,
-      healthReport,
       partnerPreference,
 
-      specialInformation: body.specialInformation,
-      paymentScreenshot: toCDN(files, "paymentScreenshot"),
       isVisible: false,
     };
 
@@ -544,15 +539,14 @@ const createBiodatas = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Biodata created successfully!',
+      message: "Biodata created successfully!",
       data: biodata,
     });
-
   } catch (error) {
-    console.error('❌ Biodata Creation Error:', error);
+    console.error("❌ Biodata Creation Error:", error);
     res.status(500).json({
       success: false,
-      message: 'Error creating biodata',
+      message: "Error creating biodata",
       error: error.message,
     });
   }

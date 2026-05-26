@@ -337,23 +337,23 @@ const vyavahikBiodataSchema = new mongoose.Schema(
       },
     },
 
-    // ─── Education ───────────────────────────────────────────────
+    // ─── Education ───────────────────
     education: {
       highestEducation: { type: String },
       collegeUniversity: { type: String },
       degreeName: { type: String },
       yearOfPassing: { type: String },
-      educationCertificate: { type: String }, // file URL
+      educationCertificate: { type: String },
     },
 
-    // ─── Work ────────────────────────────────────────────────────
+    // ─── Work ─────────────────────────
     workInfo: {
       workStatus: {
         type: String,
         enum: ["Employed", "SelfEmployed", "Unemployed"],
       },
-      companyName: { type: String }, // for Employed
-      businessName: { type: String }, // for SelfEmployed
+      companyName: { type: String },
+      businessName: { type: String },
       workingIndustry: { type: String },
       workLocation: { type: String },
       annualIncome: { type: String },
