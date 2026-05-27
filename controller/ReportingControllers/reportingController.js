@@ -161,48 +161,32 @@ exports.getAllReports = async (req, res) => {
   try {
     const { status, month, year } = req.query;
     const userId = req.user._id;
-    const isSuperAdmin = req.user.role === 'superadmin';
+    const isSuperAdmin = req.user.role === "superadmin";
 
-    // Build query based on filters
     const query = {};
 
-    // Filter by status if provided
-    if (status) {
-      query.status = status;
-    }
+    if (status) query.status = status;
 
-    // Filter by reporting period if provided
     if (month) {
       const parsedMonth = parseInt(month);
-      if (!isNaN(parsedMonth)) {
-        query.reportMonth = parsedMonth;
-      }
+      if (!isNaN(parsedMonth)) query.reportMonth = parsedMonth;
     }
-
 
     if (year) {
       const parsedYear = parseInt(year);
-      if (!isNaN(parsedYear)) {
-        query.reportYear = parsedYear;
-      }
+      if (!isNaN(parsedYear)) query.reportYear = parsedYear;
     }
 
-    // For superadmin, show all reports
-    // For others, only show reports they submitted or reports submitted to their Sangh
     if (!isSuperAdmin) {
-      // Get user's Sangh IDs (user might be associated with multiple Sanghs)
-      // This depends on your user-Sangh association structure
-      // Simplified example:
-      const userSanghIds = req.user.sanghRoles ?
-        req.user.sanghRoles.map(role => role.sanghId) : [];
+      const userSanghId = req.user.sanghId; // direct sanghId from user
 
       query.$or = [
         { submittedById: userId },
-        { recipientSanghId: { $in: userSanghIds } }
+        { sanghId: userSanghId },
+        { recipientSanghId: userSanghId },
       ];
     }
 
-    // Execute query with pagination
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
@@ -211,23 +195,19 @@ exports.getAllReports = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate('submittingSanghId', 'name level')
-      .populate('recipientSanghId', 'name level')
-      .populate('submittedById', 'firstName lastName');
+      .populate("submittingSanghId", "name level")
+      .populate("recipientSanghId", "name level")
+      .populate("submittedById", "firstName lastName");
 
     const total = await Reporting.countDocuments(query);
 
-    return successResponse(res, 'Reports retrieved successfully', {
+    return successResponse(res, "Reports retrieved successfully", {
       reports,
-      pagination: {
-        total,
-        page,
-        pages: Math.ceil(total / limit)
-      }
+      pagination: { total, page, pages: Math.ceil(total / limit) },
     });
   } catch (err) {
-    console.error('Error retrieving reports:', err);
-    return errorResponse(res, 'Server error', 500);
+    console.error("Error retrieving reports:", err);
+    return errorResponse(res, "Server error", 500);
   }
 };
 
