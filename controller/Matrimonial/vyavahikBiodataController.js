@@ -1,4 +1,4 @@
-const VyavahikBiodata = require('../../model/Matrimonial/VyavahikBiodata');
+const { VyavahikBiodata } = require('../../model/Matrimonial/VyavahikBiodata');
 const JainAadhar = require('../../model/UserRegistrationModels/jainAadharModel');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 // Create API

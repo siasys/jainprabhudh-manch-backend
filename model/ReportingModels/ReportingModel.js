@@ -22,7 +22,11 @@ const visitSchema = new mongoose.Schema({
   visitorPostName: { type: String },
   visitorLevel: { type: String },
   sanghName: { type: String },
-  sanghId: { type: mongoose.Schema.Types.ObjectId, ref: "HierarchicalSangh" },
+  sanghId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "HierarchicalSangh",
+    default: null,
+  },
   summary: { type: String },
   pdf: { type: String }, // CDN URL
   images: [{ type: String }], // CDN URLs
