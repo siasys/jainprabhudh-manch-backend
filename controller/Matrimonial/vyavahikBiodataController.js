@@ -369,14 +369,38 @@ const createBiodatas = async (req, res) => {
     const educationCertificateUrl = toCDN(files, "educationCertificate");
     const divorceCertificateUrl = toCDN(files, "divorceCertificate");
 
-    // uploadedPhotos: multer field name = 'uploadedPhotos', max 10
-    const uploadedPhotos = (files?.uploadedPhotos || [])
-      .slice(0, 10)
+    // ── Uploaded Photos (max 10) ─────────────────────────────────
+    // Pehli 3 photos ke fixed labels, baad wali extra photos
+    const labeledFields = [
+      { key: "passportPhoto", label: "Passport Photo" },
+      { key: "fullPhoto", label: "Full Photo" },
+      { key: "familyPhoto", label: "Family Photo" },
+    ];
+
+    const uploadedPhotos = [];
+
+    // Pehle 3 labeled photos process karo
+    for (const { key, label } of labeledFields) {
+      const fileArr = files?.[key];
+      const f = Array.isArray(fileArr) ? fileArr[0] : fileArr;
+      if (f?.location) {
+        uploadedPhotos.push({
+          label,
+          url: convertS3UrlToCDN(f.location),
+        });
+      }
+    }
+
+    // Extra photos (photo_4 se photo_10 tak) process karo
+    const extraPhotos = (files?.extraPhotos || [])
+      .slice(0, 10 - uploadedPhotos.length) // total 10 se zyada nahi
       .map((f, i) => ({
-        label: f.originalname || `photo_${i}`,
+        label: f.originalname || `Extra Photo ${i + 1}`,
         url: convertS3UrlToCDN(f.location),
       }))
       .filter((p) => p.url);
+
+    uploadedPhotos.push(...extraPhotos);
 
     // ── DOB processing + Age calculation ─────────────────────────
     let processedDob = null;
