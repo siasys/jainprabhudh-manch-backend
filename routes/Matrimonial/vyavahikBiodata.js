@@ -43,23 +43,19 @@ router.get("/getall", getAllBiodata);
 router.get("/me", getMyBiodata);
 router.get("/get/:id", getBiodataById);
 router.post("/like/:targetId", likeProfile);
-
 router.get("/liked", getLikedProfiles);
 // Update a biodata by ID
 router.put('/:id', updateBiodata);
 router.put('/images/:id', upload.biodataImageUpload, updateBiodataImages);
 router.post("/interest/:targetId", sendInterest);
-router.patch(
-  "/interest/:senderBiodataId/respond",
-  respondToInterest ,
-);
+router.patch("/interest/:senderBiodataId/respond", respondToInterest ,);
 router.get("/interests/sent", getSentInterests);
 router.get("/interests/received", getReceivedInterests);
 // Get a single biodata by ID
 router.get('/:id', getBiodata);
 router.get('/user/:userId', getBiodataByUserId);
 router.delete('/delete/:id', deleteBiodata);
-router.delete("/like/:targetId", unlikeProfile);
+router.delete("/unlike/:targetId", unlikeProfile);
 // Get all biodatas
 router.get('/', getAllBiodatas);
 
