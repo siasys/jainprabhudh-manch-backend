@@ -730,7 +730,7 @@ const likeProfile = async (req, res) => {
       });
     }
     // target exist karta he?
-    const targetExists = await VyavahikBiodata.exists({ _id: targetId, isVisible: true });
+    const targetExists = await VyavahikBiodata.exists({ _id: targetId });
     if (!targetExists) {
       return res.status(404).json({
         success: false,
