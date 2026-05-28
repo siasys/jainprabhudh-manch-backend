@@ -211,6 +211,54 @@ exports.getAllReports = async (req, res) => {
   }
 };
 
+// Get ALL reports - no sangh filter, direct flat list
+exports.getAllReportsAdmin = async (req, res) => {
+  try {
+    const { status, month, year } = req.query;
+
+    const query = {};
+
+    if (status) query.status = status;
+
+    if (month) {
+      const parsedMonth = parseInt(month);
+      if (!isNaN(parsedMonth)) query.reportMonth = parsedMonth;
+    }
+
+    if (year) {
+      const parsedYear = parseInt(year);
+      if (!isNaN(parsedYear)) query.reportYear = parsedYear;
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 15;
+    const skip = (page - 1) * limit;
+
+    const [reports, total] = await Promise.all([
+      Reporting.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("submittingSanghId", "name level")
+        .populate("recipientSanghId", "name level")
+        .populate("submittedById", "firstName lastName"),
+      Reporting.countDocuments(query),
+    ]);
+
+    return successResponse(res, "All reports retrieved successfully", {
+      reports,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit),
+        limit,
+      },
+    });
+  } catch (err) {
+    console.error("Error retrieving all reports:", err);
+    return errorResponse(res, "Server error", 500);
+  }
+};
 // Get reports submitted by my Sangh
 // exports.getSubmittedReports = async (req, res) => {
 //   try {

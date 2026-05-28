@@ -1,15 +1,16 @@
 const express = require('express');
-const { 
-  createReport, 
-  getReportById, 
-  getAllReports, 
-  updateReport, 
+const {
+  createReport,
+  getReportById,
+  getAllReports,
+  updateReport,
   deleteReport,
   getSubmittedReports,
   getReceivedReports,
   updateReportStatus,
-  getTopPerformers
-} = require('../../controller/ReportingControllers/reportingController');
+  getTopPerformers,
+  getAllReportsAdmin,
+} = require("../../controller/ReportingControllers/reportingController");
 const { authMiddleware } = require('../../middlewares/authMiddlewares');
 const { validateRequest } = require('../../middlewares/validationMiddleware');
 const { check } = require('express-validator');
@@ -43,6 +44,8 @@ router.get('/top-performers', getTopPerformers);
 
 // GET: Get all reports (with filtering)
 router.get('/', getAllReports);
+// superadmin only
+router.get("/all", getAllReportsAdmin);
 // GET: Get a single report by ID
 router.get('/:id', getReportById);
 // PUT: Update a report by ID
