@@ -684,8 +684,8 @@ const getBiodataById = async (req, res) => {
     });
   }
 };
- 
-// ─── GET MY OWN BIODATA (logged in user) ─────────────────────────────────────
+
+// ─── GET MY OWN BIODATA (logged in user) ─────────────────────────
 const getMyBiodata = async (req, res) => {
   try {
     const biodata = await VyavahikBiodata.findOne({ userId: req.user._id })
@@ -693,14 +693,14 @@ const getMyBiodata = async (req, res) => {
       .populate("interestsSent.profileId", "name gender dob uploadedPhotos")
       .populate("interestsReceived.profileId", "name gender dob uploadedPhotos")
       .lean();
- 
+
     if (!biodata) {
       return res.status(404).json({
         success: false,
         message: "Biodata not found for this user",
       });
     }
- 
+
     res.status(200).json({
       success: true,
       message: "My biodata fetched successfully",
@@ -715,12 +715,12 @@ const getMyBiodata = async (req, res) => {
     });
   }
 };
-// ─── LIKE A PROFILE ───────────────────────────────────────────────────────────
+// ─── LIKE A PROFILE ────────────────────────────
 // POST /biodata/like/:targetId
 const likeProfile = async (req, res) => {
   try {
     const { targetId } = req.params;
- 
+
     // apna biodata dhundo
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id });
     if (!myBiodata) {
@@ -729,7 +729,6 @@ const likeProfile = async (req, res) => {
         message: "Your biodata not found",
       });
     }
- 
     // target exist karta he?
     const targetExists = await VyavahikBiodata.exists({ _id: targetId, isVisible: true });
     if (!targetExists) {
@@ -738,7 +737,7 @@ const likeProfile = async (req, res) => {
         message: "Target profile not found",
       });
     }
- 
+
     // apne aap ko like nahi kar sakte
     if (myBiodata._id.toString() === targetId) {
       return res.status(400).json({
@@ -746,7 +745,6 @@ const likeProfile = async (req, res) => {
         message: "You cannot like your own profile",
       });
     }
- 
     // pehle se liked he?
     const alreadyLiked = myBiodata.likedProfiles.some(
       (id) => id.toString() === targetId
@@ -757,11 +755,10 @@ const likeProfile = async (req, res) => {
         message: "Profile already liked",
       });
     }
- 
     // push karo
     myBiodata.likedProfiles.push(targetId);
     await myBiodata.save();
- 
+
     res.status(200).json({
       success: true,
       message: "Profile liked successfully",
@@ -776,13 +773,13 @@ const likeProfile = async (req, res) => {
     });
   }
 };
- 
+
 // ─── UNLIKE A PROFILE ─────────────────────────────────────────────────────────
 // DELETE /biodata/like/:targetId
 const unlikeProfile = async (req, res) => {
   try {
     const { targetId } = req.params;
- 
+
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id });
     if (!myBiodata) {
       return res.status(404).json({
@@ -790,7 +787,7 @@ const unlikeProfile = async (req, res) => {
         message: "Your biodata not found",
       });
     }
- 
+
     // liked he?
     const likedIndex = myBiodata.likedProfiles.findIndex(
       (id) => id.toString() === targetId
@@ -801,11 +798,11 @@ const unlikeProfile = async (req, res) => {
         message: "Profile not in your liked list",
       });
     }
- 
+
     // pull karo
     myBiodata.likedProfiles.splice(likedIndex, 1);
     await myBiodata.save();
- 
+
     res.status(200).json({
       success: true,
       message: "Profile unliked successfully",
@@ -820,8 +817,8 @@ const unlikeProfile = async (req, res) => {
     });
   }
 };
- 
-// ─── GET MY LIKED PROFILES ────────────────────────────────────────────────────
+
+// ─── GET MY LIKED PROFILES ───────────────────────────────────
 // GET /biodata/liked
 const getLikedProfiles = async (req, res) => {
   try {
@@ -831,7 +828,7 @@ const getLikedProfiles = async (req, res) => {
         "name gender dob height complexion addressInfo uploadedPhotos communityInfo marriageInfo"
       )
       .lean();
- 
+
     if (!myBiodata) {
       return res.status(404).json({
         success: false,
@@ -860,24 +857,24 @@ const sendInterest = async (req, res) => {
   try {
     const { targetId } = req.params;
     const { message } = req.body;
- 
+
     // apna biodata
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id });
     if (!myBiodata) {
       return res.status(404).json({ success: false, message: "Your biodata not found" });
     }
- 
+
     // target exist?
     const targetBiodata = await VyavahikBiodata.findOne({ _id: targetId, isVisible: true });
     if (!targetBiodata) {
       return res.status(404).json({ success: false, message: "Target profile not found" });
     }
- 
+
     // apne aap ko interest nahi
     if (myBiodata._id.toString() === targetId) {
       return res.status(400).json({ success: false, message: "Cannot send interest to yourself" });
     }
- 
+
     // pehle se interest bheja?
     const alreadySent = myBiodata.interestsSent.some(
       (i) => i.profileId.toString() === targetId
@@ -885,7 +882,7 @@ const sendInterest = async (req, res) => {
     if (alreadySent) {
       return res.status(400).json({ success: false, message: "Interest already sent to this profile" });
     }
- 
+
     // sender ke interestsSent mein add
     myBiodata.interestsSent.push({
       profileId: targetId,
@@ -893,7 +890,7 @@ const sendInterest = async (req, res) => {
       message: message || "",
       sentAt: new Date(),
     });
- 
+
     // receiver ke interestsReceived mein add
     targetBiodata.interestsReceived.push({
       profileId: myBiodata._id,
@@ -901,9 +898,9 @@ const sendInterest = async (req, res) => {
       message: message || "",
       receivedAt: new Date(),
     });
- 
+
     await Promise.all([myBiodata.save(), targetBiodata.save()]);
- 
+
     res.status(200).json({
       success: true,
       message: "Interest sent successfully",
@@ -913,7 +910,7 @@ const sendInterest = async (req, res) => {
     res.status(500).json({ success: false, message: "Error sending interest", error: error.message });
   }
 };
- 
+
 // ─── RESPOND TO INTEREST (accept / reject) ───────────────────────────────────
 // PATCH /biodata/interest/:senderBiodataId/respond
 // body: { status: "accepted" | "rejected" }
@@ -921,17 +918,17 @@ const respondToInterest = async (req, res) => {
   try {
     const { senderBiodataId } = req.params;
     const { status } = req.body;
- 
+
     if (!["accepted", "rejected"].includes(status)) {
       return res.status(400).json({ success: false, message: "Status must be 'accepted' or 'rejected'" });
     }
- 
+
     // apna biodata (receiver)
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id });
     if (!myBiodata) {
       return res.status(404).json({ success: false, message: "Your biodata not found" });
     }
- 
+
     // apne received mein entry dhundo
     const receivedEntry = myBiodata.interestsReceived.find(
       (i) => i.profileId.toString() === senderBiodataId

@@ -270,7 +270,7 @@ const compressFiles = async (req, res, next) => {
       if (file.mimetype.startsWith("image/")) {
         file.buffer = await compressImage(file.buffer);
       } else if (file.mimetype.startsWith("video/")) {
-        // ✅ Video compression BAND kiya — Presigned URL se direct S3 pe jaayegi
+        // Video compression BAND kiya — Presigned URL se direct S3 pe jaayegi
         // Server pe video aayegi hi nahi ab, isliye yahan kuch nahi karna
         // console.log(`📹 Video skipped in compressFiles — using presigned URL`);
       } else if (file.mimetype === "application/pdf") {
