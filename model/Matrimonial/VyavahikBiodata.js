@@ -296,7 +296,7 @@ const vyavahikBiodataSchema = new mongoose.Schema(
     name: { type: String },
     gender: { type: String },
     dob: { type: Date },
-    age:{type: String},
+    age: { type: String },
     timeOfBirth: { type: String },
     birthPlace: { type: String },
 
@@ -305,6 +305,9 @@ const vyavahikBiodataSchema = new mongoose.Schema(
     complexion: { type: String },
     dietPreference: { type: String }, // veg / jain / vegan etc.
     hobbies: { type: String },
+    aboutMySelf: {
+      type: String,
+    },
     physicalCondition: {
       type: String,
       enum: ["Normal", "Special Abled"],
@@ -358,20 +361,36 @@ const vyavahikBiodataSchema = new mongoose.Schema(
       workLocation: { type: String },
       annualIncome: { type: String },
     },
-
     // ─── Family Background ───────────────────────────────────────
     familyInfo: {
       fatherName: { type: String },
       fatherOccupation: { type: String },
+
       motherName: { type: String },
       motherOccupation: { type: String },
+
       nativePlace: { type: String },
       familyType: { type: String },
       familyIncome: { type: String },
-      noOfBrothers: { type: Number },
-      noOfSisters: { type: Number },
-    },
 
+      noOfBrothers: { type: Number },
+
+      brothers: [
+        {
+          name: { type: String },
+          occupation: { type: String },
+        },
+      ],
+
+      noOfSisters: { type: Number },
+
+      sisters: [
+        {
+          name: { type: String },
+          occupation: { type: String },
+        },
+      ],
+    },
     // ─── Religion & Community ────────────────────────────────────
     communityInfo: {
       mulJain: { type: String },
@@ -399,8 +418,13 @@ const vyavahikBiodataSchema = new mongoose.Schema(
       mobileNumber: { type: String },
       contactPerson: { type: String },
       email: { type: String },
-      alternativeNumber: { type: String },
-      contactPersonRelation: { type: String },
+
+      addNumber: {
+        name: { type: String },
+        number: { type: String },
+        relation: { type: String },
+        address: { type: String },
+      },
     },
 
     // ─── Uploaded Photos ─────────────────────────────────────────
@@ -466,10 +490,37 @@ const vyavahikBiodataSchema = new mongoose.Schema(
           enum: ["pending", "accepted", "rejected"],
           default: "pending",
         },
-        message: { type: String }, // optional note from sender
+        message: { type: String },
         receivedAt: { type: Date, default: Date.now },
       },
     ],
+    // ─── Membership / Payment Info ─────────────────────────
+    membershipInfo: {
+      amount: {
+        type: Number,
+        default: 500,
+      },
+
+      paymentStatus: {
+        type: String,
+        enum: ["pending", "paid", "failed"],
+        default: "pending",
+      },
+
+      startDate: {
+        type: Date,
+        default: Date.now,
+      },
+
+      validityDate: {
+        type: Date,
+        default: () => {
+          const date = new Date();
+          date.setFullYear(date.getFullYear() + 1); // 1 year validity
+          return date;
+        },
+      },
+    },
   },
   { timestamps: true },
 );

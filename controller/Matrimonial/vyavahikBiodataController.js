@@ -464,15 +464,20 @@ const createBiodatas = async (req, res) => {
     const familyInfo = {
       fatherName: body.fatherName,
       fatherOccupation: body.fatherOccupation,
+
       motherName: body.motherName,
       motherOccupation: body.motherOccupation,
+
       nativePlace: body.nativePlace,
       familyType: body.familyType,
       familyIncome: body.familyIncome,
-      noOfBrothers: body.noOfBrothers,
-      noOfSisters: body.noOfSisters,
-    };
 
+      noOfBrothers: body.noOfBrothers,
+      brothers: body.brothers || [],
+
+      noOfSisters: body.noOfSisters,
+      sisters: body.sisters || [],
+    };
     // ── Community / Religion ─────────────────────────────────────
     const communityInfo = {
       mulJain: body.mulJain,
@@ -500,8 +505,13 @@ const createBiodatas = async (req, res) => {
       mobileNumber: body.contactMobile || body.mobileNumber,
       contactPerson: body.contactPerson,
       email: body.email,
-      alternativeNumber: body.alternativeNumber,
-      contactPersonRelation: body.contactPersonRelation,
+
+      addNumber: {
+        name: body.addNumberName,
+        number: body.addNumber,
+        relation: body.addNumberRelation,
+        address: body.addNumberAddress,
+      },
     };
 
     // ── Partner Preference ───────────────────────────────────────
@@ -517,6 +527,19 @@ const createBiodatas = async (req, res) => {
       additionalPreference: body.additionalPreference,
     };
 
+    // ── Membership / Payment ───────────────────────────────
+    const membershipInfo = {
+      amount: body.amount || 500,
+      paymentStatus: "pending",
+
+      startDate: new Date(),
+
+      validityDate: (() => {
+        const date = new Date();
+        date.setFullYear(date.getFullYear() + 1);
+        return date;
+      })(),
+    };
     // ── Assemble Document (schema ke exact fields) ────────────────
     const biodataData = {
       userId: req.user?._id,
@@ -541,6 +564,7 @@ const createBiodatas = async (req, res) => {
       complexion: body.complexion,
       dietPreference: body.dietPreference,
       hobbies: body.hobbies,
+      aboutMySelf: body.aboutMySelf,
       physicalCondition: body.physicalCondition,
       physicalConditionDescribe: body.physicalConditionDescribe,
 
@@ -552,6 +576,7 @@ const createBiodatas = async (req, res) => {
       communityInfo,
       addressInfo,
       contactInfo,
+      membershipInfo,
       uploadedPhotos,
       partnerPreference,
 

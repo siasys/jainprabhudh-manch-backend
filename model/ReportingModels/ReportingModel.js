@@ -14,7 +14,7 @@ const projectSchema = new mongoose.Schema({
   description: { type: String },
   memberCount: { type: Number, default: 0 },
   eventDate: { type: Date },
-  images: [{ type: String }], // CDN URLs
+  images: [{ type: String }],
 });
 
 const visitSchema = new mongoose.Schema({
