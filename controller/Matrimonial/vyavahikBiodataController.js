@@ -460,23 +460,38 @@ const createBiodatas = async (req, res) => {
       annualIncome: body.annualIncome,
     };
 
+    // ── Brothers / Sisters — FormData string → array parse ──────
+    let brothers = body.brothers || [];
+    let sisters = body.sisters || [];
+
+    if (typeof brothers === "string") {
+      try {
+        brothers = JSON.parse(brothers);
+      } catch {
+        brothers = [];
+      }
+    }
+    if (typeof sisters === "string") {
+      try {
+        sisters = JSON.parse(sisters);
+      } catch {
+        sisters = [];
+      }
+    }
+
     // ── Family Info ──────────────────────────────────────────────
     const familyInfo = {
       fatherName: body.fatherName,
       fatherOccupation: body.fatherOccupation,
-
       motherName: body.motherName,
       motherOccupation: body.motherOccupation,
-
       nativePlace: body.nativePlace,
       familyType: body.familyType,
       familyIncome: body.familyIncome,
-
       noOfBrothers: body.noOfBrothers,
-      brothers: body.brothers || [],
-
+      brothers, // ✅ parsed array
       noOfSisters: body.noOfSisters,
-      sisters: body.sisters || [],
+      sisters, // ✅ parsed array
     };
     // ── Community / Religion ─────────────────────────────────────
     const communityInfo = {
@@ -676,7 +691,7 @@ const getAllBiodata = async (req, res) => {
     });
   }
 };
- 
+
 // ─── GET SINGLE BIODATA BY ID ─────────────────────────────────────────────────
 const getBiodataById = async (req, res) => {
   try {

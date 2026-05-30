@@ -272,7 +272,7 @@
 
 const mongoose = require("mongoose");
 
-// ─── Vyavahik Biodata Schema ──────────────────────────────────────────────────
+// ─── Vyavahik Biodata Schema ───────────────────────────────────
 const vyavahikBiodataSchema = new mongoose.Schema(
   {
     userId: {
@@ -280,7 +280,7 @@ const vyavahikBiodataSchema = new mongoose.Schema(
       ref: "User",
     },
 
-    // ─── Profile Type ───────────────────────────────────────────
+    // ─── Profile Type ──────────────────────────────────────────
     profile: {
       type: String,
       enum: ["mySelf", "someoneElse"],
@@ -290,7 +290,7 @@ const vyavahikBiodataSchema = new mongoose.Schema(
     relationWithCandidate: { type: String },
     creatorName: { type: String },
 
-    // ─── Basic Info ──────────────────────────────────────────────
+    // ─── Basic Info ──────────────────────
     shravakId: { type: String },
     jainShravak: { type: String },
     name: { type: String },
@@ -324,7 +324,7 @@ const vyavahikBiodataSchema = new mongoose.Schema(
       divorcedDetails: {
         isDivorceComplete: { type: String },
         reasonForDivorce: { type: String },
-        divorceCertificate: { type: String }, // file URL
+        divorceCertificate: { type: String },
         spouseName: { type: String },
         spouseFatherName: { type: String },
         spouseMotherName: { type: String },
@@ -442,7 +442,7 @@ const vyavahikBiodataSchema = new mongoose.Schema(
       heightFrom: { type: Number }, // in cm
       heightTo: { type: Number },
       incomePreference: { type: String },
-      maritalStatus: { type: String }, // Single / Divorced / Any
+      maritalStatus: { type: String },
       educationPreference: { type: String },
       locationPreference: { type: String },
       additionalPreference: { type: String },
