@@ -986,7 +986,6 @@ const getAllApplications = asyncHandler(async (req, res) => {
       filter.name = { $regex: search.trim(), $options: "i" };
     }
 
-    // Review screen ke liye
     if (level && level.trim() !== "") {
       filter.applicationLevel = level.toLowerCase();
     }
@@ -1004,11 +1003,15 @@ const getAllApplications = asyncHandler(async (req, res) => {
     }
 
     const applications = await JainAadhar.find(filter)
+      .select(
+        "name userProfile status applicationLevel reviewingSanghId createdAt userId",
+      )
       .populate(
         "userId",
-        "firstName lastName fullName email accountType businessName"
+        "firstName lastName fullName email accountType businessName",
       )
-      .sort("-createdAt");
+      .sort({ createdAt: -1 })
+      .lean();
 
     return successResponse(
       res,
@@ -1017,10 +1020,15 @@ const getAllApplications = asyncHandler(async (req, res) => {
         ? "Filtered applications retrieved successfully"
         : "Applications retrieved successfully",
       200,
-      applications.length
+      applications.length,
     );
   } catch (error) {
-    return errorResponse(res, "Error fetching applications", 500, error.message);
+    return errorResponse(
+      res,
+      "Error fetching applications",
+      500,
+      error.message,
+    );
   }
 });
 // Function to generate unique Jain Aadhar number
