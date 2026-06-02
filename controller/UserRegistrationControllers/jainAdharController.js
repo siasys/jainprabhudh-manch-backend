@@ -950,24 +950,72 @@ const getCheckShravk = asyncHandler(async (req, res) => {
 
 
 // Admin: Get all applications
+// const getAllApplications = asyncHandler(async (req, res) => {
+//   try {
+//     const { search } = req.query;
+
+//     let filter = {};
+
+//     if (search && search.trim() !== "") {
+//       filter = {
+//         name: { $regex: search, $options: "i" }
+//       };
+//     }
+//     const applications = await JainAadhar.find(filter)
+//       .populate("userId", "firstName lastName fullName email accountType businessName")
+//       .sort("-createdAt");
+//     return successResponse(
+//       res,
+//       applications,
+//       "Applications retrieved successfully",
+//       200,
+//       applications.length
+//     );
+//   } catch (error) {
+//     return errorResponse(res, "Error fetching applications", 500, error.message);
+//   }
+// });
+// Admin + Review: Get applications
 const getAllApplications = asyncHandler(async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, level, sanghId, status } = req.query;
 
-    let filter = {};
+    const filter = {};
 
     if (search && search.trim() !== "") {
-      filter = {
-        name: { $regex: search, $options: "i" }
-      };
+      filter.name = { $regex: search.trim(), $options: "i" };
     }
+
+    // Review screen ke liye
+    if (level && level.trim() !== "") {
+      filter.applicationLevel = level.toLowerCase();
+    }
+
+    if (sanghId && sanghId.trim() !== "") {
+      filter.$or = [
+        { reviewingSanghId: sanghId },
+        { reviewingSanghId: null },
+        { reviewingSanghId: { $exists: false } },
+      ];
+    }
+
+    if (status && status.trim() !== "") {
+      filter.status = status.toLowerCase();
+    }
+
     const applications = await JainAadhar.find(filter)
-      .populate("userId", "firstName lastName fullName email accountType businessName")
+      .populate(
+        "userId",
+        "firstName lastName fullName email accountType businessName"
+      )
       .sort("-createdAt");
+
     return successResponse(
       res,
       applications,
-      "Applications retrieved successfully",
+      level || sanghId
+        ? "Filtered applications retrieved successfully"
+        : "Applications retrieved successfully",
       200,
       applications.length
     );
@@ -975,7 +1023,6 @@ const getAllApplications = asyncHandler(async (req, res) => {
     return errorResponse(res, "Error fetching applications", 500, error.message);
   }
 });
-
 // Function to generate unique Jain Aadhar number
 const generateJainAadharNumber = async () => {
   while (true) {

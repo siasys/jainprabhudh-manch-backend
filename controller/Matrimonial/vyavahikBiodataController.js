@@ -633,9 +633,9 @@ const getAllBiodata = async (req, res) => {
       heightFrom,
       heightTo,
     } = req.query;
- 
+
     const filter = { isVisible: true };
- 
+
     // ── Filters ──────────────────────────────────────────────────
     if (gender)        filter.gender = gender;
     if (city)          filter["addressInfo.city"]         = new RegExp(city, "i");
@@ -644,23 +644,23 @@ const getAllBiodata = async (req, res) => {
     if (panth)         filter["communityInfo.panth"]      = new RegExp(panth, "i");
     if (caste)         filter["communityInfo.caste"]      = new RegExp(caste, "i");
     if (maritalStatus) filter["marriageInfo.marriageType"]= maritalStatus;
- 
+
     // age filter via dob range
     if (ageFrom || ageTo) {
       filter.dob = {};
       if (ageTo)   filter.dob.$gte = new Date(new Date().setFullYear(new Date().getFullYear() - ageTo));
       if (ageFrom) filter.dob.$lte = new Date(new Date().setFullYear(new Date().getFullYear() - ageFrom));
     }
- 
+
     // height filter
     if (heightFrom || heightTo) {
       filter.height = {};
       if (heightFrom) filter.height.$gte = Number(heightFrom);
       if (heightTo)   filter.height.$lte = Number(heightTo);
     }
- 
+
     const skip = (Number(page) - 1) * Number(limit);
- 
+
     const [biodatas, total] = await Promise.all([
       VyavahikBiodata.find(filter)
         .select("-interestsSent -interestsReceived -contactInfo") // hide sensitive fields in listing
@@ -670,7 +670,7 @@ const getAllBiodata = async (req, res) => {
         .lean(),
       VyavahikBiodata.countDocuments(filter),
     ]);
- 
+
     res.status(200).json({
       success: true,
       message: "Biodatas fetched successfully",
@@ -696,20 +696,20 @@ const getAllBiodata = async (req, res) => {
 const getBiodataById = async (req, res) => {
   try {
     const { id } = req.params;
- 
+
     const biodata = await VyavahikBiodata.findOne({ _id: id, isVisible: true })
       .populate("likedProfiles", "name gender dob uploadedPhotos")
       .populate("interestsSent.profileId", "name gender dob uploadedPhotos")
       .populate("interestsReceived.profileId", "name gender dob uploadedPhotos")
       .lean();
- 
+
     if (!biodata) {
       return res.status(404).json({
         success: false,
         message: "Biodata not found",
       });
     }
- 
+
     res.status(200).json({
       success: true,
       message: "Biodata fetched successfully",
@@ -875,7 +875,7 @@ const getLikedProfiles = async (req, res) => {
         message: "Your biodata not found",
       });
     }
- 
+
     res.status(200).json({
       success: true,
       message: "Liked profiles fetched successfully",
@@ -976,14 +976,14 @@ const respondToInterest = async (req, res) => {
     if (!receivedEntry) {
       return res.status(404).json({ success: false, message: "Interest request not found" });
     }
- 
+
     if (receivedEntry.status !== "pending") {
       return res.status(400).json({ success: false, message: `Interest already ${receivedEntry.status}` });
     }
- 
+
     // apna received update
     receivedEntry.status = status;
- 
+
     // sender ke interestsSent mein bhi sync
     const senderBiodata = await VyavahikBiodata.findById(senderBiodataId);
     if (senderBiodata) {
@@ -993,9 +993,9 @@ const respondToInterest = async (req, res) => {
       if (sentEntry) sentEntry.status = status;
       await senderBiodata.save();
     }
- 
+
     await myBiodata.save();
- 
+
     res.status(200).json({
       success: true,
       message: `Interest ${status} successfully`,
@@ -1005,7 +1005,7 @@ const respondToInterest = async (req, res) => {
     res.status(500).json({ success: false, message: "Error responding to interest", error: error.message });
   }
 };
- 
+
 // ─── GET MY SENT INTERESTS ────────────────────────────────────────────────────
 // GET /biodata/interests/sent
 const getSentInterests = async (req, res) => {
@@ -1013,11 +1013,11 @@ const getSentInterests = async (req, res) => {
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
       .populate("interestsSent.profileId", "name gender dob uploadedPhotos addressInfo")
       .lean();
- 
+
     if (!myBiodata) {
       return res.status(404).json({ success: false, message: "Your biodata not found" });
     }
- 
+
     res.status(200).json({
       success: true,
       message: "Sent interests fetched successfully",
@@ -1029,7 +1029,7 @@ const getSentInterests = async (req, res) => {
     res.status(500).json({ success: false, message: "Error fetching sent interests", error: error.message });
   }
 };
- 
+
 // ─── GET MY RECEIVED INTERESTS ────────────────────────────────────────────────
 // GET /biodata/interests/received
 const getReceivedInterests = async (req, res) => {
@@ -1037,11 +1037,11 @@ const getReceivedInterests = async (req, res) => {
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
       .populate("interestsReceived.profileId", "name gender dob uploadedPhotos addressInfo")
       .lean();
- 
+
     if (!myBiodata) {
       return res.status(404).json({ success: false, message: "Your biodata not found" });
     }
- 
+
     res.status(200).json({
       success: true,
       message: "Received interests fetched successfully",
