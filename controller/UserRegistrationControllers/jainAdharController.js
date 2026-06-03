@@ -948,7 +948,37 @@ const getCheckShravk = asyncHandler(async (req, res) => {
   }
 });
 
+const getBulkShravakReviewSangh = asyncHandler(async (req, res) => {
+  try {
+    const { shravakIds } = req.body;
 
+    if (!Array.isArray(shravakIds) || shravakIds.length === 0) {
+      return errorResponse(res, "Shravak Ids are required", 400);
+    }
+
+    const cleanIds = shravakIds.filter(Boolean).map((id) => String(id).trim());
+
+    const records = await JainAadhar.find({
+      jainAadharNumber: { $in: cleanIds },
+    })
+      .select("jainAadharNumber reviewingSanghId createdAt")
+      .populate("reviewingSanghId", "_id name sanghName");
+
+    return successResponse(
+      res,
+      records,
+      "Shravak records fetched successfully",
+      200,
+    );
+  } catch (error) {
+    return errorResponse(
+      res,
+      "Error fetching Shravak records",
+      500,
+      error.message,
+    );
+  }
+});
 // Admin: Get all applications
 // const getAllApplications = asyncHandler(async (req, res) => {
 //   try {
@@ -1004,7 +1034,7 @@ const getAllApplications = asyncHandler(async (req, res) => {
 
     const applications = await JainAadhar.find(filter)
       .select(
-        "name userProfile status applicationLevel reviewingSanghId createdAt userId",
+        "name userProfile status applicationLevel reviewingSanghId createdAt userId contactDetails location jainAadharNumber",
       )
       .populate(
         "userId",
@@ -1795,5 +1825,6 @@ module.exports = {
   sendSharavakOtp,
   verifySharavakOtp,
   resendSharavakOtp,
-  checkApplicationDuplicate
+  checkApplicationDuplicate,
+  getBulkShravakReviewSangh,
 };

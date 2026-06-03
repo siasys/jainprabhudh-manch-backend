@@ -25,8 +25,8 @@ const {
   verifySharavakOtp,
   resendSharavakOtp,
   getCheckShravk,
-  checkApplicationByNumber,
-  checkApplicationDuplicate
+  checkApplicationDuplicate,
+  getBulkShravakReviewSangh
 } = require('../../controller/UserRegistrationControllers/jainAdharController');
 const { authMiddleware, canReviewJainAadhar } = require('../../middlewares/authMiddlewares');
 const { canEditJainAadhar } = require('../../middlewares/jainAadharEditPermissions');
@@ -38,7 +38,7 @@ const { generateJainAadharCard, generateMinorityCard } = require('../../controll
 
 
 router.get('/check-id', getCheckShravk);
-
+router.post("/bulk-check-shravak", getBulkShravakReviewSangh);
 const statusCheckLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // limit each IP to 10 requests per 15 minutes
