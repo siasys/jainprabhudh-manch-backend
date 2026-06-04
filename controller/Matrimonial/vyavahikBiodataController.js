@@ -615,6 +615,346 @@ const createBiodatas = async (req, res) => {
     });
   }
 };
+
+
+// ─── UPDATE / EDIT ───────────────────────────────────────────────────────────
+const editBiodata = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { body, files } = req;
+
+    const biodata = await VyavahikBiodata.findById(id);
+
+    if (!biodata) {
+      return res.status(404).json({
+        success: false,
+        message: "Biodata not found",
+      });
+    }
+
+    // Optional ownership check
+    if (
+      req.user?._id &&
+      biodata.userId?.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to edit this biodata",
+      });
+    }
+
+    // ── Files: old preserve, new aaye to replace ─────────────────
+    const educationCertificateUrl =
+      toCDN(files, "educationCertificate") ||
+      biodata.education?.educationCertificate;
+
+    const divorceCertificateUrl =
+      toCDN(files, "divorceCertificate") ||
+      biodata.marriageInfo?.divorcedDetails?.divorceCertificate;
+
+    // ── Photos update ────────────────────────────────────────────
+    let uploadedPhotos = Array.isArray(biodata.uploadedPhotos)
+      ? [...biodata.uploadedPhotos]
+      : [];
+
+    const replacePhotoByLabel = (label, url) => {
+      if (!url) return;
+
+      const index = uploadedPhotos.findIndex((p) => p.label === label);
+
+      if (index !== -1) {
+        uploadedPhotos[index] = { label, url };
+      } else {
+        uploadedPhotos.push({ label, url });
+      }
+    };
+
+    const labeledFields = [
+      { key: "passportPhoto", label: "Passport Photo" },
+      { key: "fullPhoto", label: "Full Photo" },
+      { key: "familyPhoto", label: "Family Photo" },
+    ];
+
+    for (const { key, label } of labeledFields) {
+      const fileArr = files?.[key];
+      const f = Array.isArray(fileArr) ? fileArr[0] : fileArr;
+
+      if (f?.location) {
+        replacePhotoByLabel(label, convertS3UrlToCDN(f.location));
+      }
+    }
+
+    const extraPhotos = (files?.extraPhotos || [])
+      .map((f, i) => ({
+        label: f.originalname || `Extra Photo ${i + 1}`,
+        url: convertS3UrlToCDN(f.location),
+      }))
+      .filter((p) => p.url);
+
+    uploadedPhotos.push(...extraPhotos);
+    uploadedPhotos = uploadedPhotos.slice(0, 10);
+
+    // ── DOB + age ────────────────────────────────────────────────
+    let processedDob = biodata.dob;
+    let age = biodata.age;
+
+    if (body.dob) {
+      const d = new Date(body.dob);
+
+      if (!isNaN(d.getTime())) {
+        processedDob = d;
+
+        const today = new Date();
+        age = today.getFullYear() - d.getFullYear();
+
+        const m = today.getMonth() - d.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
+      }
+    }
+
+    // ── Parse brothers / sisters ─────────────────────────────────
+    let brothers = body.brothers ?? biodata.familyInfo?.brothers ?? [];
+    let sisters = body.sisters ?? biodata.familyInfo?.sisters ?? [];
+
+    if (typeof brothers === "string") {
+      try {
+        brothers = JSON.parse(brothers);
+      } catch {
+        brothers = biodata.familyInfo?.brothers || [];
+      }
+    }
+
+    if (typeof sisters === "string") {
+      try {
+        sisters = JSON.parse(sisters);
+      } catch {
+        sisters = biodata.familyInfo?.sisters || [];
+      }
+    }
+
+    // ── Marriage Info ────────────────────────────────────────────
+    const marriageType =
+      body.marriageType || biodata.marriageInfo?.marriageType;
+
+    const marriageInfo = {
+      marriageType,
+    };
+
+    if (marriageType === "Divorced") {
+      marriageInfo.divorcedDetails = {
+        isDivorceComplete:
+          body.isDivorceComplete ??
+          biodata.marriageInfo?.divorcedDetails?.isDivorceComplete,
+
+        reasonForDivorce:
+          body.reasonForDivorce ??
+          biodata.marriageInfo?.divorcedDetails?.reasonForDivorce,
+
+        divorceCertificate: divorceCertificateUrl,
+
+        spouseName:
+          body.spouseName ?? biodata.marriageInfo?.divorcedDetails?.spouseName,
+
+        spouseFatherName:
+          body.spouseFatherName ??
+          biodata.marriageInfo?.divorcedDetails?.spouseFatherName,
+
+        spouseMotherName:
+          body.spouseMotherName ??
+          biodata.marriageInfo?.divorcedDetails?.spouseMotherName,
+
+        numberOfChildren:
+          body.numberOfChildren ??
+          biodata.marriageInfo?.divorcedDetails?.numberOfChildren,
+      };
+    }
+
+    if (marriageType === "Widowed/widower") {
+      marriageInfo.widowedDetails = {
+        spouseName:
+          body.spouseName ?? biodata.marriageInfo?.widowedDetails?.spouseName,
+
+        spouseFatherName:
+          body.spouseFatherName ??
+          biodata.marriageInfo?.widowedDetails?.spouseFatherName,
+
+        spouseMotherName:
+          body.spouseMotherName ??
+          biodata.marriageInfo?.widowedDetails?.spouseMotherName,
+
+        reasonSpouseDeath:
+          body.reasonSpouseDeath ??
+          biodata.marriageInfo?.widowedDetails?.reasonSpouseDeath,
+
+        numberOfChildren:
+          body.numberOfChildren ??
+          biodata.marriageInfo?.widowedDetails?.numberOfChildren,
+      };
+    }
+
+    // ── Update document ──────────────────────────────────────────
+    biodata.profile = body.profile ?? biodata.profile;
+    biodata.relationWithCandidate =
+      body.relationWithCandidate ?? biodata.relationWithCandidate;
+    biodata.creatorName = body.creatorName ?? biodata.creatorName;
+
+    biodata.shravakId = body.shravakId ?? biodata.shravakId;
+    biodata.jainShravak = body.jainShravak ?? biodata.jainShravak;
+    biodata.name = body.name ?? biodata.name;
+    biodata.gender = body.gender ?? biodata.gender;
+    biodata.dob = processedDob;
+    biodata.age = age;
+    biodata.timeOfBirth = body.timeOfBirth ?? biodata.timeOfBirth;
+    biodata.birthPlace = body.birthPlace ?? biodata.birthPlace;
+
+    biodata.height = body.height ?? biodata.height;
+    biodata.complexion = body.complexion ?? biodata.complexion;
+    biodata.dietPreference = body.dietPreference ?? biodata.dietPreference;
+    biodata.hobbies = body.hobbies ?? biodata.hobbies;
+    biodata.aboutMySelf = body.aboutMySelf ?? biodata.aboutMySelf;
+    biodata.physicalCondition =
+      body.physicalCondition ?? biodata.physicalCondition;
+    biodata.physicalConditionDescribe =
+      body.physicalConditionDescribe ?? biodata.physicalConditionDescribe;
+
+    biodata.marriageInfo = marriageInfo;
+
+    biodata.education = {
+      highestEducation:
+        body.highestEducation ?? biodata.education?.highestEducation,
+      collegeUniversity:
+        body.collegeUniversity ?? biodata.education?.collegeUniversity,
+      degreeName: body.degreeName ?? biodata.education?.degreeName,
+      yearOfPassing: body.yearOfPassing ?? biodata.education?.yearOfPassing,
+      educationCertificate: educationCertificateUrl,
+    };
+
+    biodata.workInfo = {
+      workStatus: body.workStatus ?? biodata.workInfo?.workStatus,
+      companyName: body.companyName ?? biodata.workInfo?.companyName,
+      businessName: body.businessName ?? biodata.workInfo?.businessName,
+      workingIndustry:
+        body.workingIndustry ?? biodata.workInfo?.workingIndustry,
+      workLocation: body.workLocation ?? biodata.workInfo?.workLocation,
+      annualIncome: body.annualIncome ?? biodata.workInfo?.annualIncome,
+    };
+
+    biodata.familyInfo = {
+      fatherName: body.fatherName ?? biodata.familyInfo?.fatherName,
+      fatherOccupation:
+        body.fatherOccupation ?? biodata.familyInfo?.fatherOccupation,
+      motherName: body.motherName ?? biodata.familyInfo?.motherName,
+      motherOccupation:
+        body.motherOccupation ?? biodata.familyInfo?.motherOccupation,
+      nativePlace: body.nativePlace ?? biodata.familyInfo?.nativePlace,
+      familyType: body.familyType ?? biodata.familyInfo?.familyType,
+      familyIncome: body.familyIncome ?? biodata.familyInfo?.familyIncome,
+      noOfBrothers: body.noOfBrothers ?? biodata.familyInfo?.noOfBrothers,
+      brothers,
+      noOfSisters: body.noOfSisters ?? biodata.familyInfo?.noOfSisters,
+      sisters,
+    };
+
+    biodata.communityInfo = {
+      mulJain: body.mulJain ?? biodata.communityInfo?.mulJain,
+      panth: body.panth ?? biodata.communityInfo?.panth,
+      gotra: body.gotra ?? biodata.communityInfo?.gotra,
+      subGotra: body.subGotra ?? biodata.communityInfo?.subGotra,
+      caste: body.caste ?? biodata.communityInfo?.caste,
+      subCaste: body.subCaste ?? biodata.communityInfo?.subCaste,
+      mamaGotra: body.mamaGotra ?? biodata.communityInfo?.mamaGotra,
+      manglik: body.manglik ?? biodata.communityInfo?.manglik,
+      motherTongue:
+        body.motherTongue ?? biodata.communityInfo?.motherTongue,
+    };
+
+    biodata.addressInfo = {
+      country: body.country ?? biodata.addressInfo?.country ?? "India",
+      state: body.state ?? biodata.addressInfo?.state,
+      district: body.district ?? biodata.addressInfo?.district,
+      city: body.city ?? biodata.addressInfo?.city,
+      fullAddress: body.fullAddress ?? biodata.addressInfo?.fullAddress,
+    };
+
+    biodata.contactInfo = {
+      mobileNumber:
+        body.contactMobile ??
+        body.mobileNumber ??
+        biodata.contactInfo?.mobileNumber,
+
+      contactPerson:
+        body.contactPerson ?? biodata.contactInfo?.contactPerson,
+
+      email: body.email ?? biodata.contactInfo?.email,
+
+      addNumber: {
+        name:
+          body.addNumberName ?? biodata.contactInfo?.addNumber?.name,
+        number:
+          body.addNumber ?? biodata.contactInfo?.addNumber?.number,
+        relation:
+          body.addNumberRelation ??
+          biodata.contactInfo?.addNumber?.relation,
+        address:
+          body.addNumberAddress ??
+          biodata.contactInfo?.addNumber?.address,
+      },
+    };
+
+    biodata.partnerPreference = {
+      preferredAgeFrom:
+        body.preferredAgeFrom ??
+        biodata.partnerPreference?.preferredAgeFrom,
+
+      preferredAgeTo:
+        body.preferredAgeTo ??
+        biodata.partnerPreference?.preferredAgeTo,
+
+      heightFrom:
+        body.heightFrom ?? biodata.partnerPreference?.heightFrom,
+
+      heightTo:
+        body.heightTo ?? biodata.partnerPreference?.heightTo,
+
+      incomePreference:
+        body.incomePreference ??
+        biodata.partnerPreference?.incomePreference,
+
+      maritalStatus:
+        body.partnerMaritalStatus ??
+        biodata.partnerPreference?.maritalStatus,
+
+      educationPreference:
+        body.educationPreference ??
+        biodata.partnerPreference?.educationPreference,
+
+      locationPreference:
+        body.locationPreference ??
+        biodata.partnerPreference?.locationPreference,
+
+      additionalPreference:
+        body.additionalPreference ??
+        biodata.partnerPreference?.additionalPreference,
+    };
+
+    biodata.uploadedPhotos = uploadedPhotos;
+
+    await biodata.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Biodata updated successfully!",
+      data: biodata,
+    });
+  } catch (error) {
+    console.error("❌ Biodata Update Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error updating biodata",
+      error: error.message,
+    });
+  }
+};
 //─── GET ALL BIODATAS ─────────────────────────────────────────────────────────
 const getAllBiodata = async (req, res) => {
   try {
@@ -1073,4 +1413,5 @@ module.exports = {
   respondToInterest,
   getSentInterests,
   getReceivedInterests,
+  editBiodata,
 };

@@ -435,7 +435,7 @@ const createJainAadhar = asyncHandler(async (req, res) => {
       targetSanghType = "main";
     }
 
-    // ✅ Normalize location
+    // Normalize location
     const norm = {
       country: (location.country || "India").trim(),
       state: (location.state || "").trim(),

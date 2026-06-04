@@ -18,7 +18,8 @@ const {
   sendInterest,
   respondToInterest,
   getSentInterests,
-  getReceivedInterests
+  getReceivedInterests,
+  editBiodata
 } = require("../../controller/Matrimonial/vyavahikBiodataController");
 const upload = require('../../middlewares/upload');
 const { 
@@ -35,7 +36,7 @@ router.get('/check-status', checkUserBiodata);
 // New payment flow routes
 router.post('/', upload.biodataImageUpload, createBiodata);
 router.post("/create", upload.biodataImageUpload, createBiodatas);
-
+router.patch("/edit/:id", upload.biodataImageUpload, editBiodata);
 router.post('/create-payment', createBiodataPaymentOrder);
 router.post('/verify-payment', verifyBiodataPayment);
 router.post('/complete-registration/:orderId', upload.biodataImageUpload, completeBiodataRegistration);
