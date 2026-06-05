@@ -26,7 +26,8 @@ const {
   resendSharavakOtp,
   getCheckShravk,
   checkApplicationDuplicate,
-  getBulkShravakReviewSangh
+  getBulkShravakReviewSangh,
+  createJainShravak
 } = require('../../controller/UserRegistrationControllers/jainAdharController');
 const { authMiddleware, canReviewJainAadhar } = require('../../middlewares/authMiddlewares');
 const { canEditJainAadhar } = require('../../middlewares/jainAadharEditPermissions');
@@ -58,6 +59,14 @@ router.post(
   upload.jainAadharDocs,
   //checkExistingApplication,
   createJainAadhar
+);
+
+router.post(
+  "/jainShravak/apply",
+  // applicationLimiter,
+  upload.jainAadharDocs,
+  //checkExistingApplication,
+  createJainShravak,
 );
 // routes/jainAadharRoutes.js
 router.post('/send-email-otp', sendEmailVerificationOtp);

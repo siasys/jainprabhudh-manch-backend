@@ -675,6 +675,302 @@ const createJainAadhar = asyncHandler(async (req, res) => {
     return errorResponse(res, error.message, 500);
   }
 });
+
+// New Logic
+const createJainShravak = asyncHandler(async (req, res) => {
+  try {
+    const number = req.body.contactDetails?.number;
+    const enteredOtp = req.body.otp;
+
+    if (!number || !enteredOtp) {
+      return errorResponse(
+        res,
+        "Mobile number and OTP are required for verification",
+        400,
+      );
+    }
+
+    const otpEntry = await SharavakOtpVerification.findOne({
+      phoneNumber: number,
+    });
+
+    if (!otpEntry)
+      return errorResponse(res, "No OTP sent to this mobile number", 404);
+
+    if (otpEntry.code !== enteredOtp)
+      return errorResponse(res, "Incorrect OTP", 400);
+
+    if (new Date() > otpEntry.expiresAt)
+      return errorResponse(res, "OTP expired", 400);
+
+    otpEntry.isVerified = true;
+    await otpEntry.save();
+    req.body.isPhoneVerified = true;
+
+    const { location } = req.body;
+
+    if (!location || !location.state) {
+      return errorResponse(res, "State is required in location data", 400);
+    }
+
+    // ✅ Name Formatting
+    if (req.body.name) {
+      let fullName = req.body.name.trim();
+      const nameParts = fullName.split(" ");
+
+      if (nameParts.length >= 2) {
+        const firstName = nameParts[0];
+        const lastName = nameParts[nameParts.length - 1];
+        const lowerFull = fullName.toLowerCase();
+
+        if (!lowerFull.includes("jain")) {
+          req.body.name = `${firstName} Jain (${lastName})`;
+        } else {
+          req.body.name = fullName;
+        }
+      }
+    }
+
+    // ✅ Gender + DOB validation only
+    const gender = (req.body.gender || "").toLowerCase().trim();
+    if (!gender) return errorResponse(res, "Gender is required", 400);
+
+    const dob = req.body.dob || req.body.dateOfBirth;
+    if (!dob) return errorResponse(res, "Date of birth is required", 400);
+
+    const birthDate = new Date(dob);
+    if (isNaN(birthDate.getTime())) {
+      return errorResponse(
+        res,
+        "Invalid date of birth format. Use YYYY-MM-DD",
+        400,
+      );
+    }
+
+    // ✅ Normalize location
+    const norm = {
+      country: (location.country || "India").trim(),
+      state: (location.state || "").trim(),
+      district: (location.district || "").trim(),
+      city: (location.city || "").trim(),
+    };
+
+    const cityRegex = norm.city
+      ? new RegExp("^" + escapeRegex(norm.city) + "$", "i")
+      : null;
+
+    const districtRegex = norm.district
+      ? new RegExp("^" + escapeRegex(norm.district) + "$", "i")
+      : null;
+
+    const stateRegex = norm.state
+      ? new RegExp("^" + escapeRegex(norm.state) + "$", "i")
+      : null;
+
+    const countryRegex = norm.country
+      ? new RegExp("^" + escapeRegex(norm.country) + "$", "i")
+      : null;
+
+    // ✅ President check
+    const hasActivePresident = (sangh) => {
+      if (!sangh) return false;
+
+      if (
+        !Array.isArray(sangh.officeBearers) ||
+        sangh.officeBearers.length === 0
+      ) {
+        return false;
+      }
+
+      return sangh.officeBearers.some(
+        (ob) => ob.role === "president" && ob.userId != null,
+      );
+    };
+
+    let applicationLevel = null;
+    let reviewingSanghId = null;
+    let reviewingSangh = null;
+    let targetSanghType = null;
+
+    /*
+      ✅ NEW LOGIC:
+      1. Frontend se selectedSanghId aaye to first priority
+      2. Agar selected city sangh valid nahi / president nahi
+         to city → district → state → country → superadmin
+      3. Ab sanghType age/gender se force nahi hoga
+      4. Jis sangh me application ja rahi hai, uska sanghType save hoga
+    */
+
+    // ✅ Step 1: Frontend selected sangh
+    const selectedSanghId =
+      req.body.selectedSanghId || req.body.reviewingSanghId || null;
+
+    if (selectedSanghId) {
+      const selectedSangh = await HierarchicalSangh.findOne({
+        _id: selectedSanghId,
+        status: "active",
+      }).exec();
+
+      if (selectedSangh && hasActivePresident(selectedSangh)) {
+        reviewingSangh = selectedSangh;
+        reviewingSanghId = selectedSangh._id;
+        applicationLevel = selectedSangh.level;
+        targetSanghType =
+          selectedSangh.sanghType || req.body.sanghType || "main";
+      }
+    }
+
+    // ✅ Any sanghType search helper
+    const findAnyTypeSangh = async (level, locFilters = {}) => {
+      return await HierarchicalSangh.findOne({
+        level,
+        status: "active",
+        ...locFilters,
+      }).exec();
+    };
+
+    // ✅ Step 2: City fallback
+    if (!reviewingSangh && norm.city && norm.district && norm.state) {
+      const citySangh = await findAnyTypeSangh("city", {
+        "location.city": cityRegex,
+        "location.district": districtRegex,
+        "location.state": stateRegex,
+      });
+
+      if (citySangh && hasActivePresident(citySangh)) {
+        reviewingSangh = citySangh;
+        reviewingSanghId = citySangh._id;
+        applicationLevel = "city";
+        targetSanghType = citySangh.sanghType || req.body.sanghType || "main";
+      }
+    }
+
+    // ✅ Step 3: District fallback
+    if (!reviewingSangh && norm.district && norm.state) {
+      const districtSangh = await findAnyTypeSangh("district", {
+        "location.district": districtRegex,
+        "location.state": stateRegex,
+      });
+
+      if (districtSangh && hasActivePresident(districtSangh)) {
+        reviewingSangh = districtSangh;
+        reviewingSanghId = districtSangh._id;
+        applicationLevel = "district";
+        targetSanghType =
+          districtSangh.sanghType || req.body.sanghType || "main";
+      }
+    }
+
+    // ✅ Step 4: State fallback
+    if (!reviewingSangh && norm.state) {
+      const stateSangh = await findAnyTypeSangh("state", {
+        "location.state": stateRegex,
+      });
+
+      if (stateSangh && hasActivePresident(stateSangh)) {
+        reviewingSangh = stateSangh;
+        reviewingSanghId = stateSangh._id;
+        applicationLevel = "state";
+        targetSanghType = stateSangh.sanghType || req.body.sanghType || "main";
+      }
+    }
+
+    // ✅ Step 5: Country fallback
+    if (!reviewingSangh) {
+      const countrySangh = await findAnyTypeSangh("country", {
+        "location.country": countryRegex,
+      });
+
+      if (countrySangh && hasActivePresident(countrySangh)) {
+        reviewingSangh = countrySangh;
+        reviewingSanghId = countrySangh._id;
+        applicationLevel = "country";
+        targetSanghType =
+          countrySangh.sanghType || req.body.sanghType || "main";
+      } else {
+        applicationLevel = "superadmin";
+        reviewingSanghId = null;
+        targetSanghType = req.body.sanghType || "main";
+      }
+    }
+
+    // ✅ Country office bearer → superadmin
+    if (req.body.isOfficeBearer && applicationLevel === "country") {
+      applicationLevel = "superadmin";
+      reviewingSanghId = null;
+    }
+
+    // ✅ Safety fallback
+    if (!applicationLevel) {
+      applicationLevel = "superadmin";
+      reviewingSanghId = null;
+      targetSanghType = req.body.sanghType || "main";
+    }
+
+    // ─────────────────────────────────────────
+    // Prepare & Save
+    // ─────────────────────────────────────────
+    const applicantUserId = req.body.applicantUserId || req.user._id;
+
+    const jainAadharData = {
+      ...req.body,
+      userId: applicantUserId,
+      createdBy: req.user._id,
+      applicationLevel,
+      reviewingSanghId,
+      targetSanghType,
+      status: "pending",
+      location: {
+        country: norm.country,
+        state: norm.state,
+        district: norm.district,
+        city: norm.city,
+        address: location.address || "",
+        pinCode: location.pinCode || "",
+      },
+      reviewHistory: [
+        {
+          action: "submitted",
+          by: req.user._id,
+          level: "user",
+          remarks: "Application submitted",
+          timestamp: new Date(),
+        },
+      ],
+    };
+
+    if (req.files?.userProfile?.[0]) {
+      const profileUrl =
+        req.files.userProfile[0].location || req.files.userProfile[0].path;
+
+      jainAadharData.userProfile = convertS3UrlToCDN(profileUrl);
+    }
+
+    if (!req.files?.userProfile?.[0]) {
+      return errorResponse(res, "Profile photo is required", 400);
+    }
+
+    const newJainAadhar = await JainAadhar.create(jainAadharData);
+
+    const user = await User.findById(req.user._id);
+
+    if (user && user.jainAadharStatus !== "verified") {
+      await User.findByIdAndUpdate(req.user._id, {
+        jainAadharStatus: "pending",
+        jainAadharApplication: newJainAadhar._id,
+      });
+    }
+
+    return successResponse(
+      res,
+      newJainAadhar,
+      "Application submitted successfully",
+      201,
+    );
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
+});
 const sendSharavakOtp = asyncHandler(async (req, res) => {
   let { phoneNumber, name } = req.body;
 
@@ -1033,13 +1329,12 @@ const getAllApplications = asyncHandler(async (req, res) => {
     }
 
     const applications = await JainAadhar.find(filter)
-      .select(
-        "name userProfile status applicationLevel reviewingSanghId createdAt userId contactDetails location jainAadharNumber",
-      )
+      // ✅ select remove kiya, ab full data aayega
       .populate(
         "userId",
-        "firstName lastName fullName email accountType businessName",
+        "firstName lastName fullName email accountType businessName profilePicture phoneNumber jainAadharStatus",
       )
+      .populate("reviewingSanghId", "name level sanghType location")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -1479,14 +1774,33 @@ const getApplicationStats = asyncHandler(async (req, res) => {
 const getApplicationDetails = asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
+
     const application = await JainAadhar.findById(id)
-      .populate('userId', 'firstName lastName email mobile');
+      .populate(
+        "userId",
+        "firstName lastName fullName email mobile phoneNumber accountType profilePicture",
+      )
+      .lean();
+
     if (!application) {
-      return errorResponse(res, 'Application not found', 404);
+      return res.status(404).json({
+        success: false,
+        message: "Application not found",
+      });
     }
-    return successResponse(res, application, 'Application details retrieved successfully');
+
+    return res.status(200).json({
+      success: true,
+      message: "Application details retrieved successfully",
+      data: application,
+    });
   } catch (error) {
-    return errorResponse(res, 'Error fetching application details', 500, error.message);
+    console.error("Error fetching application details:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching application details",
+      error: error.message,
+    });
   }
 });
 
@@ -1827,4 +2141,5 @@ module.exports = {
   resendSharavakOtp,
   checkApplicationDuplicate,
   getBulkShravakReviewSangh,
+  createJainShravak,
 };
