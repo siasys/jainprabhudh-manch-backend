@@ -4,6 +4,8 @@ const { authMiddleware } = require('../../middlewares/authMiddlewares');
 const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
+router.get("/:postId", getPostById);
+
 // Apply authentication middleware to all routes
 router.use(authMiddleware);
 // Rate limiting for post creation
@@ -33,7 +35,6 @@ router.put('/:postId/unlike', unlikePost); // Unlike a post
 router.delete('/:postId', deletePost); // Delete a post
 router.get('/user/:userId/posts', getPostsByUser);
 
-router.get('/:postId', getPostById);
 router.get('/:postId/likes', getLikedUsers);
 // routes/postRoutes.js
 router.post('/:postId/vote', voteOnPoll);
