@@ -580,82 +580,121 @@ const getPostsByUser = asyncHandler(async (req, res) => {
 
 const getPostById = asyncHandler(async (req, res) => {
   const { postId } = req.params;
-  const userId = req.user.id;
 
-  const user = await User.findById(userId);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
+  const userId = req.user?._id || req.user?.id || req.query?.userId || null;
+
   if (!postId) {
-    return res.status(400).json({ error: 'Post ID is required' });
+    return res.status(400).json({ error: "Post ID is required" });
   }
 
   await redisClient.del(`post:${postId}`);
 
-  const post = await getOrSetCache(`post:${postId}`, async () => {
-    let query = Post.findById(postId)
-      .populate('user', 'firstName lastName fullName profilePicture accountType businessName sadhuName tirthName')
-      .populate({
-        path: 'comments.user',
-        select: 'firstName lastName fullName profilePicture accountType businessName sadhuName tirthName',
-      })
-      .populate({
-        path: 'comments.replies.user',
-        model: 'User',
-        select: 'firstName lastName fullName profilePicture accountType businessName sadhuName tirthName',
-      })
-      .populate('sanghId', 'name sanghImage')
-      .populate('panchId', 'name sanghImage');
-
-    return await query;
-  }, 3600);
+  const post = await getOrSetCache(
+    `post:${postId}`,
+    async () => {
+      return await Post.findById(postId)
+        .populate(
+          "user",
+          "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
+        )
+        .populate({
+          path: "comments.user",
+          select:
+            "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
+        })
+        .populate({
+          path: "comments.replies.user",
+          model: "User",
+          select:
+            "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
+        })
+        .populate("sanghId", "name sanghImage")
+        .populate("panchId", "name sanghImage");
+    },
+    3600,
+  );
 
   if (!post) {
-    return res.status(404).json({ error: 'Post not found' });
+    return res.status(404).json({ error: "Post not found" });
   }
 
-  // function to get proper display name
   const getDisplayName = (u) => {
-    if (!u) return 'User';
-    if (u.accountType === 'business') return u.businessName || u.fullName || 'User';
-    if (u.accountType === 'sadhu') return u.sadhuName || u.fullName || 'User';
-    if (u.accountType === 'tirth') return u.tirthName || u.fullName || 'User';
-    return u.fullName || 'User';
+    if (!u) return "User";
+    if (u.accountType === "business")
+      return u.businessName || u.fullName || "User";
+    if (u.accountType === "sadhu") return u.sadhuName || u.fullName || "User";
+    if (u.accountType === "tirth") return u.tirthName || u.fullName || "User";
+    return u.fullName || "User";
   };
+
+  const hasUserLiked = userId
+    ? post.likes?.some((like) => like.toString() === userId.toString())
+    : false;
 
   res.json({
     id: post._id,
+    _id: post._id,
+
     caption: post.caption,
     postType: post.postType,
+
     image: post.media?.[0]?.url,
+    media: post.media || [],
+
     likes: post.likes.map((like) => like.toString()),
     likeCount: post.likes.length,
+    isLiked: hasUserLiked,
+
     comments: post.comments.map((comment) => ({
       id: comment._id,
+      _id: comment._id,
       text: comment.text,
       user: {
         id: comment.user?._id,
+        _id: comment.user?._id,
         name: getDisplayName(comment.user),
+        fullName: getDisplayName(comment.user),
         avatar: comment.user?.profilePicture,
+        profilePicture: comment.user?.profilePicture,
       },
       createdAt: comment.createdAt,
       replies: comment.replies.map((reply) => ({
         id: reply._id,
+        _id: reply._id,
         text: reply.text,
         user: {
           id: reply.user?._id,
+          _id: reply.user?._id,
           name: getDisplayName(reply.user),
+          fullName: getDisplayName(reply.user),
           avatar: reply.user?.profilePicture,
+          profilePicture: reply.user?.profilePicture,
         },
         createdAt: reply.createdAt,
       })),
     })),
+
     commentCount: post.comments.length,
+
     userId: post.user?._id,
     userName: getDisplayName(post.user),
     profilePicture: post.user?.profilePicture,
+
+    user: post.user
+      ? {
+          _id: post.user._id,
+          id: post.user._id,
+          fullName: getDisplayName(post.user),
+          profilePicture: post.user.profilePicture,
+          accountType: post.user.accountType,
+          businessName: post.user.businessName,
+          sadhuName: post.user.sadhuName,
+          tirthName: post.user.tirthName,
+        }
+      : null,
+
     type: post.type || null,
-    // ── Sangh/Panch populated data ──
+
     sanghId: post.sanghId?._id || post.sanghId || null,
     sanghName: post.sanghId?.name || null,
     sanghImage: post.sanghId?.sanghImage || null,
@@ -669,6 +708,7 @@ const getPostById = asyncHandler(async (req, res) => {
     pollVotes: post.pollVotes || {},
     votedUsers: post.votedUsers || [],
     pollDuration: post.pollDuration,
+
     createdAt: post.createdAt,
   });
 });
