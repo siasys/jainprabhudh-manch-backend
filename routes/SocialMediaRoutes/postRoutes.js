@@ -4,6 +4,8 @@ const { authMiddleware } = require('../../middlewares/authMiddlewares');
 const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
+router.get("/videos", getAllVideoPosts);
+
 router.get("/:postId", getPostById);
 
 // Apply authentication middleware to all routes
@@ -25,7 +27,6 @@ router.post("/:postId/share", sharePost);
 router.post("/:postId/save", toggleSavePost);
 
 router.get('/', getAllPosts);
-router.get('/videos', getAllVideoPosts);
 router.get('/combined-feed', getCombinedFeed);
 router.get('/hashtags/search', searchHashtags);
 // Get optimized combined feed with cursor-based pagination

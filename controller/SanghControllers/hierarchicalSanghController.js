@@ -1601,7 +1601,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             name: newMember.name,
           });
 
-          // ✅ STEP 1: Add MEMBER role first (Index 0)
+          // STEP 1: Add MEMBER role first (Index 0)
           await User.findByIdAndUpdate(user._id, {
             $push: {
               sanghRoles: {
@@ -1614,7 +1614,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             },
           });
 
-          // ✅ STEP 2: Add HONORARY MEMBER role if applicable (Index 1)
+          // STEP 2: Add HONORARY MEMBER role if applicable (Index 1)
           if (
             (member.isHonorary === "true" || member.isHonorary === true) &&
             member.localSangh?.sanghId
