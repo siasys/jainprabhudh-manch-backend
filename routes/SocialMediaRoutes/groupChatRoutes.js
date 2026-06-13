@@ -1,8 +1,37 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const upload = require('../../middlewares/upload');
-const {createGroupChat, getGroupDetails, getAllGroups, getAllGroupChats, sendGroupMessage, getGroupMessages, deleteGroupMessage, updateGroupDetails, updateGroupMessage, leaveGroup, updateGroupIcon, checkMembership, addMembers, updateGroupName, createOrFindGotraGroup, getAllGotraGroups, getUserGotraGroups, deleteGroupChat, makeAdmin, createOrFindHierarchicalSanghGroup, removeUserFromGroup, deleteGroupMessageOnlyForMe, clearAllGroupMessagesForMe, removeAdmin, createOrFindCityGroup, createSanghGlobalGroup } = require('../../controller/SocialMediaControllers/groupChatController');
-const {authenticate} = require('../../middlewares/authMiddlewares')
+const upload = require("../../middlewares/upload");
+const {
+  createGroupChat,
+  getGroupDetails,
+  getAllGroups,
+  getAllGroupChats,
+  sendGroupMessage,
+  getGroupMessages,
+  deleteGroupMessage,
+  updateGroupDetails,
+  updateGroupMessage,
+  leaveGroup,
+  updateGroupIcon,
+  checkMembership,
+  addMembers,
+  updateGroupName,
+  createOrFindGotraGroup,
+  getAllGotraGroups,
+  getUserGotraGroups,
+  deleteGroupChat,
+  makeAdmin,
+  createOrFindHierarchicalSanghGroup,
+  removeUserFromGroup,
+  deleteGroupMessageOnlyForMe,
+  clearAllGroupMessagesForMe,
+  removeAdmin,
+  createOrFindCityGroup,
+  createSanghGlobalGroup,
+  getGroupUnreadCounts,
+  markGroupMessagesRead,
+} = require("../../controller/SocialMediaControllers/groupChatController");
+const { authenticate } = require("../../middlewares/authMiddlewares");
 // Apply authentication to all routes
 router.use(authenticate);
 
@@ -12,52 +41,67 @@ router.post(
   upload.compressFiles,
   upload.uploadToS3,
   createGroupChat,
-);router.post('/create-gotra-group', upload.single('groupImage'), createOrFindGotraGroup);
-router.post("/create-hierarchical-sangh-group", createOrFindHierarchicalSanghGroup);
+);
+router.post(
+  "/create-gotra-group",
+  upload.single("groupImage"),
+  createOrFindGotraGroup,
+);
+router.post(
+  "/create-hierarchical-sangh-group",
+  createOrFindHierarchicalSanghGroup,
+);
 router.post("/create-sangh-global-group", createSanghGlobalGroup);
-router.post('/remove-user', removeUserFromGroup);
-router.post('/create-city-group', upload.single('groupImage'), createOrFindCityGroup);
+router.post("/remove-user", removeUserFromGroup);
+router.post(
+  "/create-city-group",
+  upload.single("groupImage"),
+  createOrFindCityGroup,
+);
 
 // Get all groups for a user
-router.get('/user-groups', getAllGroups);
-router.get('/gotra-groups', getUserGotraGroups);
-
+router.get("/user-groups", getAllGroups);
+router.get("/gotra-groups", getUserGotraGroups);
+router.get("/unread-counts", getGroupUnreadCounts);
 // Get group details
-router.get('/:groupId', getGroupDetails);
+router.get("/:groupId", getGroupDetails);
 // Get all group chats
-router.get('/all-chats', getAllGroupChats);
+router.get("/all-chats", getAllGroupChats);
 // Send Group Message
 router.post(
   "/send-message",
   upload.single("chatImage"),
-  upload.compressFiles, // ✅ ADD THIS
-  upload.uploadToS3, // ✅ ADD THIS
+  upload.compressFiles,
+  upload.uploadToS3,
   sendGroupMessage,
-);// Get All Messages for a Group
-router.get('/messages/:groupId', getGroupMessages);
-router.delete('/delete/:groupId', deleteGroupChat);
+); // Get All Messages for a Group
+router.get("/messages/:groupId", getGroupMessages);
+router.post("/mark-read/:groupId", markGroupMessagesRead);
+router.delete("/delete/:groupId", deleteGroupChat);
 // Delete Group Message
-router.delete('/messages/onlyme/clearall/:groupId', clearAllGroupMessagesForMe);
-router.delete('/messages/:groupId/:messageId', deleteGroupMessage);
-router.delete('/messages/onlyme/:groupId/:messageId', deleteGroupMessageOnlyForMe);
-
+router.delete("/messages/onlyme/clearall/:groupId", clearAllGroupMessagesForMe);
+router.delete("/messages/:groupId/:messageId", deleteGroupMessage);
+router.delete(
+  "/messages/onlyme/:groupId/:messageId",
+  deleteGroupMessageOnlyForMe,
+);
 
 // Update Group Details (Name, Image, Members)
-router.put('/update/:groupId', upload.single('groupImage'), updateGroupDetails);
-router.put('/make-admin/:groupId', makeAdmin);
-router.put('/remove-admin/:groupId', removeAdmin);
+router.put("/update/:groupId", upload.single("groupImage"), updateGroupDetails);
+router.put("/make-admin/:groupId", makeAdmin);
+router.put("/remove-admin/:groupId", removeAdmin);
 
 // Leave group
-router.post('/leave/:groupId', leaveGroup);
+router.post("/leave/:groupId", leaveGroup);
 // Update group icon
-router.post('/icon/:groupId', upload.single('groupIcon'), updateGroupIcon);
+router.post("/icon/:groupId", upload.single("groupIcon"), updateGroupIcon);
 // Check group membership
-router.get('/check-membership/:groupId', checkMembership);
+router.get("/check-membership/:groupId", checkMembership);
 // Add members to group
-router.post('/add-members/:groupId', addMembers);
+router.post("/add-members/:groupId", addMembers);
 // Update group name
-router.put('/update-name/:groupId', updateGroupName);
+router.put("/update-name/:groupId", updateGroupName);
 // Update Group Message
-router.put('/update-messages/:groupId/:messageId', updateGroupMessage);
+router.put("/update-messages/:groupId/:messageId", updateGroupMessage);
 
 module.exports = router;

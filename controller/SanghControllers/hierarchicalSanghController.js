@@ -536,50 +536,52 @@ const getAllSangh = asyncHandler(async (req, res) => {
 
 const getAllSanghs = asyncHandler(async (req, res) => {
   try {
-    const { query } = req.query; // Fetch the query from request
+    const { query, level, sanghType, state, district, city } = req.query;
 
-    // If there's a search query, filter based on the query in name or location (country, state, etc.)
-    const searchCriteria = query
-      ? {
-          $or: [
-            { name: { $regex: query, $options: "i" } }, // Match name with case insensitive regex
-            {
-              location: {
-                $or: [
-                  { country: { $regex: query, $options: "i" } },
-                  { state: { $regex: query, $options: "i" } },
-                  { district: { $regex: query, $options: "i" } },
-                  { city: { $regex: query, $options: "i" } },
-                  { area: { $regex: query, $options: "i" } },
-                ],
-              },
-            },
-          ],
-        }
-      : {}; // If no query, return all
+    // Base criteria — optional direct filters (sab optional, na aaye to ignore)
+    const searchCriteria = {};
 
-    const sanghs = await HierarchicalSangh.find(searchCriteria);
+    if (level) searchCriteria.level = level;
+    if (sanghType) searchCriteria.sanghType = sanghType;
+    if (state) searchCriteria["location.state"] = new RegExp(`^${state}$`, "i");
+    if (district)
+      searchCriteria["location.district"] = new RegExp(`^${district}$`, "i");
+    if (city) searchCriteria["location.city"] = new RegExp(`^${city}$`, "i");
+
+    // Text search (jaisa pehle tha) — par ab location keys SAHI tarike se
+    if (query) {
+      searchCriteria.$or = [
+        { name: { $regex: query, $options: "i" } },
+        { "location.country": { $regex: query, $options: "i" } },
+        { "location.state": { $regex: query, $options: "i" } },
+        { "location.district": { $regex: query, $options: "i" } },
+        { "location.city": { $regex: query, $options: "i" } },
+        { "location.area": { $regex: query, $options: "i" } },
+      ];
+    }
+
+    // .lean() -> plain JS objects, Mongoose overhead nahi -> fast & light
+    const sanghs = await HierarchicalSangh.find(searchCriteria).lean();
 
     if (!sanghs.length) {
       return errorResponse(res, "No Sangh found", 404);
     }
 
-    // Convert S3 URLs to CDN URLs for each officeBearer's photo
+    // Convert S3 URLs to CDN URLs for each officeBearer's photo (SAME as before)
     sanghs.forEach((sangh) => {
       if (sangh.officeBearers && sangh.officeBearers.length > 0) {
         sangh.officeBearers.forEach((bearer) => {
           if (bearer.photo) {
-            bearer.photo = convertS3UrlToCDN(bearer.photo); // Apply the conversion function here
+            bearer.photo = convertS3UrlToCDN(bearer.photo);
           }
         });
       }
     });
 
-    // Sort the Sanghs to bring matching results first
+    // Sort the Sanghs to bring matching results first (SAME as before)
     sanghs.sort((a, b) => {
-      const queryLower = query ? query.toLowerCase() : ""; // Lowercased query for comparison
+      const queryLower = query ? query.toLowerCase() : "";
 
-      // Check if 'a' or 'b' has relevant fields to search
       const aMatch =
         (a.name && a.name.toLowerCase().includes(queryLower)) ||
         (a.location &&
@@ -616,7 +618,6 @@ const getAllSanghs = asyncHandler(async (req, res) => {
           b.location.area &&
           b.location.area.toLowerCase().includes(queryLower));
 
-      // Prioritize matches
       if (aMatch && !bMatch) return -1;
       if (!aMatch && bMatch) return 1;
       return 0;

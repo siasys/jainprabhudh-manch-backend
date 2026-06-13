@@ -492,10 +492,19 @@ exports.getAllGroups = async (req, res) => {
     if (gotraGroup) allGroups.push(gotraGroup);
 
     // ✅ Add messageCount
-    allGroups = allGroups.map((group) => ({
-      ...group.toObject(),
-      messageCount: group.groupMessages ? group.groupMessages.length : 0,
+  allGroups = allGroups.map((group) => {
+    const obj = group.toObject();
+
+    obj.groupMessages = (obj.groupMessages || []).map((msg) => ({
+      ...msg,
+      message: msg.message ? decrypt(msg.message) : msg.message,
     }));
+
+    return {
+      ...obj,
+      messageCount: obj.groupMessages ? obj.groupMessages.length : 0,
+    };
+  });
 
     res.status(200).json({ groups: allGroups });
   } catch (error) {
@@ -1402,5 +1411,122 @@ exports.removeAdmin = async (req, res) => {
   } catch (error) {
     console.error("Error removing admin:", error);
     return res.status(500).send("Server error");
+  }
+};
+// ============================================================================
+// ✅ NEW: Group read/unread APIs (existing logic untouched, sirf add-on)
+// ============================================================================
+ 
+// Helper: ek group ke andar current user ka unread count nikaalo
+const computeGroupUnread = (group, uid) => {
+  let count = 0;
+  (group.groupMessages || []).forEach((msg) => {
+    const senderId = msg.sender
+      ? (msg.sender._id ? msg.sender._id.toString() : msg.sender.toString())
+      : null;
+    if (senderId === uid) return; // apne msg unread nahi hote
+    const delFor = (msg.deletedFor || []).map((id) => id.toString());
+    if (delFor.includes(uid)) return; // mere liye deleted msg skip
+    const alreadyRead = (msg.readBy || []).some(
+      (r) => r.user && r.user.toString() === uid,
+    );
+    if (!alreadyRead) count++;
+  });
+  return count;
+};
+ 
+// ✅ MARK READ: user ne group khola/dekha -> us group ke saare msg read mark
+exports.markGroupMessagesRead = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const userId =
+      req.accountType === "sangh" ? req.sangh?._id : req.user?._id;
+ 
+    if (!userId) {
+      return errorResponse(res, "User or Sangh ID not found", 400);
+    }
+ 
+    const group = await GroupChat.findById(groupId);
+    if (!group) {
+      return errorResponse(res, "Group not found", 404);
+    }
+ 
+    const isMember = group.groupMembers.some(
+      (m) => m.user.toString() === userId.toString(),
+    );
+    if (!isMember) {
+      return errorResponse(res, "Not authorized for this group", 403);
+    }
+ 
+    const uid = userId.toString();
+    let changed = false;
+ 
+    group.groupMessages.forEach((msg) => {
+      const delFor = (msg.deletedFor || []).map((id) => id.toString());
+      if (delFor.includes(uid)) return; // mere liye deleted skip
+ 
+      const alreadyRead = (msg.readBy || []).some(
+        (r) => r.user && r.user.toString() === uid,
+      );
+      if (!alreadyRead) {
+        msg.readBy.push({ user: userId, readAt: new Date() });
+        changed = true;
+      }
+    });
+ 
+    if (changed) await group.save();
+ 
+    // ✅ Socket: doosron ko seen-status + khud ko unread=0 (instant)
+    try {
+      const io = getIo();
+      io.to(`group:${groupId}`).emit("groupMessageReadStatus", {
+        groupId,
+        readBy: uid,
+        readAt: new Date(),
+      });
+      io.to(uid).emit("groupUnreadCountUpdate", { groupId, unreadCount: 0 });
+    } catch (e) {
+      // socket fail ho to bhi response break na ho
+    }
+ 
+    return successResponse(res, { groupId, unreadCount: 0 }, "Messages marked as read", 200);
+  } catch (error) {
+    console.error("markGroupMessagesRead error:", error);
+    return errorResponse(res, error.message, 500);
+  }
+};
+ 
+// ✅ UNREAD COUNTS: saare groups ka per-group unread + total
+exports.getGroupUnreadCounts = async (req, res) => {
+  try {
+    const userId =
+      req.accountType === "sangh" ? req.sangh?._id : req.user?._id;
+ 
+    if (!userId) {
+      return errorResponse(res, "User or Sangh ID not found", 400);
+    }
+    const uid = userId.toString();
+ 
+    // sirf zaroori fields (light query)
+    const groups = await GroupChat.find({ "groupMembers.user": userId }).select(
+      "groupName groupMessages.sender groupMessages.readBy groupMessages.deletedFor",
+    );
+ 
+    let totalUnread = 0;
+    const perGroup = groups.map((group) => {
+      const unreadCount = computeGroupUnread(group, uid);
+      totalUnread += unreadCount;
+      return { groupId: group._id, unreadCount };
+    });
+ 
+    return successResponse(
+      res,
+      { totalUnread, groups: perGroup },
+      "Group unread counts fetched",
+      200,
+    );
+  } catch (error) {
+    console.error("getGroupUnreadCounts error:", error);
+    return errorResponse(res, error.message, 500);
   }
 };

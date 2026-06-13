@@ -1356,6 +1356,83 @@ const getAllApplications = asyncHandler(async (req, res) => {
     );
   }
 });
+
+const getAllShravakApplications = asyncHandler(async (req, res) => {
+  try {
+    const { search, level, sanghId, status, page = 1, limit = 20 } = req.query;
+
+    const filter = {};
+
+    if (search && search.trim() !== "") {
+      filter.name = { $regex: search.trim(), $options: "i" };
+    }
+
+    if (level && level.trim() !== "") {
+      filter.applicationLevel = level.toLowerCase();
+    }
+
+    if (sanghId && sanghId.trim() !== "") {
+      filter.$or = [
+        { reviewingSanghId: sanghId },
+        { reviewingSanghId: null },
+        { reviewingSanghId: { $exists: false } },
+      ];
+    }
+
+    if (status && status.trim() !== "") {
+      filter.status = status.toLowerCase();
+    }
+
+    const parsedPage = Math.max(parseInt(page) || 1, 1);
+    const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    const [applications, total] = await Promise.all([
+      JainAadhar.find(filter)
+        .select(
+          "name userProfile status applicationLevel reviewingSanghId createdAt userId contactDetails location jainAadharNumber",
+        )
+        .populate(
+          "userId",
+          "firstName lastName fullName email accountType businessName profilePicture phoneNumber jainAadharStatus",
+        )
+        .populate("reviewingSanghId", "name level sanghType location")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parsedLimit)
+        .lean(),
+
+      JainAadhar.countDocuments(filter),
+    ]);
+
+    return successResponse(
+      res,
+      {
+        applications,
+        pagination: {
+          currentPage: parsedPage,
+          totalPages: Math.ceil(total / parsedLimit),
+          total,
+          limit: parsedLimit,
+          hasNextPage: parsedPage < Math.ceil(total / parsedLimit),
+          hasPrevPage: parsedPage > 1,
+        },
+      },
+      level || sanghId
+        ? "Filtered applications retrieved successfully"
+        : "Applications retrieved successfully",
+      200,
+      total,
+    );
+  } catch (error) {
+    return errorResponse(
+      res,
+      "Error fetching applications",
+      500,
+      error.message,
+    );
+  }
+});
 // Function to generate unique Jain Aadhar number
 const generateJainAadharNumber = async () => {
   while (true) {
@@ -2142,4 +2219,5 @@ module.exports = {
   checkApplicationDuplicate,
   getBulkShravakReviewSangh,
   createJainShravak,
+  getAllShravakApplications,
 };

@@ -38,6 +38,12 @@ module.exports = {
     "Tinsukia",
   ],
 
+  "Andaman and Nicobar Islands": [
+    "Nicobars",
+    "North And Middle Andaman",
+    "South Andamans"
+  ],
+
   Bihar: [
     "Ara",
     "Barauni",
@@ -69,7 +75,10 @@ module.exports = {
     "Siwan",
   ],
 
-  "Chandigarh (union territory)": ["Chandigarh"],
+   "Chandigarh": [
+    "Chandigarh"
+  ],
+
   Chhattisgarh: [
     "Ambikapur",
     "Bhilai",
@@ -109,7 +118,12 @@ module.exports = {
     "Manendragarh",
   ],
 
-  "Daman and Diu": ["Daman", "Diu", "Silvassa"],
+    "Dadra and Nagar Haveli and Daman and Diu": [
+    "Dadra And Nagar Haveli",
+    "Daman",
+    "Diu"
+  ],
+
 
   Delhi: ["Delhi", "New Delhi"],
 
@@ -185,17 +199,27 @@ module.exports = {
     "Una",
   ],
 
-  "Jammu and Kashmir": [
+ "Jammu and Kashmir": [
     "Anantnag",
-    "Baramula",
+    "Bandipora",
+    "Baramulla",
+    "Budgam",
     "Doda",
-    "Gulmarg",
+    "Ganderbal",
     "Jammu",
     "Kathua",
-    "Punch",
+    "Kishtwar",
+    "Kulgam",
+    "Kupwara",
+    "Poonch",
+    "Pulwama",
     "Rajouri",
+    "Ramban",
+    "Reasi",
+    "Samba",
+    "Shopian",
     "Srinagar",
-    "Udhampur",
+    "Udhampur"
   ],
 
   Jharkhand: [
@@ -257,7 +281,15 @@ module.exports = {
     "Thrissur",
   ],
 
-  Ladakh: ["Kargil", "Leh"],
+    "Ladakh": [
+    "Kargil",
+    "Leh Ladakh"
+  ],
+
+  "Lakshadweep": [
+    "Lakshadweep District"
+  ],
+
 
   "Madhya Pradesh": [
     "Ashok Nagar",
@@ -430,7 +462,12 @@ module.exports = {
     "Udayagiri",
   ],
 
-  Puducherry: ["Karaikal", "Mahe", "Puducherry", "Yanam"],
+  "Puducherry": [
+    "Puducherry",
+    "Karaikal",
+    "Mahe",
+    "Yanam"
+  ],
 
   Punjab: [
     "Amritsar",

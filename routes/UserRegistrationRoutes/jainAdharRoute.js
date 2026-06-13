@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { 
+const {
   createJainAadhar,
   getApplicationStatus,
   getAllApplications,
@@ -27,8 +27,9 @@ const {
   getCheckShravk,
   checkApplicationDuplicate,
   getBulkShravakReviewSangh,
-  createJainShravak
-} = require('../../controller/UserRegistrationControllers/jainAdharController');
+  createJainShravak,
+  getAllShravakApplications,
+} = require("../../controller/UserRegistrationControllers/jainAdharController");
 const { authMiddleware, canReviewJainAadhar } = require('../../middlewares/authMiddlewares');
 const { canEditJainAadhar } = require('../../middlewares/jainAadharEditPermissions');
 const { canReviewJainAadharByLocation } = require('../../middlewares/sanghPermissions');
@@ -96,6 +97,10 @@ router.get(
     query('sortOrder').optional().isIn(['asc', 'desc']).withMessage('Invalid sort order')
   ],
   getAllApplications
+);
+router.get(
+  "/total-applications",
+  getAllShravakApplications,
 );
 router.get( "/check-duplicate" ,checkApplicationDuplicate);
 // router.get('/applications', getApplicationsReview);
