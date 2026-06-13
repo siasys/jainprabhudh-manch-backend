@@ -147,7 +147,7 @@ const initializeWebSocket = (server) => {
     });
 
     socket.on("typingInGroup", ({ groupId }) => {
-      const groupChatController = require("../controllers/SocialMediaControllers/groupChatController");
+      const groupChatController = require("../controller/SocialMediaControllers/groupChatController");
       groupChatController.handleGroupTyping(socket, groupId);
     });
 
