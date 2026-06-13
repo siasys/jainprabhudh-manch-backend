@@ -36,7 +36,7 @@ router.patch('/clear/:receiverId', clearAllMessagesBetweenUsers);
 
 // Update messages by senderId
 router.put('/update/:messageId',updateMessageById);
-router.patch("/block-unblock", blockUnblockUsconversationconversationer);
+router.patch('/block-unblock', blockUnblockUser);
 // Get unread messages count
 router.get('/unread/:userId', getUnreadMessagesCount);
 router.get('/conversations/:userId',
