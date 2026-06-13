@@ -437,74 +437,94 @@ exports.createOrFindHierarchicalSanghGroup = async (req, res) => {
 // ✅ Get All Groups (User + Sangh Account Compatible)
 exports.getAllGroups = async (req, res) => {
   try {
-    // 👇 Agar Sangh account se logged in hai to sanghId lo, warna userId
-    const userId =
-      req.accountType === "sangh"
-        ? req.sangh?._id
-        : req.user?._id;
+    const userId = req.accountType === "sangh" ? req.sangh?._id : req.user?._id;
 
     if (!userId) {
       return res.status(400).json({ message: "User or Sangh ID not found" });
     }
 
-    // ✅ Fetch all non-gotra groups where this account is a member
-    const normalGroups = await GroupChat.find({
+    const groups = await GroupChat.find({
       "groupMembers.user": userId,
       isGotraGroup: false,
     })
-      .populate(
-        "groupMembers.user",
-        "firstName fullName lastName profilePicture accountType businessName sadhuName tirthName"
+      .select(
+        "groupName groupImage creator admins groupMembers isGotraGroup isCityGroup isGlobal isSanghGroup createdAt updatedAt groupMessages",
       )
-      .populate(
-        "creator",
-        "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName"
-      )
-      .populate("groupMessages");
+      .lean();
 
-    // ✅ Fetch gotra group (either user/sangh is member OR creator)
     const gotraGroup = await GroupChat.findOne({
       isGotraGroup: true,
       $or: [{ "groupMembers.user": userId }, { creator: userId }],
     })
-      .populate(
-        "groupMembers.user",
-        "firstName fullName lastName profilePicture accountType businessName sadhuName tirthName"
+      .select(
+        "groupName groupImage creator admins groupMembers isGotraGroup isCityGroup isGlobal isSanghGroup createdAt updatedAt groupMessages",
       )
-      .populate(
-        "creator",
-        "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName"
-      )
-      .populate("groupMessages");
+      .lean();
 
-    // ✅ CDN URL conversion
-    normalGroups.forEach((group) => {
-      if (group.groupImage) {
-        group.groupImage = convertS3UrlToCDN(group.groupImage);
-      }
-    });
-
-    if (gotraGroup && gotraGroup.groupImage) {
-      gotraGroup.groupImage = convertS3UrlToCDN(gotraGroup.groupImage);
-    }
-
-    let allGroups = [...normalGroups];
+    let allGroups = [...groups];
     if (gotraGroup) allGroups.push(gotraGroup);
 
-    // ✅ Add messageCount
-  allGroups = allGroups.map((group) => {
-    const obj = group.toObject();
+    const uid = userId.toString();
 
-    obj.groupMessages = (obj.groupMessages || []).map((msg) => ({
-      ...msg,
-      message: msg.message ? decrypt(msg.message) : msg.message,
-    }));
+    allGroups = allGroups.map((group) => {
+      const messages = group.groupMessages || [];
+      const lastMsg = messages[messages.length - 1] || null;
 
-    return {
-      ...obj,
-      messageCount: obj.groupMessages ? obj.groupMessages.length : 0,
-    };
-  });
+      const unreadCount = messages.reduce((count, msg) => {
+        const senderId = msg.sender?.toString?.() || String(msg.sender || "");
+        if (senderId === uid) return count;
+
+        const deletedFor = (msg.deletedFor || []).map((id) => id.toString());
+        if (deletedFor.includes(uid)) return count;
+
+        const isRead = (msg.readBy || []).some(
+          (r) => r.user && r.user.toString() === uid,
+        );
+
+        return isRead ? count : count + 1;
+      }, 0);
+
+      let lastMessage = "Tap to open group";
+
+      if (lastMsg) {
+        const hasAttachment =
+          lastMsg.attachments?.length > 0 ||
+          lastMsg.imageUrl ||
+          lastMsg.chatImage;
+
+        if (hasAttachment) {
+          lastMessage = "📷 Photo";
+        } else if (lastMsg.message) {
+          lastMessage = decrypt(lastMsg.message);
+        }
+      }
+
+      return {
+        _id: group._id,
+        groupName: group.groupName,
+        groupImage: group.groupImage
+          ? convertS3UrlToCDN(group.groupImage)
+          : null,
+        creator: group.creator,
+        admins: group.admins || [],
+        isGotraGroup: group.isGotraGroup,
+        isCityGroup: group.isCityGroup,
+        isGlobal: group.isGlobal,
+        isSanghGroup: group.isSanghGroup,
+        createdAt: group.createdAt,
+        updatedAt: group.updatedAt,
+
+        lastMessage,
+        lastMessageTime:
+          lastMsg?.createdAt || group.updatedAt || group.createdAt,
+        messageCount: unreadCount,
+        groupMessages: [],
+      };
+    });
+
+    allGroups.sort(
+      (a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime),
+    );
 
     res.status(200).json({ groups: allGroups });
   } catch (error) {

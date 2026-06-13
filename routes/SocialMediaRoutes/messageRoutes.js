@@ -36,10 +36,10 @@ router.patch('/clear/:receiverId', clearAllMessagesBetweenUsers);
 
 // Update messages by senderId
 router.put('/update/:messageId',updateMessageById);
-router.patch('/block-unblock', blockUnblockUser);
+router.patch("/block-unblock", blockUnblockUsconversationconversationer);
 // Get unread messages count
 router.get('/unread/:userId', getUnreadMessagesCount);
-router.get('/conversations/:userId', 
+router.get('/conversations/:userId',
   [
     param('userId').isMongoId().withMessage('Invalid user ID')
   ],
