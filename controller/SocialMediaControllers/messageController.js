@@ -123,37 +123,43 @@ exports.createMessage = async (req, res) => {
     const receiver = req.body.receiver.trim();
     const message = req.body.message;
     const senderType = req.body.senderType || req.user.type;
-    const receiverType = req.body.receiverType || 'user';
+    const receiverType = req.body.receiverType || "user";
+    // ✅ reply (optional) — kis message ka jawaab hai
+    const replyToId =
+      req.body.replyTo && mongoose.Types.ObjectId.isValid(req.body.replyTo)
+        ? req.body.replyTo
+        : null;
     // 1. Validate message
     if (!message || message.trim() === "") {
-      return res.status(400).json({ message: 'Message cannot be empty' });
+      return res.status(400).json({ message: "Message cannot be empty" });
     }
     if (containsBadWords(message)) {
       return res.status(400).json({
         success: false,
-        message: "Your message contains inappropriate or unsafe words. Please modify it."
+        message:
+          "Your message contains inappropriate or unsafe words. Please modify it.",
       });
     }
     //  2. Validate sender authorization
-    if (senderType === 'sangh') {
+    if (senderType === "sangh") {
       const sangh = await HierarchicalSangh.findById(sender);
       if (!sangh) {
         return res.status(404).json({ message: "Sangh not found" });
       }
-      const isOfficeBearer = sangh.officeBearers.some(ob =>
-        ob.userId.toString() === req.user._id.toString()
+      const isOfficeBearer = sangh.officeBearers.some(
+        (ob) => ob.userId.toString() === req.user._id.toString(),
       );
       if (!isOfficeBearer) {
         return res.status(403).json({
           success: false,
-          message: 'User not authorized to send on behalf of Sangh'
+          message: "User not authorized to send on behalf of Sangh",
         });
       }
     } else {
       if (sender !== req.user._id.toString()) {
         return res.status(403).json({
           success: false,
-          message: 'Sender ID must match authenticated user'
+          message: "Sender ID must match authenticated user",
         });
       }
     }
@@ -161,53 +167,57 @@ exports.createMessage = async (req, res) => {
     // 3. Fetch receiver (can be user or sangh)
     let receiverUser = null;
     let receiverSangh = null;
-    if (receiverType === 'sangh') {
+    if (receiverType === "sangh") {
       receiverSangh = await HierarchicalSangh.findById(receiver);
       if (!receiverSangh) {
-        return errorResponse(res, 'Receiver Sangh not found', 400);
+        return errorResponse(res, "Receiver Sangh not found", 400);
       }
     } else {
       receiverUser = await User.findById(receiver);
       if (!receiverUser) {
-        return errorResponse(res, 'Receiver User not found', 400);
+        return errorResponse(res, "Receiver User not found", 400);
       }
     }
     if (receiverUser?.blockedUsers?.includes(sender)) {
       return res.status(403).json({
         success: false,
-        message: 'You are blocked by this user. Message cannot be sent.'
+        message: "You are blocked by this user. Message cannot be sent.",
       });
     }
     //  Create/get conversation
     const conversationCacheKey = `conversation:${sender}:${receiver}`;
-    let conversation = await getOrSetCache(conversationCacheKey, async () => {
-      return await Conversation.findOne({
-        participants: { $all: [sender, receiver] }
-      });
-    }, 300);
+    let conversation = await getOrSetCache(
+      conversationCacheKey,
+      async () => {
+        return await Conversation.findOne({
+          participants: { $all: [sender, receiver] },
+        });
+      },
+      300,
+    );
     if (!conversation) {
       conversation = new Conversation({
-        participants: [sender, receiver]
+        participants: [sender, receiver],
       });
       await conversation.save();
     }
-let attachments = [];
+    let attachments = [];
 
-if (req.file) {
-  attachments.push({
-    type: 'image',
-    url: convertS3UrlToCDN(req.file.location),
-    name: req.file.originalname,
-    size: req.file.size
-  });
-} else if (req.body.imageUrl) {
-  attachments.push({
-    type: 'image',
-    url: req.body.imageUrl,
-    name: 'forwarded_image.jpg',
-    size: 0
-  });
-}
+    if (req.file) {
+      attachments.push({
+        type: "image",
+        url: convertS3UrlToCDN(req.file.location),
+        name: req.file.originalname,
+        size: req.file.size,
+      });
+    } else if (req.body.imageUrl) {
+      attachments.push({
+        type: "image",
+        url: req.body.imageUrl,
+        name: "forwarded_image.jpg",
+        size: 0,
+      });
+    }
     // 📦 5. Prepare message data
     const messageData = {
       sender,
@@ -215,15 +225,16 @@ if (req.file) {
       senderType,
       message: message,
       attachments,
-      createdAt: new Date()
+      createdAt: new Date(),
     };
+    if (replyToId) messageData.replyTo = replyToId; // ✅ additive
 
     let senderInfo = {};
 
-    if (senderType === 'sangh') {
+    if (senderType === "sangh") {
       const sangh = await HierarchicalSangh.findById(sender);
       if (!sangh) {
-        return errorResponse(res, 'Sender Sangh not found', 404);
+        return errorResponse(res, "Sender Sangh not found", 404);
       }
 
       messageData.sanghId = sangh._id;
@@ -232,19 +243,19 @@ if (req.file) {
         _id: sangh._id,
         fullName: sangh.name || sangh.sanghName,
         profilePicture: sangh.sanghImage || null,
-        type: 'sangh'
+        type: "sangh",
       };
     } else {
       const senderUser = await User.findById(sender);
       if (!senderUser) {
-        return errorResponse(res, 'Sender user not found', 404);
+        return errorResponse(res, "Sender user not found", 404);
       }
 
       senderInfo = {
         _id: senderUser._id,
         fullName: `${senderUser.firstName} ${senderUser.lastName}`,
         profilePicture: senderUser.profilePicture,
-        type: 'user'
+        type: "user",
       };
     }
 
@@ -252,18 +263,37 @@ if (req.file) {
     const newMessage = new Message(messageData);
     await newMessage.save();
 
+    // ✅ reply preview (quote) banao — text decrypt karke
+    let replyPreview = null;
+    if (newMessage.replyTo) {
+      try {
+        const rt = await Message.findById(newMessage.replyTo)
+          .select("message sender attachments")
+          .populate("sender", "firstName lastName fullName");
+        if (rt) {
+          replyPreview = {
+            _id: rt._id,
+            message: rt.message,
+            sender: rt.sender,
+            attachments: rt.attachments || [],
+          };
+        }
+      } catch (e) {}
+    }
+
     // Block check before emit
     const latestBlockMessage = await Message.findOne({
       $or: [
         { sender: sender, receiver: receiver },
-        { sender: receiver, receiver: sender }
-      ]
+        { sender: receiver, receiver: sender },
+      ],
     }).sort({ createdAt: -1 });
 
     const isBlocked =
-      (latestBlockMessage?.sender?.toString() === sender && latestBlockMessage?.isBlockedBySender) ||
-      (latestBlockMessage?.receiver?.toString() === sender && latestBlockMessage?.isBlockedByReceiver);
-
+      (latestBlockMessage?.sender?.toString() === sender &&
+        latestBlockMessage?.isBlockedBySender) ||
+      (latestBlockMessage?.receiver?.toString() === sender &&
+        latestBlockMessage?.isBlockedByReceiver);
 
     // 🔁 7. Update conversation
     conversation.messages.push(newMessage._id);
@@ -277,34 +307,40 @@ if (req.file) {
     // 🔊 8. Emit socket message
     const decryptedMessage = newMessage.decryptedMessage;
     const io = getIo();
-    if (!isBlocked) {
-        io.to(receiver.toString()).emit('newMessage', {
-          message: {
-            ...newMessage.toObject(),
-            message: decryptedMessage
-          },
-          sender: senderInfo
-        });
-      }
-    // 9. Success response
-    return successResponse(res, {
+    const responsePayload = {
       ...newMessage.toObject(),
       message: decryptedMessage,
-    }, 'Message sent successfully', 201);
+    };
+    if (replyPreview) responsePayload.replyTo = replyPreview; // ✅ quote bhejo
 
+    if (!isBlocked) {
+      io.to(receiver.toString()).emit("newMessage", {
+        message: responsePayload,
+        sender: senderInfo,
+      });
+    }
+    // 9. Success response
+    return successResponse(
+      res,
+      responsePayload,
+      "Message sent successfully",
+      201,
+    );
   } catch (error) {
     if (req.file) {
       try {
-        await s3Client.send(new DeleteObjectCommand({
-          Bucket: process.env.AWS_BUCKET_NAME,
-          Key: req.file.key
-        }));
+        await s3Client.send(
+          new DeleteObjectCommand({
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: req.file.key,
+          }),
+        );
       } catch (deleteError) {
-        console.error('Error deleting file:', deleteError);
+        console.error("Error deleting file:", deleteError);
       }
     }
-    console.error('Message creation error:', error);
-    return errorResponse(res, 'Error sending message', 500, error.message);
+    console.error("Message creation error:", error);
+    return errorResponse(res, "Error sending message", 500, error.message);
   }
 };
 
@@ -632,14 +668,16 @@ exports.getBlockStatus = async (req, res) => {
 // };
 
 // new get mesage
+ 
+// new get mesage
 exports.getMessages = async (req, res) => {
   try {
     const { sender, receiver } = req.query;
-
+ 
     if (!sender || !receiver) {
       return res.status(400).json({ message: 'Sender and receiver are required' });
     }
-
+ 
     const messages = await Message.find({
       $or: [
         { sender, receiver },
@@ -647,8 +685,13 @@ exports.getMessages = async (req, res) => {
       ],
     }).sort({ createdAt: 1 })
     .populate('sender', 'firstName lastName fullName profilePicture')
-    .populate('receiver', 'firstName lastName fullName profilePicture');
-
+    .populate('receiver', 'firstName lastName fullName profilePicture')
+    .populate({
+      path: 'replyTo',
+      select: 'message sender attachments',
+      populate: {path: 'sender', select: 'firstName lastName fullName'},
+    });
+ 
     // Mark messages as read
     await Message.updateMany(
       { sender: receiver, receiver: sender, isRead: false },
@@ -660,21 +703,32 @@ exports.getMessages = async (req, res) => {
         ...att.toObject(),
         url: convertS3UrlToCDN(att.url)
       })) || [];
-
-      return {
+ 
+      const obj = {
         ...msg.toObject(),
         attachments: updatedAttachments
       };
+ 
+      // ✅ reply preview ka text decrypt (populate par hook nahi chalta)
+      if (
+        obj.replyTo &&
+        typeof obj.replyTo.message === 'string' &&
+        obj.replyTo.message.includes(':')
+      ) {
+        obj.replyTo.message = decrypt(obj.replyTo.message);
+      }
+ 
+      return obj;
     });
-
+ 
     // Emit read receipt
     const io = getIo();
     io.to(receiver.toString()).emit('messagesRead', { sender, receiver });
-
+ 
     // Get participants' online status
     const senderStatus = getUserStatus(sender);
     const receiverStatus = getUserStatus(receiver);
-
+ 
     return successResponse(res, {
       messages: updatedMessages.reverse(),
       participants: {
@@ -1034,12 +1088,18 @@ exports.getUnreadMessagesCount = async (req, res) => {
 };
 
 // Send image message
+// Send image message
 exports.sendImageMessage = async (req, res) => {
   try {
     const { sender, receiver } = req.body;
     if (!req.file) {
       return res.status(400).json({ message: 'No image file provided' });
     }
+    // ✅ reply (optional)
+    const replyToId =
+      req.body.replyTo && mongoose.Types.ObjectId.isValid(req.body.replyTo)
+        ? req.body.replyTo
+        : null;
     const senderUser = await User.findById(sender);
     const receiverUser = await User.findById(receiver);
     if (!senderUser || !receiverUser) {
@@ -1056,13 +1116,35 @@ exports.sendImageMessage = async (req, res) => {
         name: req.file.originalname,
         size: req.file.size
       }],
+      ...(replyToId && {replyTo: replyToId}), // ✅ additive
       createdAt: new Date(),
     });
     await newMessage.save();
+ 
+    // ✅ reply preview
+    let imgReplyPreview = null;
+    if (newMessage.replyTo) {
+      try {
+        const rt = await Message.findById(newMessage.replyTo)
+          .select('message sender attachments')
+          .populate('sender', 'firstName lastName fullName');
+        if (rt) {
+          imgReplyPreview = {
+            _id: rt._id,
+            message: rt.message,
+            sender: rt.sender,
+            attachments: rt.attachments || [],
+          };
+        }
+      } catch (e) {}
+    }
     // Emit real-time message event
     const io = getIo();
+    const imgPayload = newMessage.toObject();
+    if (imgReplyPreview) imgPayload.replyTo = imgReplyPreview;
+ 
     io.to(receiver.toString()).emit('newMessage', {
-      message: newMessage,
+      message: imgPayload,
       sender: {
         _id: senderUser._id,
         fullName: senderUser.fullName,
@@ -1071,7 +1153,7 @@ exports.sendImageMessage = async (req, res) => {
     });
     res.status(201).json({
       message: 'Image sent successfully',
-      data: newMessage
+      data: imgPayload
     });
   } catch (error) {
     console.error('Error sending image:', error);
@@ -1085,7 +1167,7 @@ exports.broadcastMessage = async (req, res) => {
   const { senderId, users, message, media } = req.body;
 
   try {
-    // ✅ Ensure users is an array of user objects or IDs
+    // Ensure users is an array of user objects or IDs
     const userList = Array.isArray(users) ? users : [];
 
     const messages = userList

@@ -233,7 +233,8 @@ const upload = multer({
 const compressImage = async (buffer) => {
   try {
     return await sharp(buffer)
-      .flatten({ background: { r: 255, g: 255, b: 255 } }) // PNG white background fix
+      .rotate() // EXIF से auto-orient, फिर pixels में पक्का कर देता है (resize से पहले ज़रूरी)
+      .flatten({ background: { r: 255, g: 255, b: 255 } })
       .resize(1200, 1200, { fit: "inside", withoutEnlargement: true })
       .jpeg({ quality: 70, mozjpeg: true })
       .toBuffer();

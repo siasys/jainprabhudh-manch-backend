@@ -567,8 +567,15 @@ exports.getAllGroupChats = async (req, res) => {
 exports.sendGroupMessage = async (req, res) => {
   try {
     const { groupId, sender, message } = req.body;
-    const group = await GroupChat.findById(groupId)
-    .populate('groupMembers.user', 'firstName lastName fullName profilePicture');
+    // ✅ reply (optional) — kis group message ka jawaab
+    const replyToId =
+      req.body.replyTo && mongoose.Types.ObjectId.isValid(req.body.replyTo)
+        ? req.body.replyTo
+        : null;
+    const group = await GroupChat.findById(groupId).populate(
+      "groupMembers.user",
+      "firstName lastName fullName profilePicture",
+    );
     if (!group) {
       return res.status(404).json({ message: "Group not found" });
     }
@@ -576,12 +583,14 @@ exports.sendGroupMessage = async (req, res) => {
       // Delete uploaded file if group not found
       if (req.file) {
         try {
-          await s3Client.send(new DeleteObjectCommand({
-            Bucket: process.env.AWS_BUCKET_NAME,
-            Key: req.file.key
-          }));
+          await s3Client.send(
+            new DeleteObjectCommand({
+              Bucket: process.env.AWS_BUCKET_NAME,
+              Key: req.file.key,
+            }),
+          );
         } catch (error) {
-          console.error('Error deleting file:', error);
+          console.error("Error deleting file:", error);
         }
       }
       return errorResponse(res, "Group not found", 404);
@@ -589,47 +598,55 @@ exports.sendGroupMessage = async (req, res) => {
 
     // Check if sender is group member
     const isMember = group.groupMembers.some(
-      member => member.user._id.toString() === sender.toString()
+      (member) => member.user._id.toString() === sender.toString(),
     );
-    
+
     if (!isMember) {
       // Delete uploaded file if not a member
       if (req.file) {
         try {
-          await s3Client.send(new DeleteObjectCommand({
-            Bucket: process.env.AWS_BUCKET_NAME,
-            Key: req.file.key
-          }));
+          await s3Client.send(
+            new DeleteObjectCommand({
+              Bucket: process.env.AWS_BUCKET_NAME,
+              Key: req.file.key,
+            }),
+          );
         } catch (error) {
-          console.error('Error deleting file:', error);
+          console.error("Error deleting file:", error);
         }
       }
       return errorResponse(res, "Not a group member", 403);
     }
     if (message && message.trim() !== "" && containsBadWords(message)) {
-        return res.status(400).json({
-          success: false,
-          message: "Your message contains inappropriate or unsafe words. Please modify it."
-        });
-      }
+      return res.status(400).json({
+        success: false,
+        message:
+          "Your message contains inappropriate or unsafe words. Please modify it.",
+      });
+    }
     const newMessage = {
       sender,
-      message: message || 'Image',
-      attachments: req.file ? [{
-        type: 'image',
-        url: convertS3UrlToCDN(req.file.location),
-        name: req.file.originalname,
-        size: req.file.size
-      }] : [],
+      message: message || "Image",
+      attachments: req.file
+        ? [
+            {
+              type: "image",
+              url: convertS3UrlToCDN(req.file.location),
+              name: req.file.originalname,
+              size: req.file.size,
+            },
+          ]
+        : [],
       readBy: [{ user: sender, readAt: new Date() }],
-      createdAt: new Date()
+      ...(replyToId && { replyTo: replyToId }), // ✅ additive
+      createdAt: new Date(),
     };
     group.groupMessages.push(newMessage);
     await group.save();
     // Get the last message (the one we just added)
-   const sentMessage = group.groupMessages[group.groupMessages.length - 1];
-  const plainSent = sentMessage.toObject();
-  if (plainSent.message) {
+    const sentMessage = group.groupMessages[group.groupMessages.length - 1];
+    const plainSent = sentMessage.toObject();
+    if (plainSent.message) {
       try {
         plainSent.message = decrypt(plainSent.message);
       } catch (e) {
@@ -637,56 +654,95 @@ exports.sendGroupMessage = async (req, res) => {
       }
     }
     const senderInfo = group.groupMembers.find(
-      member => member.user._id.toString() === sender.toString()
+      (member) => member.user._id.toString() === sender.toString(),
     );
+
+    // ✅ reply quote preview (text + sender name) resolve karo
+    if (plainSent.replyTo) {
+      try {
+        const targetId = plainSent.replyTo.toString();
+        const target = group.groupMessages.find(
+          (m) => m._id.toString() === targetId,
+        );
+        if (target) {
+          let rtext = target.message || ""; // getter decrypt kar deta hai
+          const tHasImg = target.attachments && target.attachments.length > 0;
+          if ((!rtext || rtext === "Image") && tHasImg) rtext = "📷 Photo";
+          const tSenderMember = group.groupMembers.find(
+            (mm) => mm.user._id.toString() === target.sender.toString(),
+          );
+          const tSender = tSenderMember
+            ? {
+                _id: tSenderMember.user._id,
+                fullName:
+                  `${tSenderMember.user.firstName || ""} ${
+                    tSenderMember.user.lastName || ""
+                  }`.trim() || tSenderMember.user.fullName,
+              }
+            : null;
+          plainSent.replyTo = {
+            _id: targetId,
+            message: rtext,
+            sender: tSender,
+          };
+        }
+      } catch (e) {}
+    }
     // Prepare message data for socket emission
     const messageData = {
       groupId,
       message: {
-            ...plainSent,
+        ...plainSent,
         sender: {
           _id: senderInfo.user._id,
           fullName: `${senderInfo.user.firstName} ${senderInfo.user.lastName}`,
-          profilePicture: senderInfo.user.profilePicture
-        }
-      }
+          profilePicture: senderInfo.user.profilePicture,
+        },
+      },
     };
     // Emit message to all group members
     const io = getIo();
     if (io) {
       console.log(`Emitting new group message to room group:${groupId}`);
       // Emit to the group room
-      io.to(`group:${groupId}`).emit('newGroupMessage', messageData);
+      io.to(`group:${groupId}`).emit("newGroupMessage", messageData);
       // Also emit individually to ensure delivery
-      group.groupMembers.forEach(member => {
+      group.groupMembers.forEach((member) => {
         const memberId = member.user._id.toString();
-        io.to(memberId).emit('newGroupMessage', messageData);
-       // console.log(`Emitted message to group member: ${memberId}`);
+        io.to(memberId).emit("newGroupMessage", messageData);
+        // console.log(`Emitted message to group member: ${memberId}`);
       });
     } else {
-      console.error('Socket.io instance not available');
+      console.error("Socket.io instance not available");
     }
-    return successResponse(res, {
-      ...plainSent,
-      sender: {
-        _id: senderInfo.user._id,
-        fullName: `${senderInfo.user.firstName} ${senderInfo.user.lastName}`,
-        profilePicture: senderInfo.user.profilePicture
-      }
-    }, "Message sent successfully", 200);
+    return successResponse(
+      res,
+      {
+        ...plainSent,
+        sender: {
+          _id: senderInfo.user._id,
+          fullName: `${senderInfo.user.firstName} ${senderInfo.user.lastName}`,
+          profilePicture: senderInfo.user.profilePicture,
+        },
+      },
+      "Message sent successfully",
+      200,
+    );
   } catch (error) {
     // Delete uploaded file if error occurs
     if (req.file) {
       try {
-        await s3Client.send(new DeleteObjectCommand({
-          Bucket: process.env.AWS_BUCKET_NAME,
-          Key: req.file.key
-        }));
+        await s3Client.send(
+          new DeleteObjectCommand({
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: req.file.key,
+          }),
+        );
       } catch (deleteError) {
-        console.error('Error deleting file:', deleteError);
+        console.error("Error deleting file:", deleteError);
       }
     }
-    console.error('Send group message error:', error);
+    console.error("Send group message error:", error);
     return errorResponse(res, error.message, 500);
   }
 };
@@ -1061,14 +1117,34 @@ exports.updateGroupDetails = async (req, res) => {
 // Add typing indicator for groups
 exports.handleGroupTyping = async (socket, groupId) => {
   try {
-    const group = await GroupChat.findById(groupId);
+    const group = await GroupChat.findById(groupId).select('groupMembers');
     if (!group) return;
+
+    // ✅ typer ka naam (light query) — taaki frontend ko members ki zaroorat na pade
+    let typerName = '';
+    try {
+      const u = await User.findById(socket.userId).select(
+        'firstName lastName fullName accountType businessName sadhuName tirthName',
+      );
+      if (u) {
+        typerName =
+          u.accountType === 'business'
+            ? u.businessName || u.fullName
+            : u.accountType === 'sadhu'
+            ? u.sadhuName || u.fullName
+            : u.accountType === 'tirth'
+            ? u.tirthName || u.fullName
+            : u.fullName ||
+              [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
+      }
+    } catch (e) {}
 
     group.groupMembers.forEach(member => {
       if (member.user.toString() !== socket.userId.toString()) {
         socket.to(member.user.toString()).emit('userTypingInGroup', {
           userId: socket.userId,
-          groupId
+          groupId,
+          name: typerName,
         });
       }
     });
