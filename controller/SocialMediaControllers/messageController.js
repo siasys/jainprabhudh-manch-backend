@@ -670,46 +670,60 @@ exports.getBlockStatus = async (req, res) => {
 // new get mesage
  
 // new get mesage
+// new get message (optimized: optional limit + lean)
 exports.getMessages = async (req, res) => {
   try {
-    const { sender, receiver } = req.query;
- 
+    const { sender, receiver, limit, before } = req.query;
+
     if (!sender || !receiver) {
       return res.status(400).json({ message: 'Sender and receiver are required' });
     }
- 
-    const messages = await Message.find({
+
+    const query = {
       $or: [
         { sender, receiver },
         { sender: receiver, receiver: sender },
       ],
-    }).sort({ createdAt: 1 })
-    .populate('sender', 'firstName lastName fullName profilePicture')
-    .populate('receiver', 'firstName lastName fullName profilePicture')
-    .populate({
-      path: 'replyTo',
-      select: 'message sender attachments',
-      populate: {path: 'sender', select: 'firstName lastName fullName'},
-    });
- 
-    // Mark messages as read
+    };
+
+    // scroll-up ke liye optional cursor (isse purane messages mangwa sakte ho)
+    if (before) {
+      query.createdAt = { $lt: new Date(before) };
+    }
+
+    // ⚡ limit aaye to utne hi LATEST messages (warna sab — purana behavior)
+    const pageSize = limit ? Math.min(parseInt(limit, 10) || 30, 100) : 0;
+
+    let q = Message.find(query)
+      .sort({ createdAt: -1 }) // newest first (latest messages pehle)
+      .populate('sender', 'firstName lastName fullName profilePicture')
+      .populate('receiver', 'firstName lastName fullName profilePicture')
+      .populate({
+        path: 'replyTo',
+        select: 'message sender attachments',
+        populate: { path: 'sender', select: 'firstName lastName fullName' },
+      })
+      .lean(); // ⚡ lean = plain objects, bahut tez (no mongoose hydration/toObject)
+
+    if (pageSize) q = q.limit(pageSize);
+
+    const messages = await q;
+
+    // Mark messages as read (same as before)
     await Message.updateMany(
       { sender: receiver, receiver: sender, isRead: false },
       { isRead: true, status: 'read' }
     );
-    // Convert attachments to use CDN URLs
+
+    // CDN + reply decrypt (lean objects -> .toObject() ki zaroorat nahi)
     const updatedMessages = messages.map(msg => {
-      const updatedAttachments = msg.attachments?.map(att => ({
-        ...att.toObject(),
-        url: convertS3UrlToCDN(att.url)
-      })) || [];
- 
-      const obj = {
-        ...msg.toObject(),
-        attachments: updatedAttachments
-      };
- 
-      // ✅ reply preview ka text decrypt (populate par hook nahi chalta)
+      const updatedAttachments = (msg.attachments || []).map(att => ({
+        ...att,
+        url: convertS3UrlToCDN(att.url),
+      }));
+
+      const obj = { ...msg, attachments: updatedAttachments };
+
       if (
         obj.replyTo &&
         typeof obj.replyTo.message === 'string' &&
@@ -717,24 +731,27 @@ exports.getMessages = async (req, res) => {
       ) {
         obj.replyTo.message = decrypt(obj.replyTo.message);
       }
- 
+
       return obj;
     });
- 
+
     // Emit read receipt
     const io = getIo();
     io.to(receiver.toString()).emit('messagesRead', { sender, receiver });
- 
-    // Get participants' online status
+
+    // Online status
     const senderStatus = getUserStatus(sender);
     const receiverStatus = getUserStatus(receiver);
- 
+
+    // messages abhi newest-first hain — purana response bhi newest-first tha,
+    // is liye reverse ki zaroorat NAHI (frontend pehle jaisa hi chalega)
     return successResponse(res, {
-      messages: updatedMessages.reverse(),
+      messages: updatedMessages,
       participants: {
         [sender]: senderStatus,
-        [receiver]: receiverStatus
-      }
+        [receiver]: receiverStatus,
+      },
+      hasMore: pageSize ? messages.length === pageSize : false,
     }, 'Messages retrieved successfully', 200);
   } catch (error) {
     return errorResponse(res, 'Error retrieving messages', 500, error);
