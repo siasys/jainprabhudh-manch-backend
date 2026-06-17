@@ -355,150 +355,154 @@ const sanghTeamSchema = new mongoose.Schema({
     default: '',
   },
 });
-const receivedPaymentSchema = new mongoose.Schema({
-  fromMemberId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+const receivedPaymentSchema = new mongoose.Schema(
+  {
+    fromMemberId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    memberName: String,
+    jainAadharNumber: String,
+
+    fromMemberLevel: {
+      type: String, // city / district / state / country
+      required: true,
+    },
+
+    sourceSanghId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "HierarchicalSangh",
+    },
+
+    sourceSanghLevel: {
+      type: String,
+    },
+
+    percentage: {
+      type: Number, // 10 / 20 / 50
+      required: true,
+    },
+
+    amount: {
+      type: Number,
+      required: true,
+    },
+
+    sanghType: {
+      type: String,
+      enum: ["main", "women", "youth", "veerSena"],
+      default: "main",
+    },
+
+    location: {
+      country: String,
+      state: String,
+      district: String,
+      city: String,
+    },
+
+    paymentDate: {
+      type: Date,
+      default: Date.now,
+    },
+
+    status: {
+      type: String,
+      enum: ["unclaimed", "claimed"],
+      default: "unclaimed",
+    },
   },
+  { _id: true },
+);
 
-  memberName: String,
-  jainAadharNumber: String,
-
-  fromMemberLevel: {
-    type: String, // city / district / state / country
-    required: true
-  },
-
-  sourceSanghId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'HierarchicalSangh'
-  },
-
-  sourceSanghLevel: {
-    type: String
-  },
-
-  percentage: {
-    type: Number, // 10 / 20 / 50
-    required: true
-  },
-
-  amount: {
-    type: Number,
-    required: true
-  },
-
-  sanghType: {
-    type: String,
-    enum: ['main', 'women', 'youth'],
-    default: 'main'
-  },
-
-  location: {
-    country: String,
-    state: String,
-    district: String,
-    city: String
-  },
-
-  paymentDate: {
-    type: Date,
-    default: Date.now
-  },
-
-  status: {
-    type: String,
-    enum: ['unclaimed', 'claimed'],
-    default: 'unclaimed'
-  }
-}, { _id: true });
-
-const hierarchicalSanghSchema = new mongoose.Schema({
+const hierarchicalSanghSchema = new mongoose.Schema(
+  {
     name: {
-        type: String,
-        required: true,
+      type: String,
+      required: true,
     },
     level: {
-        type: String,
-        enum: ['foundation', 'country', 'state', 'district', 'city', 'area'],
-       // required: true
+      type: String,
+      enum: ["foundation", "country", "state", "district", "city", "area"],
+      // required: true
     },
     location: {
-        country: {
-            type: String,
-            required: true,
-            default: 'India'
-        },
-        state: {
-            type: String,
-            required: function() {
-                return ['state', 'district', 'city', 'area'].includes(this.level);
-            }
-        },
-        district: {
-            type: String,
-            required: function() {
-                return ['district', 'city', 'area'].includes(this.level);
-            }
-        },
-        city: {
-            type: String,
-            required: function() {
-                return ['city', 'area'].includes(this.level);
-            }
-        },
-        area: {
-            type: String,
-            required: function() {
-                return this.level === 'area';
-            }
-        },
-         address: {
+      country: {
         type: String,
-    }
+        required: true,
+        default: "India",
+      },
+      state: {
+        type: String,
+        required: function () {
+          return ["state", "district", "city", "area"].includes(this.level);
+        },
+      },
+      district: {
+        type: String,
+        required: function () {
+          return ["district", "city", "area"].includes(this.level);
+        },
+      },
+      city: {
+        type: String,
+        required: function () {
+          return ["city", "area"].includes(this.level);
+        },
+      },
+      area: {
+        type: String,
+        required: function () {
+          return this.level === "area";
+        },
+      },
+      address: {
+        type: String,
+      },
     },
     officeAddress: {
-    country: {
+      country: {
         type: String,
-        default: 'India',
-        required: true
+        default: "India",
+        required: true,
+      },
+      state: {
+        type: String,
+      },
+      district: {
+        type: String,
+      },
+      // city: {
+      //     type: String
+      // },
+      address: {
+        type: String,
+      },
     },
-    state: {
-        type: String
+    parentSangh: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "HierarchicalSangh",
+      default: null,
     },
-    district: {
-        type: String
-    },
-    // city: {
-    //     type: String
-    // },
-    address: {
-        type: String
-    }
-    },
-  parentSangh: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'HierarchicalSangh',
-    default: null
-},
     sanghAccessId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'SanghAccess',
-        default: null
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SanghAccess",
+      default: null,
     },
     officeBearers: [officeBearerSchema],
     sanghTeams: [sanghTeamSchema],
-    membersCount:{
-        type:String
+    membersCount: {
+      type: String,
     },
     members: [memberSchema],
     honoraryMembers: [honoraryMemberSchema],
     panches: [panchSchema],
     receivedPayments: [receivedPaymentSchema],
     establishedDate: {
-        type: Date,
-        default: Date.now
+      type: Date,
+      default: Date.now,
     },
     totalAvailableAmount: {
       type: Number,
@@ -508,58 +512,60 @@ const hierarchicalSanghSchema = new mongoose.Schema({
     coverImage: String,
     sanghImage: String,
     contact: {
-        email: String,
-        phone: String,
-        address: String
+      email: String,
+      phone: String,
+      address: String,
     },
     socialMedia: {
-        facebook: String,
-        twitter: String,
-        instagram: String,
-        website: String
+      facebook: String,
+      twitter: String,
+      instagram: String,
+      website: String,
     },
     status: {
-        type: String,
-        enum: ['active', 'inactive'],
-        default: 'active'
+      type: String,
+      enum: ["active", "inactive"],
+      default: "active",
     },
     createdBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
     sanghType: {
-        type: String,
-        enum: ['main', 'women', 'youth'],
-        default: 'main',
+      type: String,
+      enum: ["main", "women", "youth", "veerSena"],
+      default: "main",
     },
     parentMainSangh: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'HierarchicalSangh',
-        default: null
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "HierarchicalSangh",
+      default: null,
     },
     followers: [
-  {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }
-],
-  stories: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Story',
-    }
-  ],
- posts: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Post',
+        ref: "User",
+      },
+    ],
+    stories: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Story",
+      },
+    ],
+    posts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Post",
         default: 0,
       },
     ],
-}, {
-    timestamps: true
-});
+  },
+  {
+    timestamps: true,
+  },
+);
 
 
 // Generate unique access ID before saving
@@ -573,10 +579,10 @@ hierarchicalSanghSchema.pre('save', async function(next) {
             city: 'CTY',
             area: 'AREA'
         }[this.level] || 'SNG';
-        
+
         const timestamp = Date.now().toString().slice(-6);
         const random = crypto.randomBytes(3).toString('hex').toUpperCase();
-        
+
         this.accessId = `${prefix}-${timestamp}-${random}`;
     }
     // If sanghAccessId is undefined, set it to null explicitly
@@ -606,11 +612,10 @@ hierarchicalSanghSchema.methods.validateHierarchy = async function() {
   }
 
   // Allow specialized Sanghs (women/youth) under country level main Sangh
-  const isSameLevelSpecialized = (
-    parentSangh.level === 'country' &&
-    parentSangh.sanghType === 'main' &&
-    ['women', 'youth'].includes(this.sanghType)
-  );
+       const isSameLevelSpecialized =
+         parentSangh.level === "country" &&
+         parentSangh.sanghType === "main" &&
+         ["women", "youth", "veerSena"].includes(this.sanghType);
 
   if (!isSameLevelSpecialized) {
     throw new Error('Country level Sangh must have a foundation as parent or be a specialized Sangh under country main Sangh');
