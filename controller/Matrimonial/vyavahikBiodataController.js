@@ -1245,10 +1245,14 @@ const sendInterest = async (req, res) => {
     }
 
     // target exist?
-    const targetBiodata = await VyavahikBiodata.findOne({ _id: targetId, isVisible: true });
-    if (!targetBiodata) {
-      return res.status(404).json({ success: false, message: "Target profile not found" });
-    }
+ const targetBiodata = await VyavahikBiodata.findById(targetId);
+
+ if (!targetBiodata || targetBiodata.isVisible === false) {
+   return res.status(404).json({
+     success: false,
+     message: "Target profile not found",
+   });
+ }
 
     // apne aap ko interest nahi
     if (myBiodata._id.toString() === targetId) {

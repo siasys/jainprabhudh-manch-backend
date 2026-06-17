@@ -120,7 +120,7 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
       return errorResponse(res, "Missing required fields", 400);
     }
     // Validate sanghType
-    if (!["main", "women", "youth"].includes(sanghType)) {
+    if (!["main", "women", "youth", "veerSena"].includes(sanghType)) {
       return errorResponse(
         res,
         'Invalid Sangh type. Must be "main", "women", or "youth"',
@@ -204,7 +204,7 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
       const isSameLevelAllowed =
         currentIndex === parentIndex &&
         parentSangh.sanghType === "main" &&
-        ["women", "youth"].includes(sanghType);
+        ["women", "youth", "veerSena"].includes(sanghType);
 
       if (currentIndex <= parentIndex && !isSameLevelAllowed) {
         return errorResponse(
@@ -350,10 +350,10 @@ const createAdminSangh = asyncHandler(async (req, res) => {
     }
 
     // 2️⃣ Validate Sangh type
-    if (!["main", "women", "youth"].includes(sanghType)) {
+    if (!["main", "women", "youth", "veerSena"].includes(sanghType)) {
       return errorResponse(
         res,
-        'Invalid Sangh type. Must be "main", "women", or "youth"',
+        'Invalid Sangh type. Must be "main", "women", "youth", or "veerSena"',
         400,
       );
     }
@@ -2364,10 +2364,10 @@ const createSpecializedSangh = asyncHandler(async (req, res) => {
       return errorResponse(res, "Sangh type is required.", 400);
     }
     // Validate sanghType
-    if (!["women", "youth"].includes(sanghType)) {
+    if (!["women", "youth", "veerSena"].includes(sanghType)) {
       return errorResponse(
         res,
-        'Invalid Sangh type. Must be "women" or "youth"',
+        'Invalid Sangh type. Must be "women", "youth", or "veerSena"',
         400,
       );
     }

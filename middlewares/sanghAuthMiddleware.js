@@ -223,7 +223,7 @@ const validateLocationHierarchy = asyncHandler(async (req, res, next) => {
         // ✅ Allow women/youth of same level under main Sangh
         const isSameLevel = parentSangh.level === level;
         const isParentMain = parentSangh.sanghType === 'main';
-        const isChildSpecial = ['women', 'youth'].includes(sanghType);
+        const isChildSpecial = ['women', 'youth', 'veerSena'].includes(sanghType);
 
         if (isSameLevel && isParentMain && isChildSpecial) {
             return next(); // ✅ Allow same-level women/youth under main Sangh
