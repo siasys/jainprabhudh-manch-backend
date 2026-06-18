@@ -3,6 +3,8 @@ dotenv.config();
 
 // require('newrelic');
 const logger = require('./config/logger');
+// 🔔 Firebase Admin initialize (push notifications)
+require('./config/firebaseAdmin');
 const express = require("express");
 const http = require("http");
 const dbConnect = require("./config/dbConnect");
@@ -76,6 +78,8 @@ const panchApplicationRoutes = require('./routes/SanghRoutes/applicationRoutes')
 const donationPaymentRoutes = require('./routes/Donation/Donationpaymentroutes');
 const matrimonyPaymentRoutes = require('./routes/Matrimonial/Matrimonialpaymentroutes');
 const sanghCertificateRoutes = require('./routes/SanghRoutes/Sanghcertificateroute');
+const fcmRoutes = require("./routes/fcmRoutes");
+
 //const appVersionRoute = require('./routes/Update apk/appVersion');
 app.set('trust proxy',1);
 // connect to databse
@@ -137,6 +141,9 @@ app.use('/api/stories', storyRoutes);
 app.use('/api/notification', authMiddleware, notificationRoutes);
 app.use('/api/messages', authMiddleware, messageRoutes);
 app.use('/api/group', authMiddleware, groupChatRoutes);
+// 🔔 FCM token save/remove (auth required)
+app.use('/api/fcm', authMiddleware, fcmRoutes);
+
 app.use('/api/contact-us', contactUsRoutes);
 // app.use('/api/units', authMiddleware, unitRoutes );
 //app.use('/api/panchayat',panchayatRoute );

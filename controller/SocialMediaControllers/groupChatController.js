@@ -10,6 +10,7 @@ const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghMode
 const User = require('../../model/UserRegistrationModels/userModel');
 const fuzzysort = require('fuzzysort');
 const { containsBadWords } = require('../../utils/filterBadWords');
+const { sendPushToUsers } = require("../../config/firebaseAdmin");
 // 1. Create Group Chat
 exports.createGroupChat = async (req, res) => {
   try {
@@ -714,6 +715,37 @@ exports.sendGroupMessage = async (req, res) => {
       });
     } else {
       console.error("Socket.io instance not available");
+    }
+    try {
+      const memberIdsForPush = group.groupMembers
+        .map((m) => m.user._id.toString())
+        .filter((id) => id !== sender.toString());
+      const senderName =
+        `${senderInfo.user.firstName || ""} ${
+          senderInfo.user.lastName || ""
+        }`.trim() ||
+        senderInfo.user.fullName ||
+        "New message";
+      const groupPushBody =
+        plainSent.message &&
+        plainSent.message !== "Image" &&
+        plainSent.message.trim()
+          ? plainSent.message
+          : plainSent.attachments && plainSent.attachments.length
+            ? "📷 Photo"
+            : "New message";
+      sendPushToUsers(memberIdsForPush, {
+        title: group.groupName || "New group message",
+        body: `${senderName}: ${groupPushBody}`,
+        data: {
+          type: "group",
+          groupId: String(groupId),
+          senderId: String(sender),
+          senderName,
+        },
+      });
+    } catch (e) {
+      console.error("Group push error:", e.message);
     }
     return successResponse(
       res,

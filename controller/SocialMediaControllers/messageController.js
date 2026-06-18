@@ -12,6 +12,7 @@ const { getOrSetCache,invalidateCache } = require('../../utils/cache');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
 const expressAsyncHandler = require('express-async-handler');
 const { containsBadWords } = require('../../utils/filterBadWords');
+const { sendPushToUsers } = require("../../config/firebaseAdmin");
 
 exports.sharePost = async (req, res) => {
   try {
@@ -317,6 +318,23 @@ exports.createMessage = async (req, res) => {
       io.to(receiver.toString()).emit("newMessage", {
         message: responsePayload,
         sender: senderInfo,
+      });
+      // 🔔 Push notification (background/app-killed me bhi dikhe)
+      const pushBody =
+        decryptedMessage && decryptedMessage.trim()
+          ? decryptedMessage
+          : attachments.length
+            ? "📷 Photo"
+            : "New message";
+      sendPushToUsers([receiver], {
+        title: senderInfo.fullName || "New message",
+        body: pushBody,
+        data: {
+          type: "chat",
+          senderId: String(senderInfo._id || sender),
+          senderName: senderInfo.fullName || "",
+          conversationId: String(conversation._id || ""),
+        },
       });
     }
     // 9. Success response
