@@ -1,36 +1,56 @@
 // config/firebaseAdmin.js
-// 🔔 Firebase Admin init + push notification helper (chat/group notifications)
-const admin = require("firebase-admin");
+// 🔔 Firebase Admin init + push helper (modular API - firebase-admin v14)
+// Local: config/firebaseServiceAccount.json se. Render/production: env var se.
+const { getApps, initializeApp, cert } = require("firebase-admin/app");
+const { getMessaging } = require("firebase-admin/messaging");
 const User = require("../model/UserRegistrationModels/userModel");
+
+// Service account nikaalo: pehle env var, warna local file
+function loadServiceAccount() {
+  // Render par: FIREBASE_SERVICE_ACCOUNT env var me poora JSON paste karein
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+      return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } catch (e) {
+      console.error(
+        "⚠️ FIREBASE_SERVICE_ACCOUNT JSON parse failed:",
+        e.message,
+      );
+      return null;
+    }
+  }
+  // Local: file se
+  try {
+    return require("./firebaseServiceAccount.json");
+  } catch (e) {
+    console.error("⚠️ firebaseServiceAccount.json not found:", e.message);
+    return null;
+  }
+}
 
 let initialized = false;
 try {
-  if (!admin.apps.length) {
-    // ⚠️ Service account key (Firebase Console > Project Settings > Service accounts
-    //    > Generate new private key) ko is path par rakho aur .gitignore me daalo:
-    //    config/firebaseServiceAccount.json
-    const serviceAccount = require("./firebaseServiceAccount.json");
-    admin.initializeApp({
-      credential: admin.cert(serviceAccount),
-    });
+  if (getApps().length === 0) {
+    const serviceAccount = loadServiceAccount();
+    if (serviceAccount) {
+      initializeApp({ credential: cert(serviceAccount) });
+      initialized = true;
+      console.log("✅ Firebase Admin initialized");
+    } else {
+      console.error("⚠️ Firebase Admin: no service account found");
+    }
+  } else {
+    initialized = true;
   }
-  initialized = true;
-  console.log("✅ Firebase Admin initialized");
 } catch (e) {
-  console.error("⚠️ Firebase Admin init failed:", e.message);
+  console.error("⚠️ Firebase Admin init failed:", e);
 }
 
-/**
- * Multiple users ke saare devices par push bhejo.
- * @param {Array} userIds - jin users ko bhejni hai
- * @param {Object} opts - { title, body, data }
- */
 async function sendPushToUsers(userIds, { title, body, data = {} } = {}) {
   try {
     if (!initialized) return;
     if (!userIds || userIds.length === 0) return;
 
-    // unique string ids
     const ids = [
       ...new Set(
         userIds.map((id) => (id ? id.toString() : null)).filter(Boolean),
@@ -38,7 +58,6 @@ async function sendPushToUsers(userIds, { title, body, data = {} } = {}) {
     ];
     if (ids.length === 0) return;
 
-    // in users ke saare fcm tokens nikaalo
     const users = await User.find({ _id: { $in: ids } }).select("fcmTokens");
     let tokens = [];
     users.forEach((u) => {
@@ -47,7 +66,6 @@ async function sendPushToUsers(userIds, { title, body, data = {} } = {}) {
     tokens = [...new Set(tokens.filter(Boolean))];
     if (tokens.length === 0) return;
 
-    // FCM data ki saari values string honi chahiye
     const stringData = {};
     Object.keys(data || {}).forEach((k) => {
       stringData[k] = data[k] == null ? "" : String(data[k]);
@@ -59,19 +77,13 @@ async function sendPushToUsers(userIds, { title, body, data = {} } = {}) {
       data: stringData,
       android: {
         priority: "high",
-        notification: {
-          sound: "default",
-          channelId: "default-channel-id",
-        },
+        notification: { sound: "default", channelId: "default-channel-id" },
       },
-      apns: {
-        payload: { aps: { sound: "default" } },
-      },
+      apns: { payload: { aps: { sound: "default" } } },
     };
 
-    const response = await admin.messaging().sendEachForMulticast(message);
+    const response = await getMessaging().sendEachForMulticast(message);
 
-    // invalid/expire ho chuke tokens ko DB se hata do
     const invalid = [];
     response.responses.forEach((r, i) => {
       if (!r.success) {
@@ -96,4 +108,4 @@ async function sendPushToUsers(userIds, { title, body, data = {} } = {}) {
   }
 }
 
-module.exports = { admin, sendPushToUsers };
+module.exports = { sendPushToUsers };
