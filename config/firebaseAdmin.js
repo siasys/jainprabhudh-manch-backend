@@ -1,13 +1,10 @@
 // config/firebaseAdmin.js
-// 🔔 Firebase Admin init + push helper (modular API - firebase-admin v14)
-// Local: config/firebaseServiceAccount.json se. Render/production: env var se.
+// 🔔 Firebase Admin init + push helper (modular API) — WITH DIAGNOSTIC LOGS
 const { getApps, initializeApp, cert } = require("firebase-admin/app");
 const { getMessaging } = require("firebase-admin/messaging");
 const User = require("../model/UserRegistrationModels/userModel");
 
-// Service account nikaalo: pehle env var, warna local file
 function loadServiceAccount() {
-  // Render par: FIREBASE_SERVICE_ACCOUNT env var me poora JSON paste karein
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     try {
       return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -19,7 +16,6 @@ function loadServiceAccount() {
       return null;
     }
   }
-  // Local: file se
   try {
     return require("./firebaseServiceAccount.json");
   } catch (e) {
@@ -48,8 +44,20 @@ try {
 
 async function sendPushToUsers(userIds, { title, body, data = {} } = {}) {
   try {
-    if (!initialized) return;
-    if (!userIds || userIds.length === 0) return;
+    console.log(
+      "🔔 [push] called. initialized=",
+      initialized,
+      "userIds=",
+      userIds,
+    );
+    if (!initialized) {
+      console.log("🔔 [push] SKIP: firebase not initialized");
+      return;
+    }
+    if (!userIds || userIds.length === 0) {
+      console.log("🔔 [push] SKIP: no userIds");
+      return;
+    }
 
     const ids = [
       ...new Set(
@@ -64,7 +72,18 @@ async function sendPushToUsers(userIds, { title, body, data = {} } = {}) {
       if (Array.isArray(u.fcmTokens)) tokens.push(...u.fcmTokens);
     });
     tokens = [...new Set(tokens.filter(Boolean))];
-    if (tokens.length === 0) return;
+    console.log(
+      "🔔 [push] users found=",
+      users.length,
+      "| tokens found=",
+      tokens.length,
+    );
+    if (tokens.length === 0) {
+      console.log(
+        "🔔 [push] SKIP: koi fcmToken nahi mila (DB me token save nahi hua?)",
+      );
+      return;
+    }
 
     const stringData = {};
     Object.keys(data || {}).forEach((k) => {
@@ -83,10 +102,21 @@ async function sendPushToUsers(userIds, { title, body, data = {} } = {}) {
     };
 
     const response = await getMessaging().sendEachForMulticast(message);
+    console.log(
+      "🔔 [push] SENT. success=",
+      response.successCount,
+      "| failure=",
+      response.failureCount,
+    );
 
     const invalid = [];
     response.responses.forEach((r, i) => {
       if (!r.success) {
+        console.log(
+          "🔔 [push] token fail:",
+          r.error && r.error.code,
+          r.error && r.error.message,
+        );
         const code = (r.error && r.error.code) || "";
         if (
           code.includes("registration-token-not-registered") ||
@@ -102,9 +132,10 @@ async function sendPushToUsers(userIds, { title, body, data = {} } = {}) {
         { _id: { $in: ids } },
         { $pull: { fcmTokens: { $in: invalid } } },
       );
+      console.log("🔔 [push] removed invalid tokens=", invalid.length);
     }
   } catch (e) {
-    console.error("sendPushToUsers error:", e.message);
+    console.error("🔔 [push] sendPushToUsers error:", e.message);
   }
 }
 
