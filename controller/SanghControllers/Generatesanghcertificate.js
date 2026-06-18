@@ -17,7 +17,7 @@ const fontBoldPath = path.resolve(
 
 if (fs.existsSync(fontPath)) {
   registerFont(fontPath, { family: "NotoDevanagari" });
-  console.log("✅ NotoDevanagari Regular Font Loaded");
+  //console.log("✅ NotoDevanagari Regular Font Loaded");
 } else {
   console.error("❌ Font not found:", fontPath);
 }
@@ -35,7 +35,7 @@ async function loadSanghTemplate() {
     templateSanghCertificate = await loadImage(
       path.join(__dirname, "../../Public/sangh_certificate.png"),
     );
-    console.log("✅ Sangh Certificate Template Loaded");
+   // console.log("✅ Sangh Certificate Template Loaded");
   } catch (err) {
     console.error("❌ Sangh Certificate Template Load Error:", err);
   }

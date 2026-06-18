@@ -2819,7 +2819,7 @@ async function loadMemberTemplates() {
       path.join(__dirname, "../../Public/member_back.jpeg"),
     );
 
-    console.log("✅ Member card templates loaded");
+    //console.log("✅ Member card templates loaded");
   } catch (err) {
     console.error("❌ Template load error:", err);
   }

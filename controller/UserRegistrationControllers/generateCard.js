@@ -16,7 +16,7 @@ const fontPath = path.resolve(
 
 if (fs.existsSync(fontPath)) {
   registerFont(fontPath, { family: "NotoDevanagari" });
-  console.log("✅ Font Loaded");
+//  console.log("✅ Font Loaded");
 } else {
   console.error("❌ Font not found:", fontPath);
 }
@@ -40,7 +40,7 @@ async function loadTemplates() {
       path.join(__dirname, "../../Public/jain_shravak_3.jpeg"),
     );
 
-    console.log("✅ Card Templates Loaded");
+   // console.log("✅ Card Templates Loaded");
   } catch (err) {
     console.error("❌ Template Load Error:", err);
   }
@@ -234,7 +234,7 @@ async function loadMinorityTemplate() {
     templateMinority = await loadImage(
       path.join(__dirname, "../../Public/minority.png"),
     );
-    console.log("Minority Card Template Loaded");
+   // console.log("Minority Card Template Loaded");
   } catch (err) {
     console.error("❌ Minority Template Load Error:", err);
   }

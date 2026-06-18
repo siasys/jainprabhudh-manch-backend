@@ -7,7 +7,7 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-console.log('✅ Upstash Redis REST API configured');
+//console.log('✅ Upstash Redis REST API configured');
 
 // Export a promise-based interface consistent with your existing code
 module.exports = {

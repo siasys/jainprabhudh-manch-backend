@@ -1,6 +1,8 @@
 const { VyavahikBiodata } = require('../../model/Matrimonial/VyavahikBiodata');
 const JainAadhar = require('../../model/UserRegistrationModels/jainAadharModel');
 const { convertS3UrlToCDN } = require('../../utils/s3Utils');
+const mongoose = require("mongoose");
+
 // Create API
 const createBiodata = async (req, res) => {
   try {
@@ -1110,13 +1112,16 @@ const likeProfile = async (req, res) => {
       });
     }
     // target exist karta he?
-    const targetExists = await VyavahikBiodata.exists({ _id: targetId });
-    if (!targetExists) {
-      return res.status(404).json({
-        success: false,
-        message: "Target profile not found",
-      });
-    }
+const targetBiodata = await VyavahikBiodata.findOne({
+  $or: [{ _id: targetId }, { userId: targetId }],
+});
+
+if (!targetBiodata) {
+  return res.status(404).json({
+    success: false,
+    message: "Target profile not found",
+  });
+}
 
     // apne aap ko like nahi kar sakte
     if (myBiodata._id.toString() === targetId) {
@@ -1238,44 +1243,71 @@ const sendInterest = async (req, res) => {
     const { targetId } = req.params;
     const { message } = req.body;
 
-    // apna biodata
-    const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id });
+    if (!targetId || !mongoose.Types.ObjectId.isValid(targetId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid target profile id",
+      });
+    }
+
+    const myBiodata = await VyavahikBiodata.findOne({
+      userId: req.user._id,
+    });
+
     if (!myBiodata) {
-      return res.status(404).json({ success: false, message: "Your biodata not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Your biodata not found",
+      });
     }
 
-    // target exist?
- const targetBiodata = await VyavahikBiodata.findById(targetId);
+    const targetBiodata = await VyavahikBiodata.findOne({
+      $or: [{ _id: targetId }, { userId: targetId }],
+    });
 
- if (!targetBiodata || targetBiodata.isVisible === false) {
-   return res.status(404).json({
-     success: false,
-     message: "Target profile not found",
-   });
- }
-
-    // apne aap ko interest nahi
-    if (myBiodata._id.toString() === targetId) {
-      return res.status(400).json({ success: false, message: "Cannot send interest to yourself" });
+    if (!targetBiodata) {
+      return res.status(404).json({
+        success: false,
+        message: "Target profile not found",
+      });
     }
 
-    // pehle se interest bheja?
+    const targetProfileId = targetBiodata._id.toString();
+    const myProfileId = myBiodata._id.toString();
+
+    if (myProfileId === targetProfileId) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot send interest to yourself",
+      });
+    }
+
+    myBiodata.interestsSent = Array.isArray(myBiodata.interestsSent)
+      ? myBiodata.interestsSent
+      : [];
+
+    targetBiodata.interestsReceived = Array.isArray(targetBiodata.interestsReceived)
+      ? targetBiodata.interestsReceived
+      : [];
+
     const alreadySent = myBiodata.interestsSent.some(
-      (i) => i.profileId.toString() === targetId
+      (i) => i?.profileId?.toString() === targetProfileId
     );
+
     if (alreadySent) {
-      return res.status(400).json({ success: false, message: "Interest already sent to this profile" });
+      return res.status(400).json({
+        success: false,
+        message: "Interest already sent to this profile",
+      });
     }
 
-    // sender ke interestsSent mein add
     myBiodata.interestsSent.push({
-      profileId: targetId,
+      profileId: targetBiodata._id,
       status: "pending",
       message: message || "",
       sentAt: new Date(),
     });
 
-    // receiver ke interestsReceived mein add
     targetBiodata.interestsReceived.push({
       profileId: myBiodata._id,
       status: "pending",
@@ -1285,13 +1317,17 @@ const sendInterest = async (req, res) => {
 
     await Promise.all([myBiodata.save(), targetBiodata.save()]);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Interest sent successfully",
     });
   } catch (error) {
     console.error("❌ Send Interest Error:", error);
-    res.status(500).json({ success: false, message: "Error sending interest", error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Error sending interest",
+      error: error.message,
+    });
   }
 };
 
@@ -1349,28 +1385,45 @@ const respondToInterest = async (req, res) => {
     res.status(500).json({ success: false, message: "Error responding to interest", error: error.message });
   }
 };
-
 // ─── GET MY SENT INTERESTS ────────────────────────────────────────────────────
 // GET /biodata/interests/sent
 const getSentInterests = async (req, res) => {
   try {
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
-      .populate("interestsSent.profileId", "name gender dob uploadedPhotos addressInfo")
+      .populate(
+        "interestsSent.profileId",
+        "name gender dob uploadedPhotos addressInfo"
+      )
       .lean();
 
     if (!myBiodata) {
-      return res.status(404).json({ success: false, message: "Your biodata not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Your biodata not found",
+        total: 0,
+        data: [],
+      });
     }
 
-    res.status(200).json({
+    const interestsSent = Array.isArray(myBiodata.interestsSent)
+      ? myBiodata.interestsSent
+      : [];
+
+    return res.status(200).json({
       success: true,
       message: "Sent interests fetched successfully",
-      total: myBiodata.interestsSent.length,
-      data: myBiodata.interestsSent,
+      total: interestsSent.length,
+      data: interestsSent,
     });
   } catch (error) {
     console.error("❌ Get Sent Interests Error:", error);
-    res.status(500).json({ success: false, message: "Error fetching sent interests", error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching sent interests",
+      total: 0,
+      data: [],
+      error: error.message,
+    });
   }
 };
 
@@ -1379,22 +1432,40 @@ const getSentInterests = async (req, res) => {
 const getReceivedInterests = async (req, res) => {
   try {
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
-      .populate("interestsReceived.profileId", "name gender dob uploadedPhotos addressInfo")
+      .populate(
+        "interestsReceived.profileId",
+        "name gender dob uploadedPhotos addressInfo"
+      )
       .lean();
 
     if (!myBiodata) {
-      return res.status(404).json({ success: false, message: "Your biodata not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Your biodata not found",
+        total: 0,
+        data: [],
+      });
     }
 
-    res.status(200).json({
+    const interestsReceived = Array.isArray(myBiodata.interestsReceived)
+      ? myBiodata.interestsReceived
+      : [];
+
+    return res.status(200).json({
       success: true,
       message: "Received interests fetched successfully",
-      total: myBiodata.interestsReceived.length,
-      data: myBiodata.interestsReceived,
+      total: interestsReceived.length,
+      data: interestsReceived,
     });
   } catch (error) {
     console.error("❌ Get Received Interests Error:", error);
-    res.status(500).json({ success: false, message: "Error fetching received interests", error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching received interests",
+      total: 0,
+      data: [],
+      error: error.message,
+    });
   }
 };
 module.exports = {

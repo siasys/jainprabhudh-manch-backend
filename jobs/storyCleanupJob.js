@@ -6,7 +6,7 @@ const s3Client = require('../config/s3Config');
 // Story cleanup function
 const cleanupExpiredStories = async () => {
   try {
-    console.log('Running story cleanup job');
+   // console.log('Running story cleanup job');
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     
     // Find expired stories

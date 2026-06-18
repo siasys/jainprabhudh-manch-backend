@@ -32,7 +32,7 @@ async function loadTemplates() {
       path.join(__dirname, "../../Public/business-2.jpeg"),
     );
 
-    console.log("✅ Business templates loaded");
+    //console.log("✅ Business templates loaded");
   } catch (err) {
     console.error("❌ Template load error:", err);
   }

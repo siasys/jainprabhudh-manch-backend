@@ -15,7 +15,7 @@ const fontPath = path.resolve(
 
 if (fs.existsSync(fontPath)) {
   registerFont(fontPath, { family: "NotoDevanagari" });
-  console.log("✅ Sadhu font loaded");
+ // console.log("✅ Sadhu font loaded");
 } else {
   console.error("❌ Font not found:", fontPath);
 }
@@ -33,7 +33,7 @@ async function loadTemplates() {
     }
 
     sadhuTemplate = await loadImage(templatePath);
-    console.log("✅ Sadhu template loaded");
+    //console.log("✅ Sadhu template loaded");
   } catch (err) {
     console.error("❌ Template load error:", err);
   }
