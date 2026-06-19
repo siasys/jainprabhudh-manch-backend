@@ -105,7 +105,7 @@ router.get(
 router.get( "/check-duplicate" ,checkApplicationDuplicate);
 // router.get('/applications', getApplicationsReview);
 router.get('/generate-card/:id', generateJainAadharCard);
-router.get("/generate-minority-card/:id", generateMinorityCard);
+router.get("/minority-card/:id", generateMinorityCard);
 router.get('/verify/jain-shravak/:jainAadharNumber', async (req, res) => {
   try {
     const { jainAadharNumber } = req.params;
