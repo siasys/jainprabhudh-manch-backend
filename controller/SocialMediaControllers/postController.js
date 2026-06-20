@@ -1,30 +1,30 @@
-const Post = require('../../model/SocialMediaModels/postModel');
-const User = require('../../model/UserRegistrationModels/userModel');
-const UserInterest = require('../../model/SocialMediaModels/UserInterest');
-const asyncHandler = require('express-async-handler');
-const upload = require('../../middlewares/upload');
-const { successResponse, errorResponse } = require('../../utils/apiResponse');
-const { body, validationResult, param, query } = require('express-validator');
-const Notification = require('../../model/SocialMediaModels/notificationModel')
-const { getIo } = require('../../websocket/socket');
-const SanghPost = require('../../model/SanghModels/sanghPostModel');
-const PanchPost = require('../../model/SanghModels/panchPostModel');
-const VyaparPost = require('../../model/VyaparModels/vyaparPostModel');
-const TirthPost = require('../../model/TirthModels/tirthPostModel');
-const SadhuPost = require('../../model/SadhuModels/sadhuPostModel');
-const { getOrSetCache, invalidateCache } = require('../../utils/cache');
-const { convertS3UrlToCDN } = require('../../utils/s3Utils');
-const { extractS3KeyFromUrl } = require('../../utils/s3Utils');
-const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
-const redisClient = require('../../config/redisClient');
-const Report = require('../../model/SocialMediaModels/Report');
-const Hashtag = require('../../model/SocialMediaModels/Hashtag');
-const Sangh = require('../../model/SanghModels/hierarchicalSanghModel');
+const Post = require("../../model/SocialMediaModels/postModel");
+const User = require("../../model/UserRegistrationModels/userModel");
+const UserInterest = require("../../model/SocialMediaModels/UserInterest");
+const asyncHandler = require("express-async-handler");
+const upload = require("../../middlewares/upload");
+const { successResponse, errorResponse } = require("../../utils/apiResponse");
+const { body, validationResult, param, query } = require("express-validator");
+const Notification = require("../../model/SocialMediaModels/notificationModel");
+const { getIo } = require("../../websocket/socket");
+const SanghPost = require("../../model/SanghModels/sanghPostModel");
+const PanchPost = require("../../model/SanghModels/panchPostModel");
+const VyaparPost = require("../../model/VyaparModels/vyaparPostModel");
+const TirthPost = require("../../model/TirthModels/tirthPostModel");
+const SadhuPost = require("../../model/SadhuModels/sadhuPostModel");
+const { getOrSetCache, invalidateCache } = require("../../utils/cache");
+const { convertS3UrlToCDN } = require("../../utils/s3Utils");
+const { extractS3KeyFromUrl } = require("../../utils/s3Utils");
+const { s3Client, DeleteObjectCommand } = require("../../config/s3Config");
+const redisClient = require("../../config/redisClient");
+const Report = require("../../model/SocialMediaModels/Report");
+const Hashtag = require("../../model/SocialMediaModels/Hashtag");
+const Sangh = require("../../model/SanghModels/hierarchicalSanghModel");
 const { containsBadWords } = require("../../utils/filterBadWords");
-const CommentReport = require('../../model/SocialMediaModels/CommentReport');
-const Block = require('../../model/Block User/Block');
-const { moderateImage } = require('../../utils/moderation');
-const BoostPlan = require('../../model/BoostPlan/BoostPlan')
+const CommentReport = require("../../model/SocialMediaModels/CommentReport");
+const Block = require("../../model/Block User/Block");
+const { moderateImage } = require("../../utils/moderation");
+const BoostPlan = require("../../model/BoostPlan/BoostPlan");
 const mongoose = require("mongoose");
 
 // const createPost = [
@@ -73,7 +73,6 @@ const mongoose = require("mongoose");
 //         });
 //       }
 
-
 //     const media = [];
 
 //     // -----------------------------
@@ -103,8 +102,6 @@ const mongoose = require("mongoose");
 //     media.push({ url: cdnUrl, type: 'video' });
 //   }
 // }
-
-
 
 //     // -----------------------------
 //     // TEXT CHECK USING BAD-WORD FILTER
@@ -181,7 +178,6 @@ const mongoose = require("mongoose");
 //     else if (type === 'sadhu') postData.sadhuId = refId;
 //     else if (type === 'vyapar') postData.vyaparId = refId;
 
-
 // // ASSIGN ACTIVE BOOST TO POST
 // let activeBoostId = null;
 // if (user.activeBoosts && user.activeBoosts.length > 0) {
@@ -244,7 +240,7 @@ const mongoose = require("mongoose");
 //   })
 // ];
 
-// Old code 
+// Old code
 // const createPost = [
 //   upload.postMediaUpload,
 //   body("userId").notEmpty().isMongoId(),
@@ -495,7 +491,11 @@ const createPost = [
     if (req.files?.video) {
       for (const file of req.files.video) {
         const cdnUrl = convertS3UrlToCDN(file.location);
-        media.push({ url: cdnUrl, type: "video" });
+        // thumbnailUrl uploadToS3 middleware ne already set kar di hogi
+        const thumbnailCdn = file.thumbnailUrl
+          ? convertS3UrlToCDN(file.thumbnailUrl)
+          : null;
+        media.push({ url: cdnUrl, type: "video", thumbnail: thumbnailCdn });
       }
     }
 
@@ -611,7 +611,9 @@ const voteOnPoll = async (req, res) => {
     const { optionIndex, userId } = req.body;
 
     if (optionIndex === undefined || !userId) {
-      return res.status(400).json({ message: "optionIndex and userId are required" });
+      return res
+        .status(400)
+        .json({ message: "optionIndex and userId are required" });
     }
 
     // Find post as a Mongoose document (no lean)
@@ -626,7 +628,8 @@ const voteOnPoll = async (req, res) => {
       post.type === "sangh" || post.type === "panch"
         ? post.sanghId?._id?.toString()
         : userId.toString();
-    if (!voterId) return res.status(400).json({ message: "Voter ID not found" });
+    if (!voterId)
+      return res.status(400).json({ message: "Voter ID not found" });
 
     // Ensure pollVotes map is initialized
     if (!post.pollVotes) post.pollVotes = new Map();
@@ -636,25 +639,25 @@ const voteOnPoll = async (req, res) => {
     });
 
     // Ensure votedUsers array exists and compare as strings
-   if (!post.votedUsers) post.votedUsers = [];
+    if (!post.votedUsers) post.votedUsers = [];
 
-// Convert to string for safe comparison
-const voterIdStr = voterId.toString();
-const votedUsersStr = post.votedUsers.map(id => id.toString());
+    // Convert to string for safe comparison
+    const voterIdStr = voterId.toString();
+    const votedUsersStr = post.votedUsers.map((id) => id.toString());
 
-// Only prevent double voting for the **same voter type**
-const alreadyVoted =
-  (post.type === "sangh" || post.type === "panch")
-    ? votedUsersStr.includes(voterIdStr) // sangh already voted
-    : votedUsersStr.includes(voterIdStr); // normal user already voted
+    // Only prevent double voting for the **same voter type**
+    const alreadyVoted =
+      post.type === "sangh" || post.type === "panch"
+        ? votedUsersStr.includes(voterIdStr) // sangh already voted
+        : votedUsersStr.includes(voterIdStr); // normal user already voted
 
-if (alreadyVoted) {
-  return res.status(400).json({ message: "You have already voted" });
-}
+    if (alreadyVoted) {
+      return res.status(400).json({ message: "You have already voted" });
+    }
 
-// Add vote
-post.pollVotes.get(optionIndex.toString()).push(voterIdStr);
-post.votedUsers.push(voterIdStr);
+    // Add vote
+    post.pollVotes.get(optionIndex.toString()).push(voterIdStr);
+    post.votedUsers.push(voterIdStr);
 
     // Save updated post
     await post.save();
@@ -662,7 +665,7 @@ post.votedUsers.push(voterIdStr);
     // Recalculate poll results
     const totalVotes = Object.values(post.pollVotes).reduce(
       (sum, arr) => sum + arr.length,
-      0
+      0,
     );
 
     const pollResults = post.pollOptions.map((option, idx) => {
@@ -680,31 +683,33 @@ post.votedUsers.push(voterIdStr);
       pollResults,
       totalVotes,
     });
-
   } catch (err) {
     console.error("Vote Error:", err);
-    res.status(500).json({ message: "Error submitting vote", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Error submitting vote", error: err.message });
   }
 };
-
 
 const searchHashtags = async (req, res) => {
   try {
     const query = req.query.q;
-    if (!query || query.trim() === '') {
-      return res.status(400).json({ message: 'Query parameter `q` is required' });
+    if (!query || query.trim() === "") {
+      return res
+        .status(400)
+        .json({ message: "Query parameter `q` is required" });
     }
 
     const hashtags = await Hashtag.find({
-      name: { $regex: `^${query.toLowerCase()}`, $options: 'i' }
+      name: { $regex: `^${query.toLowerCase()}`, $options: "i" },
     })
-    .sort({ count: -1 }) // most popular first
-    .limit(10); // limit to top 10 suggestions
+      .sort({ count: -1 }) // most popular first
+      .limit(10); // limit to top 10 suggestions
 
     res.json(hashtags);
   } catch (err) {
-    console.error('Hashtag search error:', err);
-    res.status(500).json({ message: 'Server error while searching hashtags' });
+    console.error("Hashtag search error:", err);
+    res.status(500).json({ message: "Server error while searching hashtags" });
   }
 };
 
@@ -731,15 +736,20 @@ const getPostsByUser = asyncHandler(async (req, res) => {
 
     // Get complete posts with all populated data
     const posts = await Post.find({ user: userId })
-      .populate("user", "fullName profilePicture accountType accountStatus sadhuName tirthName businessName")
+      .populate(
+        "user",
+        "fullName profilePicture accountType accountStatus sadhuName tirthName businessName",
+      )
       .populate("sanghId", "name sanghImage")
       .populate({
         path: "comments.user",
-        select: "fullName profilePicture accountType accountStatus sadhuName tirthName businessName"
+        select:
+          "fullName profilePicture accountType accountStatus sadhuName tirthName businessName",
       })
       .populate({
         path: "comments.replies.user",
-        select: "fullName profilePicture accountType accountStatus sadhuName tirthName businessName"
+        select:
+          "fullName profilePicture accountType accountStatus sadhuName tirthName businessName",
       })
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -757,16 +767,15 @@ const getPostsByUser = asyncHandler(async (req, res) => {
       totalPages: Math.ceil(totalPosts / limit),
       hasMore: skip + limit < totalPosts,
       data: {
-        posts: posts
-      }
+        posts: posts,
+      },
     });
-
   } catch (error) {
-    console.error('Error fetching user posts:', error);
+    console.error("Error fetching user posts:", error);
     res.status(500).json({
       success: false,
       error: "Failed to fetch posts",
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -905,8 +914,6 @@ const getPostById = asyncHandler(async (req, res) => {
     createdAt: post.createdAt,
   });
 });
-
-
 
 // new pagination filter code (old code 9-6-2026)
 // const getAllPosts = async (req, res) => {
@@ -1599,8 +1606,8 @@ const getAllPosts = async (req, res) => {
     return errorResponse(res, "Failed to fetch posts", 500, err.message);
   }
 };
- 
-//old get video 
+
+//old get video
 // const getAllVideoPosts = async (req, res) => {
 //   try {
 //     const limit = parseInt(req.query.limit) || 10;
@@ -2269,103 +2276,103 @@ const toggleLike = [
     const { postId } = req.params;
     const { userId } = req.body;
     if (!userId) {
-      return res.status(400).json({ message: 'User ID is required' });
+      return res.status(400).json({ message: "User ID is required" });
     }
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: "User not found" });
     }
 
-    const post = await Post.findById(postId).populate('user');
+    const post = await Post.findById(postId).populate("user");
     if (!post) {
-      return res.status(404).json({ message: 'Post not found' });
+      return res.status(404).json({ message: "Post not found" });
     }
 
     const isLiked = post.likes.includes(userId);
 
-  if (isLiked) {
-    // ---- Unlike ----
-    post.likes = post.likes.filter((id) => id.toString() !== userId);
+    if (isLiked) {
+      // ---- Unlike ----
+      post.likes = post.likes.filter((id) => id.toString() !== userId);
 
-    user.activity.likes = user.activity.likes.filter(
-      (like) => like.postId.toString() !== postId,
-    );
-    await user.save();
+      user.activity.likes = user.activity.likes.filter(
+        (like) => like.postId.toString() !== postId,
+      );
+      await user.save();
 
-    // ✅ UserInterest score DECREASE on unlike
-    if (post.hashtags && post.hashtags.length) {
-      let interestDoc = await UserInterest.findOne({ user: userId });
-      if (interestDoc) {
+      // ✅ UserInterest score DECREASE on unlike
+      if (post.hashtags && post.hashtags.length) {
+        let interestDoc = await UserInterest.findOne({ user: userId });
+        if (interestDoc) {
+          post.hashtags.forEach((tag) => {
+            const lowerTag = tag.toLowerCase();
+            const existingTag = interestDoc.hashtags.find(
+              (h) => h.name === lowerTag,
+            );
+            if (existingTag) {
+              // ✅ Score minus karo, 0 se neeche nahi jayega
+              existingTag.score = Math.max(0, existingTag.score - 1);
+            }
+            // Unlike pe naya tag add nahi karte
+          });
+          await interestDoc.save();
+        }
+      }
+
+      await Notification.findOneAndDelete({
+        senderId: userId,
+        receiverId: post.user._id,
+        type: "like",
+        postId: postId,
+      });
+    } else {
+      // ---- Like ----
+      post.likes.push(userId);
+
+      if (
+        !user.activity.likes.some((like) => like.postId.toString() === postId)
+      ) {
+        user.activity.likes.push({ postId });
+        await user.save();
+      }
+      // UserInterest score increase
+      if (post.hashtags && post.hashtags.length) {
+        let interestDoc = await UserInterest.findOne({ user: userId });
+        if (!interestDoc) {
+          interestDoc = new UserInterest({ user: userId, hashtags: [] });
+        }
         post.hashtags.forEach((tag) => {
-          const lowerTag = tag.toLowerCase();
-          const existingTag = interestDoc.hashtags.find(
-            (h) => h.name === lowerTag,
-          );
+          const existingTag = interestDoc.hashtags.find((h) => h.name === tag);
           if (existingTag) {
-            // ✅ Score minus karo, 0 se neeche nahi jayega
-            existingTag.score = Math.max(0, existingTag.score - 1);
+            existingTag.score += 1;
+          } else {
+            interestDoc.hashtags.push({ name: tag, score: 1 });
           }
-          // Unlike pe naya tag add nahi karte
         });
         await interestDoc.save();
       }
-    }
 
-    await Notification.findOneAndDelete({
-      senderId: userId,
-      receiverId: post.user._id,
-      type: "like",
-      postId: postId,
-    });
-  } else {
-    // ---- Like ----
-    post.likes.push(userId);
-
-    if (
-      !user.activity.likes.some((like) => like.postId.toString() === postId)
-    ) {
-      user.activity.likes.push({ postId });
-      await user.save();
-    }
-    // UserInterest score increase
-    if (post.hashtags && post.hashtags.length) {
-      let interestDoc = await UserInterest.findOne({ user: userId });
-      if (!interestDoc) {
-        interestDoc = new UserInterest({ user: userId, hashtags: [] });
-      }
-      post.hashtags.forEach((tag) => {
-        const existingTag = interestDoc.hashtags.find((h) => h.name === tag);
-        if (existingTag) {
-          existingTag.score += 1;
-        } else {
-          interestDoc.hashtags.push({ name: tag, score: 1 });
-        }
+      // Notification create
+      const notification = new Notification({
+        senderId: userId,
+        receiverId: post.user._id,
+        type: "like",
+        message: "liked your post.",
+        postId: postId,
       });
-      await interestDoc.save();
+      await notification.save();
+
+      // Socket notification send
+      const io = getIo();
+      io.to(post.user._id.toString()).emit("newNotification", notification);
     }
-
-    // Notification create
-    const notification = new Notification({
-      senderId: userId,
-      receiverId: post.user._id,
-      type: "like",
-      message: "liked your post.",
-      postId: postId,
-    });
-    await notification.save();
-
-    // Socket notification send
-    const io = getIo();
-    io.to(post.user._id.toString()).emit("newNotification", notification);
-  }
 
     await post.save();
     await invalidateCache(`post:${postId}`);
     await invalidateCache(`postLikes:${postId}`);
 
     res.status(200).json({
-      message: isLiked ? 'Like removed' : 'Post liked',
+      message: isLiked ? "Like removed" : "Post liked",
       likesCount: post.likes.length,
       likes: post.likes,
     });
@@ -2392,13 +2399,13 @@ const toggleSavePost = asyncHandler(async (req, res) => {
 
   // Check if already saved in activity.saved
   const alreadySaved = user.activity?.saved?.some(
-    (a) => a.postId.toString() === postId
+    (a) => a.postId.toString() === postId,
   );
 
   if (alreadySaved) {
     // ❌ Unsave: remove from activity.saved
     user.activity.saved = (user.activity.saved || []).filter(
-      (a) => a.postId.toString() !== postId
+      (a) => a.postId.toString() !== postId,
     );
   } else {
     // ✅ Save: push to activity.saved with timestamp
@@ -2411,7 +2418,9 @@ const toggleSavePost = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    message: alreadySaved ? "Post removed from saved" : "Post saved successfully",
+    message: alreadySaved
+      ? "Post removed from saved"
+      : "Post saved successfully",
     saved: !alreadySaved,
     savedCount: user.activity.saved.length,
   });
@@ -2421,12 +2430,13 @@ const getLikedUsers = asyncHandler(async (req, res) => {
   const { postId } = req.params;
 
   const post = await Post.findById(postId).populate({
-    path: 'likes',
-    select: 'fullName profilePicture businessName accountType sadhuName tirthName',
+    path: "likes",
+    select:
+      "fullName profilePicture businessName accountType sadhuName tirthName",
   });
 
   if (!post) {
-    return res.status(404).json({ message: 'Post not found' });
+    return res.status(404).json({ message: "Post not found" });
   }
 
   res.status(200).json({ users: post.likes });
@@ -2437,11 +2447,11 @@ const unlikePost = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const post = await Post.findById(postId);
   if (!post) {
-    return res.status(404).json({ error: 'Post not found' });
+    return res.status(404).json({ error: "Post not found" });
   }
   // Check if the post is already unliked
   if (!post.likes.includes(userId)) {
-    return res.status(400).json({ error: 'Post has not been liked yet' });
+    return res.status(400).json({ error: "Post has not been liked yet" });
   }
   // Remove userId from the likes array
   post.likes = post.likes.filter((id) => id.toString() !== userId);
@@ -2450,9 +2460,9 @@ const unlikePost = asyncHandler(async (req, res) => {
   await User.findByIdAndUpdate(
     userId,
     { $pull: { likedPosts: postId } },
-    { new: true }
+    { new: true },
   );
-  res.json({ message: 'Post unliked', post });
+  res.json({ message: "Post unliked", post });
 });
 
 const deletePost = asyncHandler(async (req, res) => {
@@ -2461,47 +2471,48 @@ const deletePost = asyncHandler(async (req, res) => {
 
   const post = await Post.findById(postId);
   if (!post) {
-    return res.status(404).json({ error: 'Post not found' });
+    return res.status(404).json({ error: "Post not found" });
   }
 
   let isAuthorized = false;
   let entityToUpdate = null;
 
   // ✅ Check if it's a sangh post
-  if (post.type === 'sangh' || post.type === 'panch') {
+  if (post.type === "sangh" || post.type === "panch") {
     if (!sanghId) {
-      return res.status(400).json({ error: 'sanghId required for sangh posts' });
+      return res
+        .status(400)
+        .json({ error: "sanghId required for sangh posts" });
     }
 
     const sangh = await Sangh.findById(sanghId);
     if (!sangh) {
-      return res.status(404).json({ error: 'Sangh not found' });
+      return res.status(404).json({ error: "Sangh not found" });
     }
 
     // Check if post belongs to this sangh
     const postSanghId = post.sanghId?._id || post.sanghId;
     isAuthorized = postSanghId.toString() === sanghId.toString();
     entityToUpdate = sangh;
-
   } else {
     // Regular user post
     if (!userId) {
-      return res.status(400).json({ error: 'userId required for user posts' });
+      return res.status(400).json({ error: "userId required for user posts" });
     }
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     const isOwner = post.user.toString() === userId.toString();
-    const isSuperAdmin = user.role === 'superadmin';
+    const isSuperAdmin = user.role === "superadmin";
     isAuthorized = isOwner || isSuperAdmin;
     entityToUpdate = user;
   }
 
   if (!isAuthorized) {
-    return res.status(403).json({ error: 'Unauthorized to delete this post' });
+    return res.status(403).json({ error: "Unauthorized to delete this post" });
   }
 
   // Delete media from S3
@@ -2512,12 +2523,12 @@ const deletePost = asyncHandler(async (req, res) => {
         if (key) {
           const deleteParams = {
             Bucket: process.env.AWS_BUCKET_NAME,
-            Key: key
+            Key: key,
           };
           await s3Client.send(new DeleteObjectCommand(deleteParams));
         }
       } catch (err) {
-        console.error('Error deleting from S3:', err);
+        console.error("Error deleting from S3:", err);
       }
     });
     await Promise.all(deletePromises);
@@ -2529,17 +2540,17 @@ const deletePost = asyncHandler(async (req, res) => {
   // ✅ Remove postId from entity's posts list
   if (entityToUpdate) {
     entityToUpdate.posts = entityToUpdate.posts.filter(
-      id => id.toString() !== postId.toString()
+      (id) => id.toString() !== postId.toString(),
     );
     await entityToUpdate.save();
   }
 
   // ✅ Remove from sangh if sangh post
-  if (post.type === 'sangh' || post.type === 'panch') {
+  if (post.type === "sangh" || post.type === "panch") {
     if (post.sanghId) {
       await Sangh.updateOne(
         { _id: post.sanghId },
-        { $pull: { posts: post._id } }
+        { $pull: { posts: post._id } },
       );
     }
   }
@@ -2548,20 +2559,16 @@ const deletePost = asyncHandler(async (req, res) => {
   await post.deleteOne();
 
   // ✅ Decrease post count (only for user posts)
-  if (post.user && (post.type !== 'sangh' && post.type !== 'panch')) {
-    await User.findByIdAndUpdate(
-      post.user,
-      { $inc: { postCount: -1 } }
-    );
+  if (post.user && post.type !== "sangh" && post.type !== "panch") {
+    await User.findByIdAndUpdate(post.user, { $inc: { postCount: -1 } });
   }
 
   // ✅ Clear cache
   await invalidateCache(`post:${postId}`);
-  await invalidateCache('combinedFeed:*');
+  await invalidateCache("combinedFeed:*");
 
-  res.json({ message: 'Post and related reports deleted successfully' });
+  res.json({ message: "Post and related reports deleted successfully" });
 });
-
 
 const sharePost = asyncHandler(async (req, res) => {
   const { postId } = req.params;
@@ -2579,7 +2586,7 @@ const sharePost = asyncHandler(async (req, res) => {
 
   // Check if already shared
   const alreadyShared = user.activity.shares.some(
-    (s) => s.postId.toString() === postId
+    (s) => s.postId.toString() === postId,
   );
 
   if (alreadyShared) {
@@ -2605,16 +2612,20 @@ const editPost = asyncHandler(async (req, res) => {
   try {
     const post = await Post.findById(postId);
     if (!post) {
-      return res.status(404).json({ error: 'Post not found' });
+      return res.status(404).json({ error: "Post not found" });
     }
     const postUserId = post.user.$oid ? post.user.$oid : post.user.toString();
     if (postUserId !== userId) {
-      return res.status(403).json({ error: 'Unauthorized' });
+      return res.status(403).json({ error: "Unauthorized" });
     }
     post.caption = caption;
     post.image = image;
-     // If replaceMedia flag is set, delete existing media from S3 and replace with new ones
-     if (req.body.replaceMedia === 'true' && post.media && post.media.length > 0) {
+    // If replaceMedia flag is set, delete existing media from S3 and replace with new ones
+    if (
+      req.body.replaceMedia === "true" &&
+      post.media &&
+      post.media.length > 0
+    ) {
       // Delete existing media from S3
       const deletePromises = post.media.map(async (mediaItem) => {
         try {
@@ -2622,9 +2633,9 @@ const editPost = asyncHandler(async (req, res) => {
           if (key) {
             const deleteParams = {
               Bucket: process.env.AWS_BUCKET_NAME,
-              Key: key
+              Key: key,
             };
-            
+
             await s3Client.send(new DeleteObjectCommand(deleteParams));
             console.log(`Successfully deleted file from S3: ${key}`);
           }
@@ -2633,33 +2644,33 @@ const editPost = asyncHandler(async (req, res) => {
         }
       });
       await Promise.all(deletePromises);
-      
+
       // Clear existing media array
       post.media = [];
     }
     if (req.files) {
       if (req.files.image) {
-        req.files.image.forEach(file => {
+        req.files.image.forEach((file) => {
           post.media.push({
             url: convertS3UrlToCDN(file.location),
-            type: 'image'
+            type: "image",
           });
         });
       }
       if (req.files.video) {
-        req.files.video.forEach(file => {
+        req.files.video.forEach((file) => {
           post.media.push({
             url: convertS3UrlToCDN(file.location),
-            type: 'video'
+            type: "video",
           });
         });
       }
     }
     await post.save();
-    res.status(200).json({ message: 'Post updated successfully', post });
+    res.status(200).json({ message: "Post updated successfully", post });
   } catch (error) {
-    console.error('Server error:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error("Server error:", error);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
@@ -2668,23 +2679,26 @@ const addComment = async (req, res) => {
   try {
     const { postId, commentText, userId } = req.body;
     if (!postId || !commentText || !userId) {
-      return res.status(400).json({ message: 'postId, commentText, and userId are required' });
+      return res
+        .status(400)
+        .json({ message: "postId, commentText, and userId are required" });
     }
     // Bad Word Check
     if (containsBadWords(commentText)) {
       return res.status(400).json({
         success: false,
-        message: "Your comment contains inappropriate or unsafe words. Please modify it..",
+        message:
+          "Your comment contains inappropriate or unsafe words. Please modify it..",
       });
     }
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: "User not found" });
     }
 
     const post = await Post.findById(postId);
     if (!post) {
-      return res.status(404).json({ message: 'Post not found' });
+      return res.status(404).json({ message: "Post not found" });
     }
 
     const comment = {
@@ -2699,7 +2713,7 @@ const addComment = async (req, res) => {
     const newComment = post.comments[post.comments.length - 1];
 
     // User activity update
-    if (!user.activity.comments.some(c => c.postId.toString() === postId)) {
+    if (!user.activity.comments.some((c) => c.postId.toString() === postId)) {
       user.activity.comments.push({ postId });
       await user.save();
     }
@@ -2707,31 +2721,35 @@ const addComment = async (req, res) => {
     await invalidateCache(`post:${postId}`);
     await invalidateCache(`postComments:${postId}`);
 
-    await post.populate('comments.user', 'firstName lastName fullName profilePicture accountType businessName sadhuName tirthName');
+    await post.populate(
+      "comments.user",
+      "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
+    );
 
     // Send notification
     const notification = new Notification({
       senderId: userId,
       receiverId: post.user,
-      type: 'comment',
+      type: "comment",
       message: "commented on your post.",
       postId: postId,
     });
     await notification.save();
 
     const io = getIo();
-    io.to(post.user.toString()).emit('newNotification', notification);
+    io.to(post.user.toString()).emit("newNotification", notification);
 
     res.status(200).json({
-      message: 'Comment added successfully',
+      message: "Comment added successfully",
       commentId: newComment._id,
       comment: newComment,
-      post
+      post,
     });
-
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Error adding comment', error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error adding comment", error: error.message });
   }
 };
 
@@ -2741,64 +2759,75 @@ const deleteComment = async (req, res) => {
     const { postId, commentId, userId } = req.body;
 
     if (!postId || !commentId || !userId) {
-      return res.status(400).json({ message: 'postId, commentId and userId are required' });
+      return res
+        .status(400)
+        .json({ message: "postId, commentId and userId are required" });
     }
 
     const post = await Post.findById(postId);
     if (!post) {
-      return res.status(404).json({ message: 'Post not found' });
+      return res.status(404).json({ message: "Post not found" });
     }
 
-    const comment = post.comments.find(c => c._id.toString() === commentId);
+    const comment = post.comments.find((c) => c._id.toString() === commentId);
     if (!comment) {
-      return res.status(404).json({ message: 'Comment not found' });
+      return res.status(404).json({ message: "Comment not found" });
     }
 
     // User fetch karo role check karne ke liye
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: "User not found" });
     }
 
     // Condition: either user himself or superadmin
     if (comment.user.toString() !== userId && user.role !== "superadmin") {
-      return res.status(403).json({ message: 'You can only delete your own comment or must be a superadmin' });
+      return res
+        .status(403)
+        .json({
+          message:
+            "You can only delete your own comment or must be a superadmin",
+        });
     }
 
     // Remove comment
-    post.comments = post.comments.filter(c => c._id.toString() !== commentId);
+    post.comments = post.comments.filter((c) => c._id.toString() !== commentId);
 
     await post.save();
-   await CommentReport.deleteMany({ commentId: commentId });
+    await CommentReport.deleteMany({ commentId: commentId });
     // Cache clear
     await invalidateCache(`post:${postId}`);
     await invalidateCache(`postComments:${postId}`);
 
-    res.status(200).json({ message: 'Comment deleted successfully', post });
+    res.status(200).json({ message: "Comment deleted successfully", post });
   } catch (error) {
-    console.error('Error deleting comment:', error);
-    res.status(500).json({ message: 'Error deleting comment', error: error.message });
+    console.error("Error deleting comment:", error);
+    res
+      .status(500)
+      .json({ message: "Error deleting comment", error: error.message });
   }
 };
 
 const addReply = async (req, res) => {
   const { commentId, userId, replyText } = req.body;
   try {
-      // Bad Word Check
+    // Bad Word Check
     if (containsBadWords(replyText)) {
       return res.status(400).json({
         success: false,
-        message: "Your comment contains inappropriate or unsafe words. Please modify it.",
+        message:
+          "Your comment contains inappropriate or unsafe words. Please modify it.",
       });
     }
-    const post = await Post.findOne({ 'comments._id': commentId });
-    if (!post) return res.status(404).json({ message: 'Post or comment not found' });
+    const post = await Post.findOne({ "comments._id": commentId });
+    if (!post)
+      return res.status(404).json({ message: "Post or comment not found" });
 
     const user = await User.findById(userId);
-    if(!user) return res.status(404).json({ message: 'User not found'} )
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     const comment = post.comments.id(commentId);
-    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+    if (!comment) return res.status(404).json({ message: "Comment not found" });
 
     const newReply = {
       user: userId,
@@ -2812,10 +2841,13 @@ const addReply = async (req, res) => {
     // Get the last added reply with _id populated by MongoDB
     const addedReply = comment.replies[comment.replies.length - 1];
 
-    await post.populate('comments.replies.user', 'firstName lastName fullName profilePicture accountType businessName sadhuName');
+    await post.populate(
+      "comments.replies.user",
+      "firstName lastName fullName profilePicture accountType businessName sadhuName",
+    );
 
     res.status(201).json({
-      message: 'Reply added successfully',
+      message: "Reply added successfully",
       reply: {
         id: addedReply._id,
         text: addedReply.text,
@@ -2824,8 +2856,8 @@ const addReply = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error adding reply:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error("Error adding reply:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -2835,54 +2867,67 @@ const deleteReply = async (req, res) => {
     const { postId, commentId, replyId, userId } = req.body;
 
     if (!postId || !commentId || !replyId || !userId) {
-      return res.status(400).json({ message: 'postId, commentId, replyId and userId are required' });
+      return res
+        .status(400)
+        .json({
+          message: "postId, commentId, replyId and userId are required",
+        });
     }
 
     const post = await Post.findById(postId);
-    if (!post) return res.status(404).json({ message: 'Post not found' });
+    if (!post) return res.status(404).json({ message: "Post not found" });
 
     const comment = post.comments.id(commentId);
-    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+    if (!comment) return res.status(404).json({ message: "Comment not found" });
 
-    const reply = comment.replies.find(r => r._id.toString() === replyId);
-    if (!reply) return res.status(404).json({ message: 'Reply not found' });
+    const reply = comment.replies.find((r) => r._id.toString() === replyId);
+    if (!reply) return res.status(404).json({ message: "Reply not found" });
 
     const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     // Only author or superadmin can delete
-    if (reply.user.toString() !== userId && user.role !== 'superadmin') {
-      return res.status(403).json({ message: 'You can only delete your own reply or must be a superadmin' });
+    if (reply.user.toString() !== userId && user.role !== "superadmin") {
+      return res
+        .status(403)
+        .json({
+          message: "You can only delete your own reply or must be a superadmin",
+        });
     }
 
     // Remove reply
-    comment.replies = comment.replies.filter(r => r._id.toString() !== replyId);
+    comment.replies = comment.replies.filter(
+      (r) => r._id.toString() !== replyId,
+    );
     await post.save();
 
     await invalidateCache(`post:${postId}`);
     await invalidateCache(`postComments:${postId}`);
 
-    res.status(200).json({ message: 'Reply deleted successfully', post });
+    res.status(200).json({ message: "Reply deleted successfully", post });
   } catch (error) {
-    console.error('Error deleting reply:', error);
-    res.status(500).json({ message: 'Error deleting reply', error: error.message });
+    console.error("Error deleting reply:", error);
+    res
+      .status(500)
+      .json({ message: "Error deleting reply", error: error.message });
   }
 };
-
 
 const likeComment = async (req, res) => {
   try {
     const { postId, commentId, userId } = req.body;
 
     if (!postId || !commentId || !userId) {
-      return res.status(400).json({ message: 'postId, commentId and userId are required' });
+      return res
+        .status(400)
+        .json({ message: "postId, commentId and userId are required" });
     }
 
     const post = await Post.findById(postId);
-    if (!post) return res.status(404).json({ message: 'Post not found' });
+    if (!post) return res.status(404).json({ message: "Post not found" });
 
     const comment = post.comments.id(commentId);
-    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+    if (!comment) return res.status(404).json({ message: "Comment not found" });
 
     const index = comment.likes?.findIndex((id) => id.toString() === userId);
 
@@ -2890,7 +2935,7 @@ const likeComment = async (req, res) => {
       // User already liked, so unlike
       comment.likes.splice(index, 1);
       await post.save();
-      return res.status(200).json({ message: 'Comment unliked successfully' });
+      return res.status(200).json({ message: "Comment unliked successfully" });
     } else {
       // Like the comment
       comment.likes.push(userId);
@@ -2901,20 +2946,20 @@ const likeComment = async (req, res) => {
         const notification = new Notification({
           senderId: userId,
           receiverId: comment.user,
-          type: 'like_comment',
-          message: 'liked your comment',
+          type: "like_comment",
+          message: "liked your comment",
           postId,
         });
         await notification.save();
         const io = getIo();
-        io.to(comment.user.toString()).emit('newNotification', notification);
+        io.to(comment.user.toString()).emit("newNotification", notification);
       }
 
-      return res.status(200).json({ message: 'Comment liked successfully' });
+      return res.status(200).json({ message: "Comment liked successfully" });
     }
   } catch (error) {
-    console.error('Error liking comment:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error("Error liking comment:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
 const likeReply = async (req, res) => {
@@ -2922,24 +2967,28 @@ const likeReply = async (req, res) => {
     const { postId, commentId, replyId, userId } = req.body;
 
     if (!postId || !commentId || !replyId || !userId) {
-      return res.status(400).json({ message: 'postId, commentId, replyId and userId are required' });
+      return res
+        .status(400)
+        .json({
+          message: "postId, commentId, replyId and userId are required",
+        });
     }
 
     const post = await Post.findById(postId);
-    if (!post) return res.status(404).json({ message: 'Post not found' });
+    if (!post) return res.status(404).json({ message: "Post not found" });
 
     const comment = post.comments.id(commentId);
-    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+    if (!comment) return res.status(404).json({ message: "Comment not found" });
 
     const reply = comment.replies.id(replyId);
-    if (!reply) return res.status(404).json({ message: 'Reply not found' });
+    if (!reply) return res.status(404).json({ message: "Reply not found" });
 
     const index = reply.likes?.findIndex((id) => id.toString() === userId);
 
     if (index > -1) {
       reply.likes.splice(index, 1);
       await post.save();
-      return res.status(200).json({ message: 'Reply unliked successfully' });
+      return res.status(200).json({ message: "Reply unliked successfully" });
     } else {
       reply.likes = reply.likes || [];
       reply.likes.push(userId);
@@ -2949,20 +2998,20 @@ const likeReply = async (req, res) => {
         const notification = new Notification({
           senderId: userId,
           receiverId: reply.user,
-          type: 'like_reply',
-          message: 'liked your reply',
+          type: "like_reply",
+          message: "liked your reply",
           postId,
         });
         await notification.save();
         const io = getIo();
-        io.to(reply.user.toString()).emit('newNotification', notification);
+        io.to(reply.user.toString()).emit("newNotification", notification);
       }
 
-      return res.status(200).json({ message: 'Reply liked successfully' });
+      return res.status(200).json({ message: "Reply liked successfully" });
     }
   } catch (error) {
-    console.error('Error liking reply:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error("Error liking reply:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -2970,22 +3019,25 @@ const likeReply = async (req, res) => {
 const getReplies = async (req, res) => {
   const { commentId } = req.params;
   try {
-    const post = await Post.findOne({ 'comments._id': commentId });
+    const post = await Post.findOne({ "comments._id": commentId });
     if (!post) {
-      return res.status(404).json({ message: 'Post or comment not found' });
+      return res.status(404).json({ message: "Post or comment not found" });
     }
     const comment = post.comments.id(commentId);
     if (!comment) {
-      return res.status(404).json({ message: 'Comment not found' });
+      return res.status(404).json({ message: "Comment not found" });
     }
-    await post.populate('comments.replies.user', 'firstName lastName fullName profilePicture accountType businessName sadhuName tirthName');
-      res.status(200).json({
-      message: 'Replies fetched successfully',
+    await post.populate(
+      "comments.replies.user",
+      "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
+    );
+    res.status(200).json({
+      message: "Replies fetched successfully",
       replies: comment.replies,
     });
   } catch (error) {
-    console.error('Error fetching replies:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error("Error fetching replies:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
 // Delete a specific media item from a post
@@ -2995,17 +3047,17 @@ const deleteMediaItem = asyncHandler(async (req, res) => {
 
   const post = await Post.findById(postId);
   if (!post) {
-    return errorResponse(res, 'Post not found', 404);
+    return errorResponse(res, "Post not found", 404);
   }
 
   if (post.user.toString() !== userId) {
-    return errorResponse(res, 'Unauthorized to modify this post', 403);
+    return errorResponse(res, "Unauthorized to modify this post", 403);
   }
 
   // Find the media item in the post
   const mediaItem = post.media.id(mediaId);
   if (!mediaItem) {
-    return errorResponse(res, 'Media item not found', 404);
+    return errorResponse(res, "Media item not found", 404);
   }
 
   // Delete from S3
@@ -3014,22 +3066,22 @@ const deleteMediaItem = asyncHandler(async (req, res) => {
     if (key) {
       const deleteParams = {
         Bucket: process.env.AWS_BUCKET_NAME,
-        Key: key
+        Key: key,
       };
-      
+
       await s3Client.send(new DeleteObjectCommand(deleteParams));
       console.log(`Successfully deleted file from S3: ${key}`);
     }
   } catch (error) {
     console.error(`Error deleting file from S3: ${mediaItem.url}`, error);
-    return errorResponse(res, 'Error deleting media from storage', 500);
+    return errorResponse(res, "Error deleting media from storage", 500);
   }
 
   // Remove the media item from the post
   post.media.pull(mediaId);
   await post.save();
 
-  return successResponse(res, post, 'Media item deleted successfully');
+  return successResponse(res, post, "Media item deleted successfully");
 });
 
 // Hide a post (make it invisible to others)
@@ -3039,17 +3091,17 @@ const hidePost = asyncHandler(async (req, res) => {
 
   const post = await Post.findById(postId);
   if (!post) {
-    return errorResponse(res, 'Post not found', 404);
+    return errorResponse(res, "Post not found", 404);
   }
 
   if (post.user.toString() !== userId.toString()) {
-    return errorResponse(res, 'Unauthorized to modify this post', 403);
+    return errorResponse(res, "Unauthorized to modify this post", 403);
   }
 
   post.isHidden = true;
   await post.save();
 
-  return successResponse(res, post, 'Post hidden successfully');
+  return successResponse(res, post, "Post hidden successfully");
 });
 
 // Unhide a post (make it visible again)
@@ -3059,17 +3111,17 @@ const unhidePost = asyncHandler(async (req, res) => {
 
   const post = await Post.findById(postId);
   if (!post) {
-    return errorResponse(res, 'Post not found', 404);
+    return errorResponse(res, "Post not found", 404);
   }
 
   if (post.user.toString() !== userId.toString()) {
-    return errorResponse(res, 'Unauthorized to modify this post', 403);
+    return errorResponse(res, "Unauthorized to modify this post", 403);
   }
 
   post.isHidden = false;
   await post.save();
 
-  return successResponse(res, post, 'Post unhidden successfully');
+  return successResponse(res, post, "Post unhidden successfully");
 });
 
 // ✅ Updated getCombinedFeed with CDN support
@@ -3079,79 +3131,112 @@ const getCombinedFeed = asyncHandler(async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const [userPosts, sanghPosts, panchPosts, vyaparPosts, tirthPosts, sadhuPosts] = await Promise.all([
+    const [
+      userPosts,
+      sanghPosts,
+      panchPosts,
+      vyaparPosts,
+      tirthPosts,
+      sadhuPosts,
+    ] = await Promise.all([
       Post.find({ isHidden: false })
-        .populate('user', 'firstName lastName profilePicture')
-        .sort('-createdAt')
-        .select('caption media user likes comments createdAt')
+        .populate("user", "firstName lastName profilePicture")
+        .sort("-createdAt")
+        .select("caption media user likes comments createdAt")
         .lean(),
 
       SanghPost.find({ isHidden: false })
-        .populate('sanghId', 'name level location')
-        .populate('postedByUserId', 'firstName lastName fullName profilePicture')
-        .sort('-createdAt')
-        .select('caption media sanghId postedByUserId postedByRole likes comments createdAt')
+        .populate("sanghId", "name level location")
+        .populate(
+          "postedByUserId",
+          "firstName lastName fullName profilePicture",
+        )
+        .sort("-createdAt")
+        .select(
+          "caption media sanghId postedByUserId postedByRole likes comments createdAt",
+        )
         .lean(),
 
       PanchPost.find({ isHidden: false })
-        .populate('panchId', 'accessId')
-        .populate('sanghId', 'name level location')
-        .sort('-createdAt')
-        .select('caption media panchId sanghId postedByMemberId postedByName likes comments createdAt')
+        .populate("panchId", "accessId")
+        .populate("sanghId", "name level location")
+        .sort("-createdAt")
+        .select(
+          "caption media panchId sanghId postedByMemberId postedByName likes comments createdAt",
+        )
         .lean(),
 
       VyaparPost.find({ isHidden: false })
-        .populate('vyaparId', 'name businessType')
-        .populate('postedByUserId', 'firstName lastName fullName profilePicture')
-        .sort('-createdAt')
-        .select('caption media vyaparId postedByUserId likes comments createdAt')
+        .populate("vyaparId", "name businessType")
+        .populate(
+          "postedByUserId",
+          "firstName lastName fullName profilePicture",
+        )
+        .sort("-createdAt")
+        .select(
+          "caption media vyaparId postedByUserId likes comments createdAt",
+        )
         .lean(),
 
       TirthPost.find({ isHidden: false })
-        .populate('tirthId', 'name location')
-        .populate('postedByUserId', 'firstName lastName fullName profilePicture')
-        .sort('-createdAt')
-        .select('caption media tirthId postedByUserId likes comments createdAt')
+        .populate("tirthId", "name location")
+        .populate(
+          "postedByUserId",
+          "firstName lastName fullName profilePicture",
+        )
+        .sort("-createdAt")
+        .select("caption media tirthId postedByUserId likes comments createdAt")
         .lean(),
 
       SadhuPost.find({ isHidden: false })
-        .populate('sadhuId', 'sadhuName uploadImage')
-        .populate('postedByUserId', 'firstName lastName fullName profilePicture')
-        .sort('-createdAt')
-        .select('caption media sadhuId postedByUserId likes comments createdAt')
-        .lean()
+        .populate("sadhuId", "sadhuName uploadImage")
+        .populate(
+          "postedByUserId",
+          "firstName lastName fullName profilePicture",
+        )
+        .sort("-createdAt")
+        .select("caption media sadhuId postedByUserId likes comments createdAt")
+        .lean(),
     ]);
 
     const postsWithTypes = [
-      ...applyCDNToPosts(userPosts, 'user'),
-      ...applyCDNToPosts(sanghPosts, 'sangh'),
-      ...applyCDNToPosts(panchPosts, 'panch'),
-      ...applyCDNToPosts(vyaparPosts, 'vyapar'),
-      ...applyCDNToPosts(tirthPosts, 'tirth'),
-      ...applyCDNToPosts(sadhuPosts, 'sadhu')
+      ...applyCDNToPosts(userPosts, "user"),
+      ...applyCDNToPosts(sanghPosts, "sangh"),
+      ...applyCDNToPosts(panchPosts, "panch"),
+      ...applyCDNToPosts(vyaparPosts, "vyapar"),
+      ...applyCDNToPosts(tirthPosts, "tirth"),
+      ...applyCDNToPosts(sadhuPosts, "sadhu"),
     ];
 
-    const sortedPosts = postsWithTypes.sort((a, b) =>
-      new Date(b.createdAt) - new Date(a.createdAt)
+    const sortedPosts = postsWithTypes.sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
     );
 
     const paginatedPosts = sortedPosts.slice(skip, skip + limit);
     const totalPosts = sortedPosts.length;
 
-    return successResponse(res, {
-      posts: paginatedPosts,
-      pagination: {
-        total: totalPosts,
-        page,
-        pages: Math.ceil(totalPosts / limit)
-      }
-    }, 'Combined feed retrieved successfully');
+    return successResponse(
+      res,
+      {
+        posts: paginatedPosts,
+        pagination: {
+          total: totalPosts,
+          page,
+          pages: Math.ceil(totalPosts / limit),
+        },
+      },
+      "Combined feed retrieved successfully",
+    );
   } catch (error) {
-    console.error('Error in getCombinedFeed:', error);
-    return errorResponse(res, 'Error retrieving combined feed', 500, error.message);
+    console.error("Error in getCombinedFeed:", error);
+    return errorResponse(
+      res,
+      "Error retrieving combined feed",
+      500,
+      error.message,
+    );
   }
 });
-
 
 const getCombinedFeedOptimized = asyncHandler(async (req, res) => {
   const limit = parseInt(req.query.limit) || 10;
@@ -3161,80 +3246,116 @@ const getCombinedFeedOptimized = asyncHandler(async (req, res) => {
     ? `combinedFeed:cursor:${cursor}:limit:${limit}`
     : `combinedFeed:firstPage:limit:${limit}`;
 
-  const result = await getOrSetCache(cacheKey, async () => {
-    const cursorQuery = cursor ? { createdAt: { $lt: new Date(cursor) } } : {};
+  const result = await getOrSetCache(
+    cacheKey,
+    async () => {
+      const cursorQuery = cursor
+        ? { createdAt: { $lt: new Date(cursor) } }
+        : {};
 
-    const [userPosts, sanghPosts, panchPosts, vyaparPosts, tirthPosts, sadhuPosts] = await Promise.all([
-      Post.find({ ...cursorQuery, isHidden: false })
-        .populate('user', 'firstName lastName profilePicture')
-        .sort('-createdAt')
-        .select('caption media user likes comments createdAt')
-        .limit(limit)
-        .lean(),
-      SanghPost.find({ ...cursorQuery, isHidden: false })
-        .populate('sanghId', 'name level location')
-        .populate('postedByUserId', 'firstName lastName fullName profilePicture')
-        .sort('-createdAt')
-        .select('caption media sanghId postedByUserId postedByRole likes comments createdAt')
-        .limit(limit)
-        .lean(),
-      PanchPost.find({ ...cursorQuery, isHidden: false })
-        .populate('panchId', 'accessId')
-        .populate('sanghId', 'name level location')
-        .sort('-createdAt')
-        .select('caption media panchId sanghId postedByMemberId postedByName likes comments createdAt')
-        .limit(limit)
-        .lean(),
-      VyaparPost.find({ ...cursorQuery, isHidden: false })
-        .populate('vyaparId', 'name businessType')
-        .populate('postedByUserId', 'firstName lastName fullName profilePicture')
-        .sort('-createdAt')
-        .select('caption media vyaparId postedByUserId likes comments createdAt')
-        .limit(limit)
-        .lean(),
-      TirthPost.find({ ...cursorQuery, isHidden: false })
-        .populate('tirthId', 'name location')
-        .populate('postedByUserId', 'firstName lastName fullName profilePicture')
-        .sort('-createdAt')
-        .select('caption media tirthId postedByUserId likes comments createdAt')
-        .limit(limit)
-        .lean(),
-      SadhuPost.find({ ...cursorQuery, isHidden: false })
-        .populate('sadhuId', 'sadhuName uploadImage')
-        .populate('postedByUserId', 'firstName lastName fullName profilePicture')
-        .sort('-createdAt')
-        .select('caption media sadhuId postedByUserId likes comments createdAt')
-        .limit(limit)
-        .lean(),
-    ]);
+      const [
+        userPosts,
+        sanghPosts,
+        panchPosts,
+        vyaparPosts,
+        tirthPosts,
+        sadhuPosts,
+      ] = await Promise.all([
+        Post.find({ ...cursorQuery, isHidden: false })
+          .populate("user", "firstName lastName profilePicture")
+          .sort("-createdAt")
+          .select("caption media user likes comments createdAt")
+          .limit(limit)
+          .lean(),
+        SanghPost.find({ ...cursorQuery, isHidden: false })
+          .populate("sanghId", "name level location")
+          .populate(
+            "postedByUserId",
+            "firstName lastName fullName profilePicture",
+          )
+          .sort("-createdAt")
+          .select(
+            "caption media sanghId postedByUserId postedByRole likes comments createdAt",
+          )
+          .limit(limit)
+          .lean(),
+        PanchPost.find({ ...cursorQuery, isHidden: false })
+          .populate("panchId", "accessId")
+          .populate("sanghId", "name level location")
+          .sort("-createdAt")
+          .select(
+            "caption media panchId sanghId postedByMemberId postedByName likes comments createdAt",
+          )
+          .limit(limit)
+          .lean(),
+        VyaparPost.find({ ...cursorQuery, isHidden: false })
+          .populate("vyaparId", "name businessType")
+          .populate(
+            "postedByUserId",
+            "firstName lastName fullName profilePicture",
+          )
+          .sort("-createdAt")
+          .select(
+            "caption media vyaparId postedByUserId likes comments createdAt",
+          )
+          .limit(limit)
+          .lean(),
+        TirthPost.find({ ...cursorQuery, isHidden: false })
+          .populate("tirthId", "name location")
+          .populate(
+            "postedByUserId",
+            "firstName lastName fullName profilePicture",
+          )
+          .sort("-createdAt")
+          .select(
+            "caption media tirthId postedByUserId likes comments createdAt",
+          )
+          .limit(limit)
+          .lean(),
+        SadhuPost.find({ ...cursorQuery, isHidden: false })
+          .populate("sadhuId", "sadhuName uploadImage")
+          .populate(
+            "postedByUserId",
+            "firstName lastName fullName profilePicture",
+          )
+          .sort("-createdAt")
+          .select(
+            "caption media sadhuId postedByUserId likes comments createdAt",
+          )
+          .limit(limit)
+          .lean(),
+      ]);
 
-    const postsWithTypes = [
-      ...applyCDNToPosts(userPosts, 'user'),
-      ...applyCDNToPosts(sanghPosts, 'sangh'),
-      ...applyCDNToPosts(panchPosts, 'panch'),
-      ...applyCDNToPosts(vyaparPosts, 'vyapar'),
-      ...applyCDNToPosts(tirthPosts, 'tirth'),
-      ...applyCDNToPosts(sadhuPosts, 'sadhu')
-    ];
+      const postsWithTypes = [
+        ...applyCDNToPosts(userPosts, "user"),
+        ...applyCDNToPosts(sanghPosts, "sangh"),
+        ...applyCDNToPosts(panchPosts, "panch"),
+        ...applyCDNToPosts(vyaparPosts, "vyapar"),
+        ...applyCDNToPosts(tirthPosts, "tirth"),
+        ...applyCDNToPosts(sadhuPosts, "sadhu"),
+      ];
 
-    const sortedPosts = postsWithTypes
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, limit);
+      const sortedPosts = postsWithTypes
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, limit);
 
-    const nextCursor = sortedPosts.length > 0
-      ? sortedPosts[sortedPosts.length - 1].createdAt.toISOString()
-      : null;
+      const nextCursor =
+        sortedPosts.length > 0
+          ? sortedPosts[sortedPosts.length - 1].createdAt.toISOString()
+          : null;
 
-    return {
-      posts: sortedPosts,
-      pagination: {
-        nextCursor,
-        hasMore: sortedPosts.length === limit
-      }
-    };
-  }, 180);
+      return {
+        posts: sortedPosts,
+        pagination: {
+          nextCursor,
+          hasMore: sortedPosts.length === limit,
+        },
+      };
+    },
+    180,
+  );
 
-  return successResponse(res, result, 'Combined feed retrieved successfully');
+  return successResponse(res, result, "Combined feed retrieved successfully");
 });
 
 module.exports = {
@@ -3264,6 +3385,5 @@ module.exports = {
   voteOnPoll,
   getAllVideoPosts,
   toggleSavePost,
-  updateWatchTime
-
+  updateWatchTime,
 };

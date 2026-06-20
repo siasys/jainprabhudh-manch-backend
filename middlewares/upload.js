@@ -249,6 +249,65 @@ const compressVideo = async (inputBuffer) => {
   console.warn("⚠️ compressVideo called — presigned URL flow use karo");
   return inputBuffer;
 };
+// 🎬 VIDEO THUMBNAIL GENERATOR
+// ffmpeg se video ka 1st frame extract karke S3 pe upload karta hai
+// Existing compressVideo / compressFiles logic bilkul unchanged hai
+const generateVideoThumbnail = async (videoBuffer) => {
+  const tmpDir = os.tmpdir();
+  const inputPath = path.join(
+    tmpDir,
+    `vid_${Date.now()}_${Math.round(Math.random() * 1e6)}.mp4`,
+  );
+  const outputPath = path.join(
+    tmpDir,
+    `thumb_${Date.now()}_${Math.round(Math.random() * 1e6)}.jpg`,
+  );
+
+  try {
+    await fs.writeFile(inputPath, videoBuffer);
+
+    await new Promise((resolve, reject) => {
+      ffmpeg(inputPath)
+        .screenshots({
+          timestamps: ["00:00:01"],
+          filename: path.basename(outputPath),
+          folder: path.dirname(outputPath),
+          size: "480x?",
+        })
+        .on("end", resolve)
+        .on("error", (err) => {
+          // 1 sec pe frame nahi mila to 0 sec try karo
+          ffmpeg(inputPath)
+            .screenshots({
+              timestamps: ["00:00:00"],
+              filename: path.basename(outputPath),
+              folder: path.dirname(outputPath),
+              size: "480x?",
+            })
+            .on("end", resolve)
+            .on("error", reject);
+        });
+    });
+
+    const thumbBuffer = await fs.readFile(outputPath);
+
+    // compressImage jaise hi compress karo
+    const compressed = await sharp(thumbBuffer)
+      .flatten({ background: { r: 0, g: 0, b: 0 } })
+      .resize(480, 480, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 70, mozjpeg: true })
+      .toBuffer();
+
+    return compressed;
+  } catch (err) {
+    console.warn("⚠️ generateVideoThumbnail failed:", err.message);
+    return null; // fail hone par null — post create hoti rahegi
+  } finally {
+    await fs.unlink(inputPath).catch(() => {});
+    await fs.unlink(outputPath).catch(() => {});
+  }
+};
+
 const compressPDF = async (buffer) => {
   try {
     const pdfDoc = await PDFDocument.load(buffer);
@@ -328,6 +387,30 @@ const uploadToS3 = async (req, res, next) => {
 
       file.location = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
       file.key = key;
+
+      // 🎬 VIDEO: buffer delete se PEHLE thumbnail generate + S3 pe upload karo
+      if (file.mimetype?.startsWith("video/") && file.buffer) {
+        try {
+          const thumbBuffer = await generateVideoThumbnail(file.buffer);
+          if (thumbBuffer) {
+            const thumbKey = `${folder}thumb_${Date.now()}-${Math.round(Math.random() * 1e9)}.jpg`;
+            await s3Client.send(
+              new PutObjectCommand({
+                Bucket: process.env.AWS_BUCKET_NAME,
+                Key: thumbKey,
+                Body: thumbBuffer,
+                ContentType: "image/jpeg",
+              }),
+            );
+            file.thumbnailUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${thumbKey}`;
+            console.log("✅ Video thumbnail uploaded:", file.thumbnailUrl);
+          }
+        } catch (thumbErr) {
+          console.warn("⚠️ Thumbnail upload skipped:", thumbErr.message);
+          // thumbnail fail ho toh post create hoti rahegi — koi dikkat nahi
+        }
+      }
+
       delete file.buffer;
 
       // console.log(`✅ Uploaded: ${file.fieldname} → ${file.location}`);
@@ -622,3 +705,4 @@ module.exports.entityPostUpload = [
 module.exports.compressImage = compressImage;
 module.exports.compressVideo = compressVideo;
 module.exports.compressPDF = compressPDF;
+module.exports.generateVideoThumbnail = generateVideoThumbnail;
