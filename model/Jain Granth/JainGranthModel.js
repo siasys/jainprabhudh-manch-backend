@@ -4,13 +4,13 @@ const JainGranthSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
     },
     title: {
       type: String,
     },
-    jainShravakId:{
-        type: String
+    jainShravakId: {
+      type: String,
     },
     description: {
       type: String,
@@ -24,7 +24,7 @@ const JainGranthSchema = new mongoose.Schema(
     author: {
       type: String,
     },
-    publisher:{
+    publisher: {
       type: String,
     },
     fileUrl: {
@@ -33,12 +33,23 @@ const JainGranthSchema = new mongoose.Schema(
     imageUrl: {
       type: String,
     },
+    views: {
+      type: Number,
+      default: 0,
+    },
+    // ✅ Unique views — har user ek baar count hoga
+    viewedBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
     uploadedAt: {
       type: Date,
       default: Date.now,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 module.exports = mongoose.model("JainGranth", JainGranthSchema);
