@@ -5,6 +5,7 @@ const {
   getAllGranths,
   deleteGranth,
   incrementView,
+  incrementDownload,
 } = require("../../controller/Jain Granth/jainGranthController");
 
 const router = express.Router();
