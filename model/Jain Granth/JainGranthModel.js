@@ -37,6 +37,10 @@ const JainGranthSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    downloads: {
+      type: Number,
+      default: 0,
+    },
     // ✅ Unique views — har user ek baar count hoga
     viewedBy: [
       {

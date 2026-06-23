@@ -97,6 +97,22 @@ exports.incrementView = async (req, res) => {
   }
 };
 
+// ✅ Download count — har download pe increment
+exports.incrementDownload = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const granth = await JainGranth.findByIdAndUpdate(
+      id,
+      { $inc: { downloads: 1 } },
+      { new: true },
+    );
+    if (!granth) return res.status(404).json({ error: "Granth not found!" });
+    res.status(200).json({ downloads: granth.downloads });
+  } catch (error) {
+    res.status(500).json({ error: "Server error", details: error.message });
+  }
+};
+
 exports.deleteGranth = async (req, res) => {
   try {
     const { id } = req.params;

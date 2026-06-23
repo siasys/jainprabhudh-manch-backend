@@ -13,5 +13,6 @@ router.post("/upload", upload.jainGranthUpload, uploadGranth);
 router.get("/all", getAllGranths);
 router.delete("/delete/:id", deleteGranth);
 router.patch("/view/:id", incrementView);
+router.patch("/download/:id", incrementDownload);
 
 module.exports = router;
