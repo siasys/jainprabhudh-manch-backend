@@ -1356,7 +1356,7 @@ const getUserByJainAadhar = asyncHandler(async (req, res) => {
   const { aadharNumber } = req.params;
 
   const jainAadhar = await JainAadharApplication.findOne({
-    jainAadharNumber: aadharNumber,
+    jainAadharNumber: aadharNumber.trim(),
     status: "verified",
   })
     .select(
@@ -1376,11 +1376,11 @@ const getUserByJainAadhar = asyncHandler(async (req, res) => {
     data: {
       _id: jainAadhar._id,
       name: jainAadhar.name,
-      dob: jainAadhar.dob,
-      age: jainAadhar.age,
-      gender: jainAadhar.gender,
+      dob: jainAadhar.dob || "",
+      age: jainAadhar.age || null,
+      gender: jainAadhar.gender || "",
       jainAadharNumber: jainAadhar.jainAadharNumber,
-      location: jainAadhar.location,
+      location: jainAadhar.location || {},
       profileImage: jainAadhar.userProfile || jainAadhar.profileImage || "",
     },
   });
