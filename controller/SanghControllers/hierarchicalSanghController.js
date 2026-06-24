@@ -1355,16 +1355,35 @@ const checkOfficeBearerTerms = asyncHandler(async (req, res) => {
 const getUserByJainAadhar = asyncHandler(async (req, res) => {
   const { aadharNumber } = req.params;
 
-  const user = await User.findOne({
+  const jainAadhar = await JainAadharApplication.findOne({
     jainAadharNumber: aadharNumber,
-    jainAadharStatus: "verified",
-  }).select("email phoneNumber gender fullName location");
+    status: "verified",
+  })
+    .select(
+      "name dob age gender jainAadharNumber location userProfile profileImage status",
+    )
+    .lean();
 
-  if (!user) {
-    return res.status(404).json({ message: "User not found or unverified" });
+  if (!jainAadhar) {
+    return res.status(404).json({
+      success: false,
+      message: "Jain Aadhar not found or unverified",
+    });
   }
 
-  return res.status(200).json(user);
+  return res.status(200).json({
+    success: true,
+    data: {
+      _id: jainAadhar._id,
+      name: jainAadhar.name,
+      dob: jainAadhar.dob,
+      age: jainAadhar.age,
+      gender: jainAadhar.gender,
+      jainAadharNumber: jainAadhar.jainAadharNumber,
+      location: jainAadhar.location,
+      profileImage: jainAadhar.userProfile || jainAadhar.profileImage || "",
+    },
+  });
 });
 
 const distributeMemberPayment = async ({ member, user, sourceSangh }) => {
