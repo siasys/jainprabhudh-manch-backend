@@ -2,33 +2,77 @@ const Scholarship = require("../../model/Scholarship Modal/scholarshipModal");
 const { convertS3UrlToCDN } = require("../../utils/s3Utils");
 const ScholarshipSponsor = require("../../model/Scholarship Modal/ScholarshipSponsor");
 
-// ------------------------ CREATE ------------------------
+// // ------------------------ CREATE ------------------------
+// exports.applyScholarship = async (req, res) => {
+//   try {
+//     const data = req.body;
+
+//     if (!data.categoryType) {
+//       return res.status(400).json({ message: "Category type is required" });
+//     }
+
+//     // Map helper
+//     const mapFiles = (fieldName) =>
+//       (req.files?.[fieldName] || []).map((file) => ({
+//         fileUrl: convertS3UrlToCDN(file.location),
+//         fileType: file.mimetype,
+//       }));
+
+//     const scholarship = new Scholarship({
+//       ...data,
+//       lastYearMarksheet: mapFiles("lastYearMarksheet"),
+//       uploadFeeStructure: mapFiles("uploadFeeStructure"),
+//       principalLetter: mapFiles("principalLetter"),
+//       schoolAccountDocument: mapFiles("schoolAccountDocument"),
+//       scholarshipDetails: {
+//         type: data["scholarshipDetails.type"] || "",
+//         declaration: data["scholarshipDetails.declaration"] || "",
+//         reason: data["scholarshipDetails.reason"] || "",
+//       },
+//     });
+
+//     await scholarship.save();
+
+//     res.status(201).json({
+//       message: "Scholarship application submitted successfully",
+//       scholarship,
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       message: "Error applying scholarship",
+//       error: error.message,
+//     });
+//   }
+// };
+
+// old code
 exports.applyScholarship = async (req, res) => {
   try {
     const data = req.body;
 
+    // Basic validation
     if (!data.categoryType) {
       return res.status(400).json({ message: "Category type is required" });
     }
 
-    // Map helper
-    const mapFiles = (fieldName) =>
-      (req.files?.[fieldName] || []).map((file) => ({
-        fileUrl: convertS3UrlToCDN(file.location),
-        fileType: file.mimetype,
-      }));
+    // Convert uploaded files
+    const marksheetFiles = (req.files?.lastYearMarksheet || []).map((file) => ({
+      fileUrl: convertS3UrlToCDN(file.location),
+      fileType: file.mimetype,
+    }));
 
+    // Prepare Scholarship Details Object
+    const scholarshipDetails = {
+      type: data["scholarshipDetails.type"] || "",
+      declaration: data["scholarshipDetails.declaration"] || "",
+      reason: data["scholarshipDetails.reason"] || "",
+    };
+
+    // Save in DB
     const scholarship = new Scholarship({
       ...data,
-      lastYearMarksheet: mapFiles("lastYearMarksheet"),
-      uploadFeeStructure: mapFiles("uploadFeeStructure"),
-      principalLetter: mapFiles("principalLetter"),
-      schoolAccountDocument: mapFiles("schoolAccountDocument"),
-      scholarshipDetails: {
-        type: data["scholarshipDetails.type"] || "",
-        declaration: data["scholarshipDetails.declaration"] || "",
-        reason: data["scholarshipDetails.reason"] || "",
-      },
+      lastYearMarksheet: marksheetFiles,
+      scholarshipDetails: scholarshipDetails,
     });
 
     await scholarship.save();
@@ -44,7 +88,6 @@ exports.applyScholarship = async (req, res) => {
     });
   }
 };
-
 exports.createScholarshipSponsor = async (req, res) => {
   try {
     const data = req.body;

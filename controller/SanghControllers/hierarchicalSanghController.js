@@ -1173,7 +1173,7 @@ const updateSanghById = asyncHandler(async (req, res) => {
     if (!existingSangh) {
       return errorResponse(res, "Sangh not found", 404);
     }
-    // ✅ Optional uploaded images
+    // Optional uploaded images
     const coverImage =
       req.files?.coverImage && req.files.coverImage.length > 0
         ? convertS3UrlToCDN(req.files.coverImage[0].location)
