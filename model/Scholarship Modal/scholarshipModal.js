@@ -23,7 +23,7 @@ const ScholarshipSchema = new mongoose.Schema(
 
     fatherName: { type: String },
     fatherOccupation: { type: String },
-    fatherMonthlyIncome: { type: Number },
+    fatherMonthlyIncome: { type: String },
 
     contact: { type: String },
     email: { type: String },
@@ -54,12 +54,12 @@ const ScholarshipSchema = new mongoose.Schema(
 
     // Total fees of the course/year
     totalFeesAmount: {
-      type: Number,
+      type: String,
     },
 
     // Amount required / being requested
     requiredAmount: {
-      type: Number,
+      type: String,
     },
 
     // Principal Letter Document (uploaded file)
