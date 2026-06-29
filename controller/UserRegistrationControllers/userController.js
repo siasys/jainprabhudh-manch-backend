@@ -17,7 +17,7 @@ const stateCityData = require("./stateCityData");
 const EmailVerification = require("../../model/UserRegistrationModels/EmailVerification");
 const { sendVerificationSms } = require("../../services/smsHelper");
 const { s3Client, DeleteObjectCommand } = require("../../config/s3Config");
-
+const mongoose = require("mongoose");
 // const authLimiter = rateLimit({
 //     windowMs: 15 * 60 * 1000, // 15 minutes
 //     max: 5,
@@ -1388,7 +1388,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
 
   if (gender) query.gender = gender;
   if (role) query.role = role;
-  if (accountType) query.accountType = accountType; // ✅ CHANGE 2: Add karo
+  if (accountType) query.accountType = accountType;
 
   const blockRelations = await Block.find({
     $or: [{ blocker: currentUserId }, { blocked: currentUserId }],
@@ -1402,20 +1402,57 @@ const getAllUsers = asyncHandler(async (req, res) => {
 
   query._id = { $nin: [...blockedUserIds, currentUserId] };
 
-  // ✅ CHANGE 3: accountType filter ho to limit cap hatao
   const maxLimit = accountType ? 10000 : 100;
   const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), maxLimit);
 
   const parsedPage = Math.max(parseInt(page) || 1, 1);
-  const skip = (parsedPage - 1) * parsedLimit; // ✅ parsedLimit use karo skip mein bhi
+  const skip = (parsedPage - 1) * parsedLimit;
+
+  // ✅ Aggregation $match auto-cast nahi karta ObjectId — manually convert karna padega
+  const aggregateQuery = {
+    ...query,
+    _id: {
+      $nin: [...blockedUserIds, currentUserId].map(
+        (id) => new mongoose.Types.ObjectId(id),
+      ),
+    },
+  };
 
   const [users, total, noCardCount] = await Promise.all([
-    User.find(query)
-      .select("-password -__v")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parsedLimit)
-      .lean(),
+    // ✅ find() ki jagah aggregate() — taki status-priority sort kar sake
+    User.aggregate([
+      { $match: aggregateQuery },
+      {
+        $addFields: {
+          _statusOrder: {
+            $switch: {
+              branches: [
+                {
+                  case: {
+                    $or: [
+                      { $eq: ["$jainAadharStatus", "none"] },
+                      { $eq: ["$jainAadharStatus", null] },
+                      { $eq: ["$jainAadharStatus", ""] },
+                      { $not: ["$jainAadharStatus"] },
+                    ],
+                  },
+                  then: 0, // none → sabse pehle
+                },
+                { case: { $eq: ["$jainAadharStatus", "pending"] }, then: 1 },
+                { case: { $eq: ["$jainAadharStatus", "verified"] }, then: 2 },
+                { case: { $eq: ["$jainAadharStatus", "approved"] }, then: 2 },
+                { case: { $eq: ["$jainAadharStatus", "rejected"] }, then: 3 },
+              ],
+              default: 99,
+            },
+          },
+        },
+      },
+      { $sort: { _statusOrder: 1, createdAt: -1 } }, // pehle status, phir latest
+      { $skip: skip },
+      { $limit: parsedLimit },
+      { $project: { password: 0, __v: 0, _statusOrder: 0 } }, // helper field hide
+    ]),
     User.countDocuments(query),
     User.countDocuments({
       ...query,

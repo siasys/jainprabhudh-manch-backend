@@ -6,8 +6,8 @@ const rateLimit = require('express-rate-limit');
 const router = express.Router();
 router.get("/videos", getAllVideoPosts);
 
-router.get("/:postId", getPostById);
-
+// router.get("/:postId", getPostById);
+router.get("/public/:postId", getPostById);
 // Apply authentication middleware to all routes
 router.use(authMiddleware);
 // Rate limiting for post creation
