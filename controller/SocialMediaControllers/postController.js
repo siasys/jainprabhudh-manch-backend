@@ -410,6 +410,202 @@ const mongoose = require("mongoose");
 // ];
 
 // new post feed logic
+// const createPost = [
+//   upload.postMediaUpload,
+//   body("userId").notEmpty().isMongoId(),
+//   body("hashtags")
+//     .optional()
+//     .custom((value) => {
+//       try {
+//         const parsed = JSON.parse(value);
+//         if (!Array.isArray(parsed)) throw new Error();
+//         return true;
+//       } catch {
+//         throw new Error("Hashtags must be a JSON array");
+//       }
+//     }),
+
+//   asyncHandler(async (req, res) => {
+//     const errors = validationResult(req);
+//     if (!errors.isEmpty()) {
+//       return res.status(400).json({ errors: errors.array() });
+//     }
+
+//     const {
+//       caption,
+//       userId,
+//       hashtags,
+//       type,
+//       refId,
+//       postType: reqPostType,
+//       pollQuestion,
+//       pollOptions,
+//       pollDuration,
+//     } = req.body;
+
+//     // Explicit hashtags (jo frontend ne JSON array me bheje)
+//     const explicitHashtags = hashtags
+//       ? JSON.parse(hashtags).map((tag) => tag.toLowerCase())
+//       : [];
+
+//     // ✅ Caption + poll question me likhe #hashtags bhi auto-extract karo
+//     //    (\p{L}\p{N} se Hindi/Devanagari hashtags bhi support hote hain)
+//     const extractHashtags = (str) =>
+//       (str || "")
+//         .toLowerCase()
+//         .match(/#([\p{L}\p{N}_]+)/gu)
+//         ?.map((t) => t.slice(1)) || [];
+
+//     const textHashtags = [
+//       ...extractHashtags(caption),
+//       ...extractHashtags(pollQuestion),
+//     ];
+
+//     // Merge + dedupe, aur agar koi tag '#' ke saath aaya ho to '#' hata do
+//     const parsedHashtags = [
+//       ...new Set(
+//         [...explicitHashtags, ...textHashtags].map((t) =>
+//           t.startsWith("#") ? t.slice(1) : t,
+//         ),
+//       ),
+//     ].filter(Boolean);
+
+//     const user = await User.findById(userId);
+//     if (!user) return res.status(404).json({ error: "User not found" });
+
+//     const media = [];
+
+//     // -----------------------------
+//     // IMAGE UPLOAD
+//     // -----------------------------
+//     if (req.files?.image) {
+//       for (const file of req.files.image) {
+//         const cdnUrl = convertS3UrlToCDN(file.location);
+//         media.push({ url: cdnUrl, type: "image" });
+//       }
+//     }
+
+//     // -----------------------------
+//     // VIDEO UPLOAD
+//     // -----------------------------
+//     if (req.files?.video) {
+//       for (const file of req.files.video) {
+//         const cdnUrl = convertS3UrlToCDN(file.location);
+//         // thumbnailUrl uploadToS3 middleware ne already set kar di hogi
+//         const thumbnailCdn = file.thumbnailUrl
+//           ? convertS3UrlToCDN(file.thumbnailUrl)
+//           : null;
+//         media.push({ url: cdnUrl, type: "video", thumbnail: thumbnailCdn });
+//       }
+//     }
+
+//     // -----------------------------
+//     // TEXT BAD WORD FILTER
+//     // -----------------------------
+//     // const textInputs = [
+//     //   caption || "",
+//     //   pollQuestion || "",
+//     //   ...(Array.isArray(pollOptions) ? pollOptions : []),
+//     // ];
+
+//     // for (const text of textInputs) {
+//     //   if (text && containsBadWords(text)) {
+//     //     return res.status(400).json({
+//     //       error: "Your post contains inappropriate or harmful words.",
+//     //     });
+//     //   }
+//     // }
+
+//     // -----------------------------
+//     // POLL PARSING
+//     // -----------------------------
+//     let parsedPollOptionsArray = [];
+//     try {
+//       if (reqPostType === "poll") {
+//         parsedPollOptionsArray = Array.isArray(pollOptions)
+//           ? pollOptions
+//           : JSON.parse(pollOptions);
+
+//         if (
+//           !pollQuestion ||
+//           parsedPollOptionsArray.length < 2 ||
+//           !pollDuration
+//         ) {
+//           return res.status(400).json({
+//             error: "Poll requires question, minimum 2 options, and duration",
+//           });
+//         }
+//       }
+//     } catch (err) {
+//       return res.status(400).json({
+//         error: "pollOptions must be valid JSON array",
+//       });
+//     }
+
+//     // -----------------------------
+//     // SAVE HASHTAGS
+//     // -----------------------------
+//     for (const tag of parsedHashtags) {
+//       await Hashtag.findOneAndUpdate(
+//         { name: tag.toLowerCase() },
+//         { $inc: { count: 1 } },
+//         { upsert: true, new: true },
+//       );
+//     }
+
+//     let postType = reqPostType || (media.length > 0 ? "media" : "text");
+
+//     const postData = {
+//       user: userId,
+//       caption,
+//       media,
+//       postType,
+//       hashtags: parsedHashtags,
+//       type,
+//     };
+
+//     // -----------------------------
+//     // POLL DATA
+//     // -----------------------------
+//     if (postType === "poll") {
+//       postData.pollQuestion = pollQuestion;
+//       postData.pollOptions = parsedPollOptionsArray;
+//       postData.pollDuration = pollDuration;
+//       postData.pollVotes = parsedPollOptionsArray.reduce((acc, _, i) => {
+//         acc[i] = [];
+//         return acc;
+//       }, {});
+//       postData.votedUsers = [];
+//     }
+
+//     // -----------------------------
+//     // REF ID MAPPING
+//     // -----------------------------
+//     if (type === "sangh") postData.sanghId = refId;
+//     else if (type === "panch") postData.sanghId = refId;
+//     else if (type === "sadhu") postData.sadhuId = refId;
+//     else if (type === "vyapar") postData.vyaparId = refId;
+
+//     const post = await Post.create(postData);
+
+//     // increment postCount
+//     await User.findByIdAndUpdate(userId, { $inc: { postCount: 1 } });
+
+//     if (!type) {
+//       user.posts.push(post._id);
+//       await user.save();
+//     } else if (type === "sangh" || type === "panch") {
+//       await Sangh.findByIdAndUpdate(refId, { $push: { posts: post._id } });
+//     }
+
+//     await invalidateCache("combinedFeed:*");
+//     await invalidateCache("combinedFeed:firstPage:limit:10");
+
+//     res.status(201).json(post);
+//   }),
+// ];
+
+// tag people and invite logics 
 const createPost = [
   upload.postMediaUpload,
   body("userId").notEmpty().isMongoId(),
@@ -441,6 +637,10 @@ const createPost = [
       pollQuestion,
       pollOptions,
       pollDuration,
+      // ✅ NEW: Location, Tagged Users, Collaborators
+      location: locationRaw,
+      taggedUsers: taggedUsersRaw,
+      collaborators: collaboratorsRaw,
     } = req.body;
 
     // Explicit hashtags (jo frontend ne JSON array me bheje)
@@ -564,6 +764,73 @@ const createPost = [
       type,
     };
 
+    // ✅ NEW: Location parse & attach (FormData se JSON string aata hai)
+    // Field renamed to `postLocation` in schema to avoid 2dsphere geo index conflict
+    try {
+      if (locationRaw) {
+        const parsedLocation =
+          typeof locationRaw === "string"
+            ? JSON.parse(locationRaw)
+            : locationRaw;
+        if (parsedLocation && (parsedLocation.name || parsedLocation.city)) {
+          postData.postLocation = {
+            id: parsedLocation.id ?? null,
+            name: parsedLocation.name ?? null,
+            city: parsedLocation.city ?? null,
+            state: parsedLocation.state ?? null,
+          };
+        }
+      }
+    } catch (e) {
+      console.log("⚠️ location parse skipped:", e.message);
+    }
+
+    // ✅ NEW: Tagged users parse (array of user IDs)
+    let parsedTaggedUsers = [];
+    try {
+      if (taggedUsersRaw) {
+        parsedTaggedUsers =
+          typeof taggedUsersRaw === "string"
+            ? JSON.parse(taggedUsersRaw)
+            : taggedUsersRaw;
+        if (Array.isArray(parsedTaggedUsers) && parsedTaggedUsers.length > 0) {
+          // apne aap ko tag na kare
+          parsedTaggedUsers = parsedTaggedUsers
+            .map((id) => id?.toString())
+            .filter((id) => id && id !== userId.toString());
+          postData.taggedUsers = parsedTaggedUsers;
+        }
+      }
+    } catch (e) {
+      console.log("⚠️ taggedUsers parse skipped:", e.message);
+    }
+
+    // ✅ NEW: Collaborators parse (array of user IDs) — save as pending
+    let parsedCollaborators = [];
+    try {
+      if (collaboratorsRaw) {
+        const rawArr =
+          typeof collaboratorsRaw === "string"
+            ? JSON.parse(collaboratorsRaw)
+            : collaboratorsRaw;
+        if (Array.isArray(rawArr) && rawArr.length > 0) {
+          parsedCollaborators = rawArr
+            .map((id) => id?.toString())
+            .filter((id) => id && id !== userId.toString())
+            .slice(0, 5); // max 5 (frontend limit)
+          if (parsedCollaborators.length > 0) {
+            postData.collaborators = parsedCollaborators.map((uid) => ({
+              user: uid,
+              status: "pending",
+              invitedAt: new Date(),
+            }));
+          }
+        }
+      }
+    } catch (e) {
+      console.log("⚠️ collaborators parse skipped:", e.message);
+    }
+
     // -----------------------------
     // POLL DATA
     // -----------------------------
@@ -587,6 +854,44 @@ const createPost = [
     else if (type === "vyapar") postData.vyaparId = refId;
 
     const post = await Post.create(postData);
+
+    // ✅ NEW: Tag & Collaborator notifications (fire-and-forget)
+    // Notification model ka post-save hook automatic FCM push bhejta hai
+    try {
+      const Notification = require("../../model/SocialMediaModels/notificationModel");
+
+      // Tag notifications
+      if (parsedTaggedUsers && parsedTaggedUsers.length > 0) {
+        parsedTaggedUsers.forEach((tuId) => {
+          Notification.create({
+            senderId: userId,
+            receiverId: tuId,
+            type: "tag",
+            postId: post._id,
+            message: "tagged you in a post",
+          }).catch((err) =>
+            console.log("⚠️ tag notif failed:", tuId, err.message),
+          );
+        });
+      }
+
+      // Collaborator invite notifications
+      if (parsedCollaborators && parsedCollaborators.length > 0) {
+        parsedCollaborators.forEach((cId) => {
+          Notification.create({
+            senderId: userId,
+            receiverId: cId,
+            type: "collaborator_invite",
+            postId: post._id,
+            message: "invited you to collaborate on a post",
+          }).catch((err) =>
+            console.log("⚠️ collab invite notif failed:", cId, err.message),
+          );
+        });
+      }
+    } catch (e) {
+      console.log("⚠️ notification block error:", e.message);
+    }
 
     // increment postCount
     await User.findByIdAndUpdate(userId, { $inc: { postCount: 1 } });
@@ -3358,6 +3663,50 @@ const getCombinedFeedOptimized = asyncHandler(async (req, res) => {
   return successResponse(res, result, "Combined feed retrieved successfully");
 });
 
+ 
+// ✅ NEW: Posts jaha user ek ACCEPTED collaborator hai (owner nahi)
+// Instagram jaisa — collaborator ki profile pe bhi original post dikhta hai
+const getCollabPostsByUser = asyncHandler(async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "userId required" });
+    }
+ 
+    const posts = await Post.find({
+      collaborators: {
+        $elemMatch: { user: userId, status: "accepted" },
+      },
+      user: { $ne: userId }, // owner ka duplicate na aaye (edge case safety)
+    })
+      .sort({ createdAt: -1 })
+      .populate(
+        "user",
+        "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
+      )
+      .populate(
+        "collaborators.user",
+        "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
+      )
+      .lean();
+ 
+    res.status(200).json({
+      success: true,
+      count: posts.length,
+      posts,
+    });
+  } catch (error) {
+    console.error("getCollabPostsByUser error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch collab posts",
+    });
+  }
+});
+ 
+
 module.exports = {
   createPost,
   searchHashtags,
@@ -3386,4 +3735,5 @@ module.exports = {
   getAllVideoPosts,
   toggleSavePost,
   updateWatchTime,
+  getCollabPostsByUser,
 };

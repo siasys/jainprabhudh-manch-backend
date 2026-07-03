@@ -111,6 +111,31 @@ const submitVyaparApplication = async (req, res) => {
       name: file.originalname,
     }));
 
+    // ✅ GST & PAN files
+    let gstImageUrl = "";
+    if (req.files?.gstImage?.length > 0) {
+      gstImageUrl = convertS3UrlToCDN(req.files.gstImage[0].location);
+    }
+    let panFrontUrl = "";
+    if (req.files?.panFront?.length > 0) {
+      panFrontUrl = convertS3UrlToCDN(req.files.panFront[0].location);
+    }
+    let panBackUrl = "";
+    if (req.files?.panBack?.length > 0) {
+      panBackUrl = convertS3UrlToCDN(req.files.panBack[0].location);
+    }
+
+    // ✅ Udyam certificate file
+    let udyamImageUrl = "";
+    if (req.files?.udyamImage?.length > 0) {
+      udyamImageUrl = convertS3UrlToCDN(req.files.udyamImage[0].location);
+    }
+
+    // ✅ Parse GST & PAN & Udyam body (sent as JSON strings from frontend)
+    const gstData = body.gst ? JSON.parse(body.gst) : {};
+    const panData = body.pan ? JSON.parse(body.pan) : {};
+    const udyamData = body.udyam ? JSON.parse(body.udyam) : {};
+
     // ================= GENERATE UNIQUE BUSINESS CODE =================
     const generateBusinessCode = () => {
       const randomNumber = Math.floor(100000 + Math.random() * 900000); // 6 digits
@@ -137,6 +162,23 @@ const submitVyaparApplication = async (req, res) => {
       businessLogo,
       documents,
       legalLicences: body.legalLicences ? JSON.parse(body.legalLicences) : [],
+      // ✅ GST & PAN
+      gst: {
+        number: gstData.number || "",
+        image: gstImageUrl || gstData.image || "",
+      },
+      pan: {
+        number: panData.number || "",
+        frontImage: panFrontUrl || panData.frontImage || "",
+        backImage: panBackUrl || panData.backImage || "",
+      },
+      // ✅ Udyam (MSME) registration
+      udyam: {
+        number: udyamData.number || "",
+        image: udyamImageUrl || udyamData.image || "",
+      },
+      // ✅ Entity Type (Partnership / Pvt Ltd / LLP / etc.)
+      entityType: body.entityType || "",
       applicationLevel,
       reviewingSanghId,
       applicationStatus: "pending",
@@ -262,6 +304,31 @@ const submitBusinessApplication = async (req, res) => {
       name: file.originalname,
     }));
 
+    // ✅ GST & PAN files
+    let gstImageUrl = "";
+    if (req.files?.gstImage?.length > 0) {
+      gstImageUrl = convertS3UrlToCDN(req.files.gstImage[0].location);
+    }
+    let panFrontUrl = "";
+    if (req.files?.panFront?.length > 0) {
+      panFrontUrl = convertS3UrlToCDN(req.files.panFront[0].location);
+    }
+    let panBackUrl = "";
+    if (req.files?.panBack?.length > 0) {
+      panBackUrl = convertS3UrlToCDN(req.files.panBack[0].location);
+    }
+
+    // ✅ Udyam certificate file
+    let udyamImageUrl = "";
+    if (req.files?.udyamImage?.length > 0) {
+      udyamImageUrl = convertS3UrlToCDN(req.files.udyamImage[0].location);
+    }
+
+    // ✅ Parse GST & PAN & Udyam body (sent as JSON strings from frontend)
+    const gstData = body.gst ? JSON.parse(body.gst) : {};
+    const panData = body.pan ? JSON.parse(body.pan) : {};
+    const udyamData = body.udyam ? JSON.parse(body.udyam) : {};
+
     // ================= GENERATE UNIQUE BUSINESS CODE =================
     const generateBusinessCode = () => {
       const randomNumber = Math.floor(100000 + Math.random() * 900000); // 6 digits
@@ -290,6 +357,23 @@ const submitBusinessApplication = async (req, res) => {
       legalLicences: body.legalLicences ? JSON.parse(body.legalLicences) : [],
       socialLinks: body.socialLinks ? JSON.parse(body.socialLinks) : {},
       workingHours: body.workingHours ? JSON.parse(body.workingHours) : {},
+      // ✅ GST & PAN
+      gst: {
+        number: gstData.number || "",
+        image: gstImageUrl || gstData.image || "",
+      },
+      pan: {
+        number: panData.number || "",
+        frontImage: panFrontUrl || panData.frontImage || "",
+        backImage: panBackUrl || panData.backImage || "",
+      },
+      // ✅ Udyam (MSME) registration
+      udyam: {
+        number: udyamData.number || "",
+        image: udyamImageUrl || udyamData.image || "",
+      },
+      // ✅ Entity Type (Partnership / Pvt Ltd / LLP / etc.)
+      entityType: body.entityType || "",
       applicationLevel,
       reviewingSanghId,
       applicationStatus: "pending",

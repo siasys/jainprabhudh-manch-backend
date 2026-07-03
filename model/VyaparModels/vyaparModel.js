@@ -64,6 +64,31 @@ const jainVyaparSchema = new mongoose.Schema(
       },
     ],
 
+    // ✅ GST Details
+    gst: {
+      number: { type: String, default: "" },
+      image: { type: String, default: "" }, // S3/CDN URL
+    },
+
+    // ✅ PAN Card Details
+    pan: {
+      number: { type: String, default: "" },
+      frontImage: { type: String, default: "" }, // S3/CDN URL
+      backImage: { type: String, default: "" }, // S3/CDN URL
+    },
+
+    // ✅ Udyam / MSME Registration
+    udyam: {
+      number: { type: String, default: "" },
+      image: { type: String, default: "" }, // S3/CDN URL of certificate
+    },
+
+    // ✅ Entity Type (Partnership / Pvt Ltd / LLP / etc.)
+    entityType: {
+      type: String,
+      default: "",
+    },
+
     // ✅ Social Media Links
     socialLinks: {
       website: { type: String, default: "" },

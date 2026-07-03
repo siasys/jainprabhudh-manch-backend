@@ -25,6 +25,11 @@ const notificationSchema = new mongoose.Schema(
         "complaint",
         "request",
         "mention",
+        // ✅ NEW: Tag & Collaborator notification types
+        "tag",
+        "collaborator_invite",
+        "collaborator_accepted",
+        "collaborator_rejected",
       ],
       required: true,
     },
@@ -106,6 +111,11 @@ notificationSchema.post("save", async function (doc) {
       request: "sent you a request",
       suggestion: "sent a suggestion",
       complaint: "sent a complaint",
+      // ✅ NEW
+      tag: "tagged you in a post",
+      collaborator_invite: "invited you to collaborate on a post",
+      collaborator_accepted: "accepted your collaboration invite",
+      collaborator_rejected: "declined your collaboration invite",
     };
     const body =
       doc.message ||

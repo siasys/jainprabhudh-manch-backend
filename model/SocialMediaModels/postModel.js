@@ -84,6 +84,36 @@ const postSchema = new mongoose.Schema(
       type: String,
     },
     hashtags: [{ type: String }],
+    // ✅ NEW: Location tagged on post
+    postLocation: {
+      id: { type: mongoose.Schema.Types.Mixed, default: null },
+      name: { type: String, default: null },
+      city: { type: String, default: null },
+      state: { type: String, default: null },
+    },
+    // ✅ NEW: Tagged users on post
+    taggedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    // ✅ NEW: Collaborators with invite status
+    collaborators: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        status: {
+          type: String,
+          enum: ["pending", "accepted", "rejected"],
+          default: "pending",
+        },
+        invitedAt: { type: Date, default: Date.now },
+        respondedAt: { type: Date, default: null },
+      },
+    ],
     watchTime: {
       type: Number,
       default: 0,

@@ -148,6 +148,13 @@ const getS3Folder = (fieldname, req) => {
       return "scholarship/principal-letter/";
     case "schoolAccountDocument":
       return "scholarship/school-account/";
+    case "gstImage":
+      return "vyapar/gst/";
+    case "panFront":
+    case "panBack":
+      return "vyapar/pan/";
+    case "udyamImage":
+      return "vyapar/udyam/";
     case "meeting_0_image_0":
     case "meeting_0_image_1":
     case "meeting_1_image_0":
@@ -673,6 +680,10 @@ module.exports.vyaparDocs = [
     { name: "entityPhoto", maxCount: 5 },
     { name: "businessLogo", maxCount: 1 },
     { name: "entityDocuments", maxCount: 5 },
+    { name: "gstImage", maxCount: 1 },
+    { name: "panFront", maxCount: 1 },
+    { name: "panBack", maxCount: 1 },
+    { name: "udyamImage", maxCount: 1 },
   ]),
   compressFiles,
   uploadToS3,
