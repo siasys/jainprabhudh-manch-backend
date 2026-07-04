@@ -190,6 +190,7 @@ module.exports = {
 
   Delhi: [
     "Central",
+    "Delhi",
     "East",
     "New Delhi",
     "North",

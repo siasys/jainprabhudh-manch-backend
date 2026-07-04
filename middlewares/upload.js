@@ -221,6 +221,8 @@ const getS3Folder = (fieldname, req) => {
       return "others/";
     case "audio":
       return "music/";
+    case "productPhotos":
+      return "products/photos/";
     default:
       return "others/";
   }
@@ -710,6 +712,14 @@ module.exports.sponsorUpload = [
 ];
 module.exports.entityPostUpload = [
   upload.array("media", 10),
+  compressFiles,
+  uploadToS3,
+];
+// ✅ Product photos upload (for VyaparProduct API)
+module.exports.productUpload = [
+  upload.fields([
+    { name: "productPhotos", maxCount: 6 },
+  ]),
   compressFiles,
   uploadToS3,
 ];

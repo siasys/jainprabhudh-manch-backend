@@ -79,6 +79,7 @@ const donationPaymentRoutes = require('./routes/Donation/Donationpaymentroutes')
 const matrimonyPaymentRoutes = require('./routes/Matrimonial/Matrimonialpaymentroutes');
 const sanghCertificateRoutes = require('./routes/SanghRoutes/Sanghcertificateroute');
 const fcmRoutes = require("./routes/fcmRoutes");
+const vyaparProductRoutes = require("./routes/VyaparRoutes/Productroutes");
 
 //const appVersionRoute = require('./routes/Update apk/appVersion');
 app.set('trust proxy',1);
@@ -166,7 +167,7 @@ app.use('/api/yojana', govtYojanaRoutes);
 // JainVyapar routes
 app.use("/api/vyapar", vyaparRoutes);
 app.use("/api/vyapar/posts", vyaparPostRoutes);
-
+app.use("/api/vyapar/products", vyaparProductRoutes);
 // Tirth routes
 app.use('/api/tirth', authMiddleware, tirthRoutes);
 app.use('/api/tirth/posts', tirthPostRoutes);
