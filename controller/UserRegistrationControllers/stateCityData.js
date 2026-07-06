@@ -333,6 +333,8 @@ module.exports = {
     "Bagalkote",
     "Ballari",
     "Belagavi",
+    "Bengaluru",
+    "Bangalore",
     "Bengaluru Rural",
     "Bengaluru South",
     "Bengaluru Urban",
