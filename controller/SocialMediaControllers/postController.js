@@ -641,6 +641,8 @@ const createPost = [
       location: locationRaw,
       taggedUsers: taggedUsersRaw,
       collaborators: collaboratorsRaw,
+      // ✅ NEW: Schedule time (ISO string) — agar aya to future me publish hoga
+      scheduledAt: scheduledAtRaw,
     } = req.body;
 
     // Explicit hashtags (jo frontend ne JSON array me bheje)
@@ -853,45 +855,75 @@ const createPost = [
     else if (type === "sadhu") postData.sadhuId = refId;
     else if (type === "vyapar") postData.vyaparId = refId;
 
+    // ✅ NEW: Schedule handling — future time diya to status="scheduled" set karo
+    let isScheduled = false;
+    try {
+      if (scheduledAtRaw) {
+        const scheduledDate = new Date(scheduledAtRaw);
+        if (!isNaN(scheduledDate.getTime())) {
+          const now = new Date();
+          const diffMin = (scheduledDate - now) / 60000;
+          // Kam se kam 2 min future ho, aur max 60 din tak
+          if (diffMin >= 2 && diffMin <= 60 * 24 * 60) {
+            postData.scheduledAt = scheduledDate;
+            postData.status = "scheduled";
+            isScheduled = true;
+          } else if (diffMin < 2) {
+            console.log("⚠️ scheduledAt too close, publishing immediately");
+          } else {
+            return res.status(400).json({
+              success: false,
+              message: "Cannot schedule more than 60 days in advance",
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.log("⚠️ scheduledAt parse skipped:", e.message);
+    }
+
     const post = await Post.create(postData);
 
     // ✅ NEW: Tag & Collaborator notifications (fire-and-forget)
     // Notification model ka post-save hook automatic FCM push bhejta hai
-    try {
-      const Notification = require("../../model/SocialMediaModels/notificationModel");
+    // ⏰ Scheduled posts pe abhi skip — publish ke waqt scheduler fire karega
+    if (!isScheduled) {
+      try {
+        const Notification = require("../../model/SocialMediaModels/notificationModel");
 
-      // Tag notifications
-      if (parsedTaggedUsers && parsedTaggedUsers.length > 0) {
-        parsedTaggedUsers.forEach((tuId) => {
-          Notification.create({
-            senderId: userId,
-            receiverId: tuId,
-            type: "tag",
-            postId: post._id,
-            message: "tagged you in a post",
-          }).catch((err) =>
-            console.log("⚠️ tag notif failed:", tuId, err.message),
-          );
-        });
-      }
+        // Tag notifications
+        if (parsedTaggedUsers && parsedTaggedUsers.length > 0) {
+          parsedTaggedUsers.forEach((tuId) => {
+            Notification.create({
+              senderId: userId,
+              receiverId: tuId,
+              type: "tag",
+              postId: post._id,
+              message: "tagged you in a post",
+            }).catch((err) =>
+              console.log("⚠️ tag notif failed:", tuId, err.message),
+            );
+          });
+        }
 
-      // Collaborator invite notifications
-      if (parsedCollaborators && parsedCollaborators.length > 0) {
-        parsedCollaborators.forEach((cId) => {
-          Notification.create({
-            senderId: userId,
-            receiverId: cId,
-            type: "collaborator_invite",
-            postId: post._id,
-            message: "invited you to collaborate on a post",
-          }).catch((err) =>
-            console.log("⚠️ collab invite notif failed:", cId, err.message),
-          );
-        });
+        // Collaborator invite notifications
+        if (parsedCollaborators && parsedCollaborators.length > 0) {
+          parsedCollaborators.forEach((cId) => {
+            Notification.create({
+              senderId: userId,
+              receiverId: cId,
+              type: "collaborator_invite",
+              postId: post._id,
+              message: "invited you to collaborate on a post",
+            }).catch((err) =>
+              console.log("⚠️ collab invite notif failed:", cId, err.message),
+            );
+          });
+        }
+      } catch (e) {
+        console.log("⚠️ notification block error:", e.message);
       }
-    } catch (e) {
-      console.log("⚠️ notification block error:", e.message);
-    }
+    } // end if (!isScheduled)
 
     // increment postCount
     await User.findByIdAndUpdate(userId, { $inc: { postCount: 1 } });
@@ -905,6 +937,16 @@ const createPost = [
 
     await invalidateCache("combinedFeed:*");
     await invalidateCache("combinedFeed:firstPage:limit:10");
+
+    // ✅ NEW: scheduled flag & message frontend ko batao
+    if (isScheduled) {
+      return res.status(201).json({
+        success: true,
+        scheduled: true,
+        message: "Post scheduled successfully",
+        post,
+      });
+    }
 
     res.status(201).json(post);
   }),
@@ -3705,7 +3747,38 @@ const getCollabPostsByUser = asyncHandler(async (req, res) => {
     });
   }
 });
+ // ✅ NEW: User ke apne scheduled posts (jo abhi publish nahi hue)
+const getMyScheduledPosts = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user?.id || req.user?._id || req.params.userId;
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "userId required" });
+    }
  
+    // Middleware bypass karke scheduled posts fetch karo
+    const posts = await Post.find({
+      user: userId,
+      status: "scheduled",
+    })
+      .setOptions({ includeScheduled: true })
+      .sort({ scheduledAt: 1 }) // sonest first
+      .lean();
+ 
+    res.status(200).json({
+      success: true,
+      count: posts.length,
+      posts,
+    });
+  } catch (error) {
+    console.error("getMyScheduledPosts error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch scheduled posts",
+    });
+  }
+});
 
 module.exports = {
   createPost,
@@ -3736,4 +3809,5 @@ module.exports = {
   toggleSavePost,
   updateWatchTime,
   getCollabPostsByUser,
+  getMyScheduledPosts
 };

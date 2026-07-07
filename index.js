@@ -9,7 +9,8 @@ const express = require("express");
 const http = require("http");
 const dbConnect = require("./config/dbConnect");
 const app = express();
-require('./services/boostExpiry'); 
+require('./services/boostExpiry');
+const { startPostScheduler } = require("./services/Postscheduler");
 const path = require('path')
 const helmet = require('helmet');
 //console.log("Loaded JWT_SECRET:", process.env.JWT_SECRET);

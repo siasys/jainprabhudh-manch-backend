@@ -114,6 +114,16 @@ const postSchema = new mongoose.Schema(
         respondedAt: { type: Date, default: null },
       },
     ],
+    // ✅ NEW: Schedule post — kab publish ho + current status
+    scheduledAt: {
+      type: Date,
+      default: null,
+    },
+    status: {
+      type: String,
+      enum: ["published", "scheduled"],
+      default: "published",
+    },
     watchTime: {
       type: Number,
       default: 0,
@@ -258,6 +268,38 @@ postSchema.methods.addComment = function (userId, text) {
 postSchema.methods.findComment = function (commentId) {
   return this.comments.id(commentId);
 };
+
+// ✅ NEW: Auto-hide scheduled (future) posts from ALL find queries.
+// scheduledAt-based filter — status field pe depend nahi karta (double safety).
+// Bypass ke liye: Post.find({...}).setOptions({ includeScheduled: true })
+//
+// IMPORTANT: `$and` use karte hain (not `$or` at top-level) taaki existing
+// queries me jo pehle se `$or` ho (jaise isBoosted filter in getAllPosts),
+// wo conflict na kare. MongoDB me top-level $or sirf ek hi ho sakti hai.
+postSchema.pre(/^find/, function (next) {
+  // Bypass flag check (Mongoose versions ke across compatible)
+  const opts = this.options || (this.getOptions && this.getOptions()) || {};
+  if (opts.includeScheduled) return next();
+
+  const q = this.getQuery();
+  // Agar query me pehle se scheduledAt / status filter hai to touch mat karo
+  if (q.scheduledAt !== undefined || q.status !== undefined) {
+    return next();
+  }
+
+  const now = new Date();
+  // Nested $or inside $and — safely combines with any existing top-level $or
+  this.and([
+    {
+      $or: [
+        { scheduledAt: null },
+        { scheduledAt: { $exists: false } },
+        { scheduledAt: { $lte: now } },
+      ],
+    },
+  ]);
+  next();
+});
 
 const Post = mongoose.model("Post", postSchema);
 module.exports = mongoose.model("Post", postSchema);
