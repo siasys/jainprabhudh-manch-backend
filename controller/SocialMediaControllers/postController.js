@@ -1158,7 +1158,11 @@ const getPostById = asyncHandler(async (req, res) => {
             "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
         })
         .populate("sanghId", "name sanghImage")
-        .populate("panchId", "name sanghImage");
+        .populate("panchId", "name sanghImage")
+         .populate(
+          "collaborators.user",
+          "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
+        );
     },
     3600,
   );
@@ -1241,7 +1245,28 @@ const getPostById = asyncHandler(async (req, res) => {
           tirthName: post.user.tirthName,
         }
       : null,
-
+    collaborators: Array.isArray(post.collaborators)
+      ? post.collaborators.map((c) => ({
+          _id: c._id,
+          status: c.status,
+          invitedAt: c.invitedAt,
+          respondedAt: c.respondedAt,
+          user: c.user
+            ? {
+                _id: c.user._id,
+                id: c.user._id,
+                firstName: c.user.firstName,
+                lastName: c.user.lastName,
+                fullName: getDisplayName(c.user),
+                profilePicture: c.user.profilePicture,
+                accountType: c.user.accountType,
+                businessName: c.user.businessName,
+                sadhuName: c.user.sadhuName,
+                tirthName: c.user.tirthName,
+              }
+            : null,
+        }))
+      : [],
     type: post.type || null,
 
     sanghId: post.sanghId?._id || post.sanghId || null,
@@ -1661,6 +1686,14 @@ const getAllPosts = async (req, res) => {
         "firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName tirthName",
       )
       .populate("sanghId", "name sanghImage")
+      .populate(
+        "collaborators.user",
+        "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
+      )
+      .populate(
+        "taggedUsers",
+        "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
+      )
       .sort({ createdAt: -1 })
       .limit(fetchLimit) // ✅ updated only
       .lean();
@@ -2248,6 +2281,15 @@ const getAllVideoPosts = async (req, res) => {
         "firstName lastName fullName profilePicture accountStatus accountType businessName sadhuName tirthName",
       )
       .populate("sanghId", "name sanghImage")
+      // ✅ NEW: Collaborators + Tagged users populate (Instagram-style co-authors + tag icon)
+      .populate(
+        "collaborators.user",
+        "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
+      )
+      .populate(
+        "taggedUsers",
+        "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
+      )
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
@@ -2265,11 +2307,24 @@ const getAllVideoPosts = async (req, res) => {
     })
       .populate({
         path: "post",
-        populate: {
-          path: "user",
-          select:
-            "firstName lastName fullName sadhuName tirthName accountType profilePicture accountStatus",
-        },
+        // ✅ NEW: multiple nested populates — existing user + new collaborators/taggedUsers
+        populate: [
+          {
+            path: "user",
+            select:
+              "firstName lastName fullName sadhuName tirthName accountType profilePicture accountStatus",
+          },
+          {
+            path: "collaborators.user",
+            select:
+              "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
+          },
+          {
+            path: "taggedUsers",
+            select:
+              "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
+          },
+        ],
       })
       .lean();
 
@@ -2461,7 +2516,7 @@ const getAllVideoPosts = async (req, res) => {
     return errorResponse(res, "Failed to fetch video posts", 500, err.message);
   }
 };
-
+ 
 // old update watch time
 
 // const updateWatchTime = asyncHandler(async (req, res) => {
