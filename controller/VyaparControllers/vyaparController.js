@@ -8,6 +8,57 @@ const {
 } = require("../../utils/s3Utils");
 const User = require("../../model/UserRegistrationModels/userModel");
 
+// ══════════════════════════════════════════════════════════════════
+// ✅ DUPLICATE SUBMISSION GUARD
+// Problem: user submit button 3-4 baar click kar deta hai → 3-4 business ban jate hain
+// Solution: (1) in-flight lock — same user ki parallel request block
+//           (2) DB check — same user + same businessName ya 60s ke andar submit → existing return
+// ══════════════════════════════════════════════════════════════════
+const inFlightVyaparSubmissions = new Set();
+const DUPLICATE_WINDOW_MS = 60 * 1000;
+
+// Same user ka pehle se banaya hua duplicate business dhoondo
+const findDuplicateVyapar = async (userId, businessName) => {
+  const name = (businessName || "").trim();
+
+  // 1) Exactly same naam ka business is user ka pehle se hai? (case-insensitive)
+  if (name) {
+    const sameName = await JainVyapar.findOne({
+      userId,
+      businessName: {
+        $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+        $options: "i",
+      },
+    }).sort({ _id: -1 });
+    if (sameName) return sameName;
+  }
+
+  // 2) Ya phir last 60 second me is user ne koi business banaya hai? (rapid double-click)
+  const recent = await JainVyapar.findOne({ userId }).sort({ _id: -1 });
+  if (recent) {
+    const createdAt = recent.createdAt || recent._id.getTimestamp();
+    if (Date.now() - new Date(createdAt).getTime() < DUPLICATE_WINDOW_MS) {
+      return recent;
+    }
+  }
+
+  return null;
+};
+
+// Duplicate mila to wahi existing record return kar do (naya create mat karo)
+const duplicateResponse = (res, existing) =>
+  res.status(200).json({
+    success: true,
+    duplicate: true,
+    message: "Business application already submitted",
+    data: {
+      vyaparId: existing._id,
+      businessCode: existing.businessCode,
+      applicationLevel: existing.applicationLevel,
+      reviewingSanghId: existing.reviewingSanghId,
+    },
+  });
+
 // Get available cities with active Sanghs
 const getAvailableCities = async (req, res) => {
   try {
@@ -23,188 +74,213 @@ const getAvailableCities = async (req, res) => {
 };
 const submitVyaparApplication = async (req, res) => {
   try {
-    const body = req.body;
-
-    // ✅ Parse location safely
-    let location = body.location;
-    if (typeof location === "string") {
-      location = JSON.parse(location);
-    }
-
-    const { country = "India", state, district, city } = location || {};
-
-    let applicationLevel = "superadmin";
-    let reviewingSanghId = null;
-
-    // ================= SANGH ROUTING =================
-    if (state && district && city) {
-      const citySangh = await HierarchicalSangh.findOne({
-        level: "city",
-        "location.state": state,
-        "location.district": district,
-        "location.city": city,
-        status: "active",
+    // ✅ DUPLICATE GUARD — parallel request block
+    const lockKey = String(req.user._id);
+    if (inFlightVyaparSubmissions.has(lockKey)) {
+      return res.status(429).json({
+        success: false,
+        message: "Your previous submission is still processing. Please wait.",
       });
-      if (citySangh) {
-        applicationLevel = "city";
-        reviewingSanghId = citySangh._id;
+    }
+    inFlightVyaparSubmissions.add(lockKey);
+
+    try {
+      // ✅ DUPLICATE GUARD — DB me pehle se hai to wahi return karo
+      const alreadyExists = await findDuplicateVyapar(
+        req.user._id,
+        req.body?.businessName,
+      );
+      if (alreadyExists) {
+        return duplicateResponse(res, alreadyExists);
       }
-    }
 
-    if (!reviewingSanghId && state && district) {
-      const districtSangh = await HierarchicalSangh.findOne({
-        level: "district",
-        "location.state": state,
-        "location.district": district,
-        status: "active",
-      });
-      if (districtSangh) {
-        applicationLevel = "district";
-        reviewingSanghId = districtSangh._id;
+      const body = req.body;
+
+      // ✅ Parse location safely
+      let location = body.location;
+      if (typeof location === "string") {
+        location = JSON.parse(location);
       }
-    }
 
-    if (!reviewingSanghId && state) {
-      const stateSangh = await HierarchicalSangh.findOne({
-        level: "state",
-        "location.state": state,
-        status: "active",
-      });
-      if (stateSangh) {
-        applicationLevel = "state";
-        reviewingSanghId = stateSangh._id;
+      const { country = "India", state, district, city } = location || {};
+
+      let applicationLevel = "superadmin";
+      let reviewingSanghId = null;
+
+      // ================= SANGH ROUTING =================
+      if (state && district && city) {
+        const citySangh = await HierarchicalSangh.findOne({
+          level: "city",
+          "location.state": state,
+          "location.district": district,
+          "location.city": city,
+          status: "active",
+        });
+        if (citySangh) {
+          applicationLevel = "city";
+          reviewingSanghId = citySangh._id;
+        }
       }
-    }
 
-    if (!reviewingSanghId && country) {
-      const countrySangh = await HierarchicalSangh.findOne({
-        level: "country",
-        "location.country": country,
-        status: "active",
-      });
-      if (countrySangh) {
-        applicationLevel = "country";
-        reviewingSanghId = countrySangh._id;
+      if (!reviewingSanghId && state && district) {
+        const districtSangh = await HierarchicalSangh.findOne({
+          level: "district",
+          "location.state": state,
+          "location.district": district,
+          status: "active",
+        });
+        if (districtSangh) {
+          applicationLevel = "district";
+          reviewingSanghId = districtSangh._id;
+        }
       }
-    }
 
-    if (!reviewingSanghId) {
-      applicationLevel = "superadmin";
-      reviewingSanghId = null;
-    }
+      if (!reviewingSanghId && state) {
+        const stateSangh = await HierarchicalSangh.findOne({
+          level: "state",
+          "location.state": state,
+          status: "active",
+        });
+        if (stateSangh) {
+          applicationLevel = "state";
+          reviewingSanghId = stateSangh._id;
+        }
+      }
 
-    // ================= FILE HANDLING =================
-    // ✅ Business Logo (single file)
-    let businessLogo = null;
-    if (req.files?.businessLogo?.length > 0) {
-      businessLogo = convertS3UrlToCDN(req.files.businessLogo[0].location);
-    }
+      if (!reviewingSanghId && country) {
+        const countrySangh = await HierarchicalSangh.findOne({
+          level: "country",
+          "location.country": country,
+          status: "active",
+        });
+        if (countrySangh) {
+          applicationLevel = "country";
+          reviewingSanghId = countrySangh._id;
+        }
+      }
 
-    const photos = (req.files?.entityPhoto || []).map((file) => ({
-      url: convertS3UrlToCDN(file.location),
-      caption: body.photoCaption || "",
-    }));
+      if (!reviewingSanghId) {
+        applicationLevel = "superadmin";
+        reviewingSanghId = null;
+      }
 
-    const documents = (req.files?.entityDocuments || []).map((file) => ({
-      url: convertS3UrlToCDN(file.location),
-      type: file.mimetype,
-      name: file.originalname,
-    }));
+      // ================= FILE HANDLING =================
+      // ✅ Business Logo (single file)
+      let businessLogo = null;
+      if (req.files?.businessLogo?.length > 0) {
+        businessLogo = convertS3UrlToCDN(req.files.businessLogo[0].location);
+      }
 
-    // ✅ GST & PAN files
-    let gstImageUrl = "";
-    if (req.files?.gstImage?.length > 0) {
-      gstImageUrl = convertS3UrlToCDN(req.files.gstImage[0].location);
-    }
-    let panFrontUrl = "";
-    if (req.files?.panFront?.length > 0) {
-      panFrontUrl = convertS3UrlToCDN(req.files.panFront[0].location);
-    }
-    let panBackUrl = "";
-    if (req.files?.panBack?.length > 0) {
-      panBackUrl = convertS3UrlToCDN(req.files.panBack[0].location);
-    }
+      const photos = (req.files?.entityPhoto || []).map((file) => ({
+        url: convertS3UrlToCDN(file.location),
+        caption: body.photoCaption || "",
+      }));
 
-    // ✅ Udyam certificate file
-    let udyamImageUrl = "";
-    if (req.files?.udyamImage?.length > 0) {
-      udyamImageUrl = convertS3UrlToCDN(req.files.udyamImage[0].location);
-    }
+      const documents = (req.files?.entityDocuments || []).map((file) => ({
+        url: convertS3UrlToCDN(file.location),
+        type: file.mimetype,
+        name: file.originalname,
+      }));
 
-    // ✅ Parse GST & PAN & Udyam body (sent as JSON strings from frontend)
-    const gstData = body.gst ? JSON.parse(body.gst) : {};
-    const panData = body.pan ? JSON.parse(body.pan) : {};
-    const udyamData = body.udyam ? JSON.parse(body.udyam) : {};
+      // ✅ GST & PAN files
+      let gstImageUrl = "";
+      if (req.files?.gstImage?.length > 0) {
+        gstImageUrl = convertS3UrlToCDN(req.files.gstImage[0].location);
+      }
+      let panFrontUrl = "";
+      if (req.files?.panFront?.length > 0) {
+        panFrontUrl = convertS3UrlToCDN(req.files.panFront[0].location);
+      }
+      let panBackUrl = "";
+      if (req.files?.panBack?.length > 0) {
+        panBackUrl = convertS3UrlToCDN(req.files.panBack[0].location);
+      }
 
-    // ================= GENERATE UNIQUE BUSINESS CODE =================
-    const generateBusinessCode = () => {
-      const randomNumber = Math.floor(100000 + Math.random() * 900000); // 6 digits
-      return `JAINBU${randomNumber}`;
-    };
-    const businessCode = generateBusinessCode();
+      // ✅ Udyam certificate file
+      let udyamImageUrl = "";
+      if (req.files?.udyamImage?.length > 0) {
+        udyamImageUrl = convertS3UrlToCDN(req.files.udyamImage[0].location);
+      }
 
-    // ================= CREATE VYAPAR =================
-    const vyapar = await JainVyapar.create({
-      userId: req.user._id,
-      businessName: body.businessName,
-      businessCode, // ✅ add here
-      incorporationYear: body.incorporationYear,
-      businessType: body.businessType,
-      businessCategory: body.businessCategory,
-      description: body.description,
-      specialOffer: body.specialOffer,
-      location,
-      ownerName: body.ownerName,
-      contactPerson: body.contactPerson,
-      alternativeNumber: body.alternativeNumber,
-      email: body.email,
-      photos,
-      businessLogo,
-      documents,
-      legalLicences: body.legalLicences ? JSON.parse(body.legalLicences) : [],
-      // ✅ GST & PAN
-      gst: {
-        number: gstData.number || "",
-        image: gstImageUrl || gstData.image || "",
-      },
-      pan: {
-        number: panData.number || "",
-        frontImage: panFrontUrl || panData.frontImage || "",
-        backImage: panBackUrl || panData.backImage || "",
-      },
-      // ✅ Udyam (MSME) registration
-      udyam: {
-        number: udyamData.number || "",
-        image: udyamImageUrl || udyamData.image || "",
-      },
-      // ✅ Entity Type (Partnership / Pvt Ltd / LLP / etc.)
-      entityType: body.entityType || "",
-      applicationLevel,
-      reviewingSanghId,
-      applicationStatus: "pending",
-      status: "active",
-    });
+      // ✅ Parse GST & PAN & Udyam body (sent as JSON strings from frontend)
+      const gstData = body.gst ? JSON.parse(body.gst) : {};
+      const panData = body.pan ? JSON.parse(body.pan) : {};
+      const udyamData = body.udyam ? JSON.parse(body.udyam) : {};
 
-    // ================= USER ROLE UPDATE =================
-    await User.findByIdAndUpdate(req.user._id, {
-      $addToSet: {
-        vyaparRoles: {
-          vyaparId: vyapar._id,
-          role: "owner",
+      // ================= GENERATE UNIQUE BUSINESS CODE =================
+      const generateBusinessCode = () => {
+        const randomNumber = Math.floor(100000 + Math.random() * 900000); // 6 digits
+        return `JAINBU${randomNumber}`;
+      };
+      const businessCode = generateBusinessCode();
+
+      // ================= CREATE VYAPAR =================
+      const vyapar = await JainVyapar.create({
+        userId: req.user._id,
+        businessName: body.businessName,
+        businessCode, // ✅ add here
+        incorporationYear: body.incorporationYear,
+        businessType: body.businessType,
+        businessCategory: body.businessCategory,
+        description: body.description,
+        specialOffer: body.specialOffer,
+        location,
+        ownerName: body.ownerName,
+        contactPerson: body.contactPerson,
+        alternativeNumber: body.alternativeNumber,
+        email: body.email,
+        photos,
+        businessLogo,
+        documents,
+        legalLicences: body.legalLicences ? JSON.parse(body.legalLicences) : [],
+        // ✅ GST & PAN
+        gst: {
+          number: gstData.number || "",
+          image: gstImageUrl || gstData.image || "",
         },
-      },
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: "Vyapar application submitted successfully",
-      data: {
-        vyaparId: vyapar._id,
-        businessCode, // ✅ return it in response
+        pan: {
+          number: panData.number || "",
+          frontImage: panFrontUrl || panData.frontImage || "",
+          backImage: panBackUrl || panData.backImage || "",
+        },
+        // ✅ Udyam (MSME) registration
+        udyam: {
+          number: udyamData.number || "",
+          image: udyamImageUrl || udyamData.image || "",
+        },
+        // ✅ Entity Type (Partnership / Pvt Ltd / LLP / etc.)
+        entityType: body.entityType || "",
         applicationLevel,
         reviewingSanghId,
-      },
-    });
+        // ✅ AUTO-APPROVE: form submit hote hi application approved
+        applicationStatus: "approved",
+        status: "active",
+      });
+
+      // ================= USER ROLE UPDATE =================
+      await User.findByIdAndUpdate(req.user._id, {
+        $addToSet: {
+          vyaparRoles: {
+            vyaparId: vyapar._id,
+            role: "owner",
+          },
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Vyapar application submitted successfully",
+        data: {
+          vyaparId: vyapar._id,
+          businessCode,
+          applicationLevel,
+          reviewingSanghId,
+        },
+      });
+    } finally {
+      // ✅ Lock release — chahe success ho ya error
+      inFlightVyaparSubmissions.delete(lockKey);
+    }
   } catch (error) {
     console.error("submitVyaparApplication error:", error);
     return res.status(500).json({
@@ -216,190 +292,252 @@ const submitVyaparApplication = async (req, res) => {
 // new social links add api
 const submitBusinessApplication = async (req, res) => {
   try {
-    const body = req.body;
-
-    // ✅ Parse location safely
-    let location = body.location;
-    if (typeof location === "string") {
-      location = JSON.parse(location);
-    }
-
-    const { country = "India", state, district, city } = location || {};
-
-    let applicationLevel = "superadmin";
-    let reviewingSanghId = null;
-
-    // ================= SANGH ROUTING =================
-    if (state && district && city) {
-      const citySangh = await HierarchicalSangh.findOne({
-        level: "city",
-        "location.state": state,
-        "location.district": district,
-        "location.city": city,
-        status: "active",
+    // ✅ DUPLICATE GUARD — parallel request block
+    const lockKey = String(req.user._id);
+    if (inFlightVyaparSubmissions.has(lockKey)) {
+      return res.status(429).json({
+        success: false,
+        message: "Your previous submission is still processing. Please wait.",
       });
-      if (citySangh) {
-        applicationLevel = "city";
-        reviewingSanghId = citySangh._id;
+    }
+    inFlightVyaparSubmissions.add(lockKey);
+
+    try {
+      // ✅ DUPLICATE GUARD — DB me pehle se hai to wahi return karo
+      const alreadyExists = await findDuplicateVyapar(
+        req.user._id,
+        req.body?.businessName,
+      );
+      if (alreadyExists) {
+        return duplicateResponse(res, alreadyExists);
       }
-    }
 
-    if (!reviewingSanghId && state && district) {
-      const districtSangh = await HierarchicalSangh.findOne({
-        level: "district",
-        "location.state": state,
-        "location.district": district,
-        status: "active",
-      });
-      if (districtSangh) {
-        applicationLevel = "district";
-        reviewingSanghId = districtSangh._id;
+      const body = req.body;
+
+      // ✅ Parse location safely
+      let location = body.location;
+      if (typeof location === "string") {
+        location = JSON.parse(location);
       }
-    }
 
-    if (!reviewingSanghId && state) {
-      const stateSangh = await HierarchicalSangh.findOne({
-        level: "state",
-        "location.state": state,
-        status: "active",
-      });
-      if (stateSangh) {
-        applicationLevel = "state";
-        reviewingSanghId = stateSangh._id;
+      const { country = "India", state, district, city } = location || {};
+
+      let applicationLevel = "superadmin";
+      let reviewingSanghId = null;
+
+      // ================= SANGH ROUTING =================
+      if (state && district && city) {
+        const citySangh = await HierarchicalSangh.findOne({
+          level: "city",
+          "location.state": state,
+          "location.district": district,
+          "location.city": city,
+          status: "active",
+        });
+        if (citySangh) {
+          applicationLevel = "city";
+          reviewingSanghId = citySangh._id;
+        }
       }
-    }
 
-    if (!reviewingSanghId && country) {
-      const countrySangh = await HierarchicalSangh.findOne({
-        level: "country",
-        "location.country": country,
-        status: "active",
-      });
-      if (countrySangh) {
-        applicationLevel = "country";
-        reviewingSanghId = countrySangh._id;
+      if (!reviewingSanghId && state && district) {
+        const districtSangh = await HierarchicalSangh.findOne({
+          level: "district",
+          "location.state": state,
+          "location.district": district,
+          status: "active",
+        });
+        if (districtSangh) {
+          applicationLevel = "district";
+          reviewingSanghId = districtSangh._id;
+        }
       }
-    }
 
-    if (!reviewingSanghId) {
-      applicationLevel = "superadmin";
-      reviewingSanghId = null;
-    }
+      if (!reviewingSanghId && state) {
+        const stateSangh = await HierarchicalSangh.findOne({
+          level: "state",
+          "location.state": state,
+          status: "active",
+        });
+        if (stateSangh) {
+          applicationLevel = "state";
+          reviewingSanghId = stateSangh._id;
+        }
+      }
 
-    // ================= FILE HANDLING =================
-    // ✅ Business Logo (single file)
-    let businessLogo = null;
-    if (req.files?.businessLogo?.length > 0) {
-      businessLogo = convertS3UrlToCDN(req.files.businessLogo[0].location);
-    }
+      if (!reviewingSanghId && country) {
+        const countrySangh = await HierarchicalSangh.findOne({
+          level: "country",
+          "location.country": country,
+          status: "active",
+        });
+        if (countrySangh) {
+          applicationLevel = "country";
+          reviewingSanghId = countrySangh._id;
+        }
+      }
 
-    const photos = (req.files?.entityPhoto || []).map((file) => ({
-      url: convertS3UrlToCDN(file.location),
-      caption: body.photoCaption || "",
-    }));
+      if (!reviewingSanghId) {
+        applicationLevel = "superadmin";
+        reviewingSanghId = null;
+      }
 
-    const documents = (req.files?.entityDocuments || []).map((file) => ({
-      url: convertS3UrlToCDN(file.location),
-      type: file.mimetype,
-      name: file.originalname,
-    }));
+      // ================= FILE HANDLING =================
+      // ✅ Business Logo (single file)
+      let businessLogo = null;
+      if (req.files?.businessLogo?.length > 0) {
+        businessLogo = convertS3UrlToCDN(req.files.businessLogo[0].location);
+      }
 
-    // ✅ GST & PAN files
-    let gstImageUrl = "";
-    if (req.files?.gstImage?.length > 0) {
-      gstImageUrl = convertS3UrlToCDN(req.files.gstImage[0].location);
-    }
-    let panFrontUrl = "";
-    if (req.files?.panFront?.length > 0) {
-      panFrontUrl = convertS3UrlToCDN(req.files.panFront[0].location);
-    }
-    let panBackUrl = "";
-    if (req.files?.panBack?.length > 0) {
-      panBackUrl = convertS3UrlToCDN(req.files.panBack[0].location);
-    }
+      const photos = (req.files?.entityPhoto || []).map((file) => ({
+        url: convertS3UrlToCDN(file.location),
+        caption: body.photoCaption || "",
+      }));
 
-    // ✅ Udyam certificate file
-    let udyamImageUrl = "";
-    if (req.files?.udyamImage?.length > 0) {
-      udyamImageUrl = convertS3UrlToCDN(req.files.udyamImage[0].location);
-    }
+      const documents = (req.files?.entityDocuments || []).map((file) => ({
+        url: convertS3UrlToCDN(file.location),
+        type: file.mimetype,
+        name: file.originalname,
+      }));
 
-    // ✅ Parse GST & PAN & Udyam body (sent as JSON strings from frontend)
-    const gstData = body.gst ? JSON.parse(body.gst) : {};
-    const panData = body.pan ? JSON.parse(body.pan) : {};
-    const udyamData = body.udyam ? JSON.parse(body.udyam) : {};
+      // ✅ GST & PAN files
+      let gstImageUrl = "";
+      if (req.files?.gstImage?.length > 0) {
+        gstImageUrl = convertS3UrlToCDN(req.files.gstImage[0].location);
+      }
+      let panFrontUrl = "";
+      if (req.files?.panFront?.length > 0) {
+        panFrontUrl = convertS3UrlToCDN(req.files.panFront[0].location);
+      }
+      let panBackUrl = "";
+      if (req.files?.panBack?.length > 0) {
+        panBackUrl = convertS3UrlToCDN(req.files.panBack[0].location);
+      }
 
-    // ================= GENERATE UNIQUE BUSINESS CODE =================
-    const generateBusinessCode = () => {
-      const randomNumber = Math.floor(100000 + Math.random() * 900000); // 6 digits
-      return `JAINBU${randomNumber}`;
-    };
-    const businessCode = generateBusinessCode();
+      // ✅ Udyam certificate file
+      let udyamImageUrl = "";
+      if (req.files?.udyamImage?.length > 0) {
+        udyamImageUrl = convertS3UrlToCDN(req.files.udyamImage[0].location);
+      }
 
-    // ================= CREATE VYAPAR =================
-    const vyapar = await JainVyapar.create({
-      userId: req.user._id,
-      businessName: body.businessName,
-      businessCode, // ✅ add here
-      incorporationYear: body.incorporationYear,
-      businessType: body.businessType,
-      businessCategory: body.businessCategory,
-      description: body.description,
-      specialOffer: body.specialOffer,
-      location,
-      ownerName: body.ownerName,
-      contactPerson: body.contactPerson,
-      alternativeNumber: body.alternativeNumber,
-      email: body.email,
-      photos,
-      businessLogo,
-      documents,
-      legalLicences: body.legalLicences ? JSON.parse(body.legalLicences) : [],
-      socialLinks: body.socialLinks ? JSON.parse(body.socialLinks) : {},
-      workingHours: body.workingHours ? JSON.parse(body.workingHours) : {},
-      // ✅ GST & PAN
-      gst: {
-        number: gstData.number || "",
-        image: gstImageUrl || gstData.image || "",
-      },
-      pan: {
-        number: panData.number || "",
-        frontImage: panFrontUrl || panData.frontImage || "",
-        backImage: panBackUrl || panData.backImage || "",
-      },
-      // ✅ Udyam (MSME) registration
-      udyam: {
-        number: udyamData.number || "",
-        image: udyamImageUrl || udyamData.image || "",
-      },
-      // ✅ Entity Type (Partnership / Pvt Ltd / LLP / etc.)
-      entityType: body.entityType || "",
-      applicationLevel,
-      reviewingSanghId,
-      applicationStatus: "pending",
-      status: "active",
-    });
+      // ✅ Parse GST & PAN & Udyam body (sent as JSON strings from frontend)
+      const gstData = body.gst ? JSON.parse(body.gst) : {};
+      const panData = body.pan ? JSON.parse(body.pan) : {};
+      const udyamData = body.udyam ? JSON.parse(body.udyam) : {};
 
-    // ================= USER ROLE UPDATE =================
-    await User.findByIdAndUpdate(req.user._id, {
-      $addToSet: {
-        vyaparRoles: {
-          vyaparId: vyapar._id,
-          role: "owner",
+      // ✅ NON-INDIA COUNTRY DOCUMENTS
+      // Frontend bhejta hai: body.countryDocuments = JSON [{docId,label,number,imageIndex}]
+      // aur images ek hi field "countryDocImages" me usi order me
+      let countryDocuments = [];
+      if (body.countryDocuments) {
+        let parsedDocs = body.countryDocuments;
+        if (typeof parsedDocs === "string") {
+          parsedDocs = JSON.parse(parsedDocs);
+        }
+
+        const countryDocFiles = req.files?.countryDocImages || [];
+
+        countryDocuments = (Array.isArray(parsedDocs) ? parsedDocs : [])
+          .filter((d) => d && d.docId)
+          .map((d) => {
+            let imageUrl = "";
+            if (
+              d.imageIndex !== null &&
+              d.imageIndex !== undefined &&
+              countryDocFiles[d.imageIndex]
+            ) {
+              imageUrl = convertS3UrlToCDN(
+                countryDocFiles[d.imageIndex].location,
+              );
+            }
+
+            return {
+              docId: d.docId,
+              label: d.label || "",
+              number: (d.number || "").trim(),
+              image: imageUrl || d.image || "",
+            };
+          });
+      }
+
+      // ================= GENERATE UNIQUE BUSINESS CODE =================
+      const generateBusinessCode = () => {
+        const randomNumber = Math.floor(100000 + Math.random() * 900000); // 6 digits
+        return `JAINBU${randomNumber}`;
+      };
+      const businessCode = generateBusinessCode();
+
+      // ================= CREATE VYAPAR =================
+      const vyapar = await JainVyapar.create({
+        userId: req.user._id,
+        businessName: body.businessName,
+        businessCode, // ✅ add here
+        incorporationYear: body.incorporationYear,
+        businessType: body.businessType,
+        businessCategory: body.businessCategory,
+        description: body.description,
+        specialOffer: body.specialOffer,
+        location,
+        ownerName: body.ownerName,
+        contactPerson: body.contactPerson,
+        alternativeNumber: body.alternativeNumber,
+        email: body.email,
+        photos,
+        businessLogo,
+        documents,
+        legalLicences: body.legalLicences ? JSON.parse(body.legalLicences) : [],
+        socialLinks: body.socialLinks ? JSON.parse(body.socialLinks) : {},
+        workingHours: body.workingHours ? JSON.parse(body.workingHours) : {},
+        // ✅ GST & PAN
+        gst: {
+          number: gstData.number || "",
+          image: gstImageUrl || gstData.image || "",
         },
-      },
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: "Vyapar application submitted successfully",
-      data: {
-        vyaparId: vyapar._id,
-        businessCode, // ✅ return it in response
+        pan: {
+          number: panData.number || "",
+          frontImage: panFrontUrl || panData.frontImage || "",
+          backImage: panBackUrl || panData.backImage || "",
+        },
+        // ✅ Udyam (MSME) registration
+        udyam: {
+          number: udyamData.number || "",
+          image: udyamImageUrl || udyamData.image || "",
+        },
+        // ✅ Non-India country documents (EIN / ABN / UEN / TRN ...)
+        countryDocuments,
+        // ✅ Entity Type (Partnership / Pvt Ltd / LLP / etc.)
+        entityType: body.entityType || "",
         applicationLevel,
         reviewingSanghId,
-      },
-    });
+        // ✅ AUTO-APPROVE: form submit hote hi application approved
+        applicationStatus: "approved",
+        status: "active",
+      });
+
+      // ================= USER ROLE UPDATE =================
+      await User.findByIdAndUpdate(req.user._id, {
+        $addToSet: {
+          vyaparRoles: {
+            vyaparId: vyapar._id,
+            role: "owner",
+          },
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Vyapar application submitted successfully",
+        data: {
+          vyaparId: vyapar._id,
+          businessCode, // ✅ return it in response
+          applicationLevel,
+          reviewingSanghId,
+        },
+      });
+    } finally {
+      // ✅ Lock release — chahe success ho ya error
+      inFlightVyaparSubmissions.delete(lockKey);
+    }
   } catch (error) {
     console.error("submitVyaparApplication error:", error);
     return res.status(500).json({
@@ -860,6 +998,119 @@ const updateVyaparDetail = async (req, res) => {
           : body.legalLicences;
     }
 
+    // ================= GST / PAN / UDYAM UPDATE (INDIA) =================
+    // Nayi image aaye to replace, warna purani CDN URL waisi hi rahegi
+    const gstData = body.gst
+      ? typeof body.gst === "string"
+        ? JSON.parse(body.gst)
+        : body.gst
+      : null;
+    const panData = body.pan
+      ? typeof body.pan === "string"
+        ? JSON.parse(body.pan)
+        : body.pan
+      : null;
+    const udyamData = body.udyam
+      ? typeof body.udyam === "string"
+        ? JSON.parse(body.udyam)
+        : body.udyam
+      : null;
+
+    const existingGst = existingVyapar.gst || {};
+    const existingPan = existingVyapar.pan || {};
+    const existingUdyam = existingVyapar.udyam || {};
+
+    const gst = gstData
+      ? {
+          number: gstData.number ?? existingGst.number ?? "",
+          image: req.files?.gstImage?.length
+            ? convertS3UrlToCDN(req.files.gstImage[0].location)
+            : existingGst.image || "",
+        }
+      : existingGst;
+
+    const pan = panData
+      ? {
+          number: panData.number ?? existingPan.number ?? "",
+          frontImage: req.files?.panFront?.length
+            ? convertS3UrlToCDN(req.files.panFront[0].location)
+            : existingPan.frontImage || "",
+          backImage: req.files?.panBack?.length
+            ? convertS3UrlToCDN(req.files.panBack[0].location)
+            : existingPan.backImage || "",
+        }
+      : existingPan;
+
+    const udyam = udyamData
+      ? {
+          number: udyamData.number ?? existingUdyam.number ?? "",
+          image: req.files?.udyamImage?.length
+            ? convertS3UrlToCDN(req.files.udyamImage[0].location)
+            : existingUdyam.image || "",
+        }
+      : existingUdyam;
+
+    // ================= COUNTRY DOCUMENTS UPDATE (NON-INDIA) =================
+    // Frontend bhejta hai: countryDocuments JSON [{docId,label,number,image,imageIndex}]
+    // image = purani CDN URL (preserve), imageIndex = nayi file ka index
+    let countryDocuments = existingVyapar.countryDocuments || [];
+
+    if (body.countryDocuments) {
+      let parsedDocs = body.countryDocuments;
+      if (typeof parsedDocs === "string") {
+        parsedDocs = JSON.parse(parsedDocs);
+      }
+
+      const countryDocFiles = req.files?.countryDocImages || [];
+
+      countryDocuments = (Array.isArray(parsedDocs) ? parsedDocs : [])
+        .filter((d) => d && d.docId)
+        .map((d) => {
+          let imageUrl = d.image || "";
+
+          if (
+            d.imageIndex !== null &&
+            d.imageIndex !== undefined &&
+            countryDocFiles[d.imageIndex]
+          ) {
+            // Nayi image aayi — purani S3 se delete kar do
+            const old = (existingVyapar.countryDocuments || []).find(
+              (x) => x.docId === d.docId,
+            );
+            if (old?.image) {
+              try {
+                const oldKey = extractS3KeyFromUrl(old.image);
+                if (oldKey) {
+                  s3Client
+                    .send(
+                      new DeleteObjectCommand({
+                        Bucket: process.env.AWS_S3_BUCKET_NAME,
+                        Key: oldKey,
+                      }),
+                    )
+                    .catch((e) =>
+                      console.error("Error deleting old country doc:", e),
+                    );
+                }
+              } catch (e) {
+                console.error("Error deleting old country doc:", e);
+              }
+            }
+
+            imageUrl = convertS3UrlToCDN(
+              countryDocFiles[d.imageIndex].location,
+            );
+          }
+
+          return {
+            docId: d.docId,
+            label: d.label || "",
+            number: (d.number || "").trim(),
+            image: imageUrl,
+          };
+        });
+    }
+
     // ================= UPDATE FIELDS =================
     const updateData = {
       businessName: body.businessName || existingVyapar.businessName,
@@ -892,6 +1143,15 @@ const updateVyaparDetail = async (req, res) => {
       workingHours: body.workingHours
         ? JSON.parse(body.workingHours)
         : existingVyapar.workingHours || {},
+      // ✅ Entity type + country-wise documents
+      entityType:
+        body.entityType !== undefined
+          ? body.entityType
+          : existingVyapar.entityType,
+      gst,
+      pan,
+      udyam,
+      countryDocuments,
       updatedAt: Date.now(),
     };
 

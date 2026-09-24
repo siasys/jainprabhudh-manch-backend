@@ -1,91 +1,123 @@
-const mongoose = require('mongoose');
-const crypto = require('crypto');
+const mongoose = require("mongoose");
+const crypto = require("crypto");
 
-const sanghAccessSchema = new mongoose.Schema({
+const sanghAccessSchema = new mongoose.Schema(
+  {
     accessId: {
-        type: String,
-        index: true,
-        sparse: true,
-        unique: true
+      type: String,
+      index: true,
+      sparse: true,
+      unique: true,
     },
     sanghId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'HierarchicalSangh',
-        required: true,
-        index: true
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "HierarchicalSangh",
+      required: true,
+      index: true,
     },
     level: {
-        type: String,
-        enum: ['foundation','country', 'state', 'district', 'city', 'area'],
-        required: true
+      type: String,
+      enum: [
+        "foundation",
+        "international",
+        "country",
+        "state",
+        "district",
+        "city",
+        "area",
+      ],
+      required: true,
     },
     location: {
-        country: String,
-        state: String,
-        district: String,
-        city: String,
-        area: String
+      country: String,
+      state: String,
+      district: String,
+      city: String,
+      area: String,
     },
     parentSanghAccess: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'SanghAccess'
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SanghAccess",
     },
     createdBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
     status: {
-        type: String,
-        enum: ['active', 'inactive'],
-        default: 'active'
+      type: String,
+      enum: ["active", "inactive"],
+      default: "active",
     },
     lastAccessed: {
-        type: Date,
-        default: Date.now
-    }
-}, {
-    timestamps: true
-});
+      type: Date,
+      default: Date.now,
+    },
+  },
+  {
+    timestamps: true,
+  },
+);
 
 // Generate unique access ID before saving
-sanghAccessSchema.pre('save', async function(next) {
-    if (this.isNew && !this.accessId) {
-        const prefix = {
-            foundation: 'FND',
-            country: 'CNT',
-            state: 'ST',
-            district: 'DST',
-            city: 'CTY',
-            area: 'AREA'
-        }[this.level];
+sanghAccessSchema.pre("save", async function (next) {
+  if (this.isNew && !this.accessId) {
+    const prefix = {
+      foundation: "FND",
+      international: "INTL",
+      country: "CNT",
+      state: "ST",
+      district: "DST",
+      city: "CTY",
+      area: "AREA",
+    }[this.level];
 
-        const timestamp = Date.now().toString().slice(-6);
-        const random = crypto.randomBytes(3).toString('hex').toUpperCase();
-        
-        this.accessId = `${prefix}-${timestamp}-${random}`;
-    }
-    next();
+    const timestamp = Date.now().toString().slice(-6);
+    const random = crypto.randomBytes(3).toString("hex").toUpperCase();
+
+    this.accessId = `${prefix}-${timestamp}-${random}`;
+  }
+  next();
 });
 
 // Validate location based on level
-sanghAccessSchema.pre('save', function(next) {
-    const requiredFields = {
-         foundation: [],
-        area: ['country', 'state', 'district', 'city', 'area'],
-        city: ['country', 'state', 'district', 'city'],
-        district: ['country', 'state', 'district'],
-        state: ['country', 'state'],
-        country: ['country']
-    };
+sanghAccessSchema.pre("save", function (next) {
+  // India me poora chain chahiye. Dusri countries me beech ke levels hote
+  // hi nahi -- wahan Country ke neeche seedha City (Local) banta hai.
+  const isIndia = (this.location?.country || "India") === "India";
 
-    const required = requiredFields[this.level];
-    const missing = required.filter(field => !this.location[field]);
+  const requiredFields = isIndia
+    ? {
+        foundation: [],
+        // International kisi ek country se bandha nahi hai
+        international: [],
+        area: ["country", "state", "district", "city", "area"],
+        city: ["country", "state", "district", "city"],
+        district: ["country", "state", "district"],
+        state: ["country", "state"],
+        country: ["country"],
+      }
+    : {
+        foundation: [],
+        international: [],
+        area: ["country", "city", "area"],
+        city: ["country", "city"],
+        district: ["country", "district"],
+        state: ["country", "state"],
+        country: ["country"],
+      };
 
-    if (missing.length > 0) {
-        next(new Error(`Missing required location fields: ${missing.join(', ')}`));
-    }
-    next();
+  // Pehle yahan `requiredFields[this.level]` undefined ho jaata tha jab
+  // level list me na ho (jaise 'international') -- .filter() par TypeError.
+  const required = requiredFields[this.level] || [];
+  const missing = required.filter((field) => !this.location?.[field]);
+
+  if (missing.length > 0) {
+    return next(
+      new Error(`Missing required location fields: ${missing.join(", ")}`),
+    );
+  }
+  next();
 });
 
 // Add indexes
@@ -93,46 +125,58 @@ sanghAccessSchema.index({ level: 1, status: 1 });
 sanghAccessSchema.index({ createdAt: -1 });
 
 // Add method to validate hierarchy
-sanghAccessSchema.methods.validateHierarchy = async function() {
-    if (this.parentSanghAccess) {
-        const parent = await this.model('SanghAccess').findById(this.parentSanghAccess);
-        if (!parent) {
-            throw new Error('Parent Sangh access not found');
-        }
-
-        const hierarchyOrder = ['country', 'state', 'district', 'city', 'area'];
-        const parentIndex = hierarchyOrder.indexOf(parent.level);
-        const currentIndex = hierarchyOrder.indexOf(this.level);
-
-        if (currentIndex <= parentIndex) {
-            throw new Error(`${this.level} level cannot be created under ${parent.level} level`);
-        }
-
-        // Validate location hierarchy
-        switch (this.level) {
-            case 'state':
-                if (this.location.country !== parent.location.country) {
-                    throw new Error('State must belong to parent country');
-                }
-                break;
-            case 'district':
-                if (this.location.state !== parent.location.state) {
-                    throw new Error('District must belong to parent state');
-                }
-                break;
-            case 'city':
-                if (this.location.district !== parent.location.district) {
-                    throw new Error('City must belong to parent district');
-                }
-                break;
-            case 'area':
-                if (this.location.city !== parent.location.city) {
-                    throw new Error('Area must belong to parent city');
-                }
-                break;
-        }
+sanghAccessSchema.methods.validateHierarchy = async function () {
+  if (this.parentSanghAccess) {
+    const parent = await this.model("SanghAccess").findById(
+      this.parentSanghAccess,
+    );
+    if (!parent) {
+      throw new Error("Parent Sangh access not found");
     }
-    return true;
+
+    const hierarchyOrder = [
+      "foundation",
+      "international",
+      "country",
+      "state",
+      "district",
+      "city",
+      "area",
+    ];
+    const parentIndex = hierarchyOrder.indexOf(parent.level);
+    const currentIndex = hierarchyOrder.indexOf(this.level);
+
+    if (currentIndex <= parentIndex) {
+      throw new Error(
+        `${this.level} level cannot be created under ${parent.level} level`,
+      );
+    }
+
+    // Validate location hierarchy
+    switch (this.level) {
+      case "state":
+        if (this.location.country !== parent.location.country) {
+          throw new Error("State must belong to parent country");
+        }
+        break;
+      case "district":
+        if (this.location.state !== parent.location.state) {
+          throw new Error("District must belong to parent state");
+        }
+        break;
+      case "city":
+        if (this.location.district !== parent.location.district) {
+          throw new Error("City must belong to parent district");
+        }
+        break;
+      case "area":
+        if (this.location.city !== parent.location.city) {
+          throw new Error("Area must belong to parent city");
+        }
+        break;
+    }
+  }
+  return true;
 };
 
-module.exports = mongoose.model('SanghAccess', sanghAccessSchema); 
+module.exports = mongoose.model("SanghAccess", sanghAccessSchema);

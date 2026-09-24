@@ -1,6 +1,6 @@
-const Reporting = require('../../model/ReportingModels/ReportingModel');
-const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
-const { successResponse, errorResponse } = require('../../utils/apiResponse');
+const Reporting = require("../../model/ReportingModels/ReportingModel");
+const HierarchicalSangh = require("../../model/SanghModels/hierarchicalSanghModel");
+const { successResponse, errorResponse } = require("../../utils/apiResponse");
 const { convertS3UrlToCDN } = require("../../utils/s3Utils");
 
 exports.createReport = async (req, res) => {
@@ -27,6 +27,9 @@ exports.createReport = async (req, res) => {
       panchActivityCount,
       membershipFeesCount,
       employmentCount,
+      // ── NEW (score module) ──
+      donationAmount,
+      trainingCount,
       meetings: meetingsData,
       meetingsHeld,
       meetingsAttended,
@@ -39,6 +42,8 @@ exports.createReport = async (req, res) => {
       fieldBy,
       trainingHeld,
       trainingInput,
+      onlineTrainings,
+      onlineTrainingTotal,
     } = data;
 
     const user = req.user;
@@ -91,6 +96,12 @@ exports.createReport = async (req, res) => {
       ].filter(Boolean),
     }));
 
+    // ── NEW: offline training images (2) ──
+    const trainingImages = [
+      getUrl("training_image_0"),
+      getUrl("training_image_1"),
+    ].filter(Boolean);
+
     const newReport = new Reporting({
       sanghId,
       submittingSanghId: sanghId,
@@ -114,6 +125,9 @@ exports.createReport = async (req, res) => {
       panchActivityCount,
       membershipFeesCount,
       employmentCount,
+      // ── NEW (score module) ──
+      donationAmount,
+      trainingCount,
       meetings,
       meetingsHeld,
       meetingsAttended,
@@ -126,6 +140,9 @@ exports.createReport = async (req, res) => {
       fieldBy,
       trainingHeld,
       trainingInput,
+      trainingImages,
+      onlineTrainings: onlineTrainings || [],
+      onlineTrainingTotal: onlineTrainingTotal || 0,
     });
 
     await newReport.save();
@@ -141,18 +158,21 @@ exports.getReportById = async (req, res) => {
 
   try {
     const report = await Reporting.findById(id)
-      .populate('submittingSanghId', 'name level')
-      .populate('recipientSanghId', 'name level')
-      .populate('submittedById', 'firstName lastName accountType businessName sadhuName tirthName');
+      .populate("submittingSanghId", "name level")
+      .populate("recipientSanghId", "name level")
+      .populate(
+        "submittedById",
+        "firstName lastName accountType businessName sadhuName tirthName",
+      );
 
     if (!report) {
-      return errorResponse(res, 'Report not found', 404);
+      return errorResponse(res, "Report not found", 404);
     }
 
-    return successResponse(res, 'Report retrieved successfully', report);
+    return successResponse(res, "Report retrieved successfully", report);
   } catch (err) {
-    console.error('Error retrieving report:', err);
-    return errorResponse(res, 'Server error', 500);
+    console.error("Error retrieving report:", err);
+    return errorResponse(res, "Server error", 500);
   }
 };
 
@@ -180,11 +200,57 @@ exports.getAllReports = async (req, res) => {
     if (!isSuperAdmin) {
       const userSanghId = req.user.sanghId; // direct sanghId from user
 
-      query.$or = [
+      const orConditions = [
         { submittedById: userId },
         { sanghId: userSanghId },
         { recipientSanghId: userSanghId },
       ];
+
+      // ── NEW (additive): level-wise neeche ke sanghs ki reports bhi dikhao ──
+      //   country → saare state sanghs
+      //   state   → us state ke district sanghs
+      //   district→ us district ke city sanghs
+      //   (self + direct recipient upar already handle hai; ye sirf jodta hai)
+      try {
+        if (userSanghId) {
+          const mySangh = await HierarchicalSangh.findById(userSanghId)
+            .select("level location")
+            .lean();
+
+          if (mySangh && mySangh.level) {
+            let descQuery = null;
+
+            if (mySangh.level === "country") {
+              descQuery = { level: "state" };
+            } else if (mySangh.level === "state") {
+              descQuery = {
+                level: "district",
+                "location.state": mySangh.location?.state,
+              };
+            } else if (mySangh.level === "district") {
+              descQuery = {
+                level: "city",
+                "location.district": mySangh.location?.district,
+              };
+            }
+
+            if (descQuery) {
+              const descendants = await HierarchicalSangh.find(descQuery)
+                .select("_id")
+                .lean();
+              const descIds = descendants.map((d) => d._id);
+              if (descIds.length > 0) {
+                orConditions.push({ submittingSanghId: { $in: descIds } });
+                orConditions.push({ sanghId: { $in: descIds } });
+              }
+            }
+          }
+        }
+      } catch (descErr) {
+        console.error("Level-wise reports fetch skipped:", descErr.message);
+      }
+
+      query.$or = orConditions;
     }
 
     const page = parseInt(req.query.page) || 1;
@@ -313,26 +379,30 @@ exports.getSubmittedReports = async (req, res) => {
 
     let sanghId = null;
 
-    if (user.role === 'superadmin') {
+    if (user.role === "superadmin") {
       sanghId = req.query.sanghId; // Superadmin ke liye query se ID allow karein
     } else {
-      const userSangh = (user.sanghRoles || []).find(role =>
-        ['president', 'secretary', 'treasurer'].includes(role.role)
+      const userSangh = (user.sanghRoles || []).find((role) =>
+        ["president", "secretary", "treasurer"].includes(role.role),
       );
 
       if (!userSangh) {
-        return errorResponse(res, 'You are not authorized to view submitted reports.', 403);
+        return errorResponse(
+          res,
+          "You are not authorized to view submitted reports.",
+          403,
+        );
       }
 
       sanghId = userSangh.sanghId;
     }
 
-    if (!sanghId) return errorResponse(res, 'Missing Sangh ID', 400);
+    if (!sanghId) return errorResponse(res, "Missing Sangh ID", 400);
 
     const { status, month, year } = req.query;
 
     const query = {
-      submittingSanghId: sanghId
+      submittingSanghId: sanghId,
     };
 
     if (status) query.status = status;
@@ -347,27 +417,25 @@ exports.getSubmittedReports = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate('recipientSanghId', 'name level')
-      .populate('submittingSanghId', 'name level')
-      .populate('submittedById', 'firstName lastName');
+      .populate("recipientSanghId", "name level")
+      .populate("submittingSanghId", "name level")
+      .populate("submittedById", "firstName lastName");
 
     const total = await Reporting.countDocuments(query);
 
-    return successResponse(res, 'Submitted reports retrieved successfully', {
+    return successResponse(res, "Submitted reports retrieved successfully", {
       reports,
       pagination: {
         total,
         page,
-        pages: Math.ceil(total / limit)
-      }
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (err) {
-    console.error('Error retrieving submitted reports:', err);
-    return errorResponse(res, 'Server error', 500);
+    console.error("Error retrieving submitted reports:", err);
+    return errorResponse(res, "Server error", 500);
   }
 };
-
-
 
 // Get reports received by my Sangh
 exports.getReceivedReports = async (req, res) => {
@@ -375,32 +443,38 @@ exports.getReceivedReports = async (req, res) => {
     const user = req.user;
 
     // Allow superadmin to fetch all
-    if (user.role === 'superadmin') {
+    if (user.role === "superadmin") {
       const reports = await Reporting.find({}).sort({ createdAt: -1 });
-      return successResponse(res, 'All reports fetched successfully', reports);
+      return successResponse(res, "All reports fetched successfully", reports);
     }
 
     // Detect sangh ID from the user's roles
-    const userSangh = (user.sanghRoles || []).find(role =>
-      ['president', 'secretary', 'treasurer'].includes(role.role)
+    const userSangh = (user.sanghRoles || []).find((role) =>
+      ["president", "secretary", "treasurer"].includes(role.role),
     );
 
     if (!userSangh) {
-      return errorResponse(res, 'You are not assigned to any Sangh as president/secretary/treasurer', 403);
+      return errorResponse(
+        res,
+        "You are not assigned to any Sangh as president/secretary/treasurer",
+        403,
+      );
     }
 
     const reports = await Reporting.find({
-      recipientSanghId: userSangh.sanghId
+      recipientSanghId: userSangh.sanghId,
     }).sort({ createdAt: -1 });
 
-    return successResponse(res, 'Received reports fetched successfully', reports);
+    return successResponse(
+      res,
+      "Received reports fetched successfully",
+      reports,
+    );
   } catch (err) {
-    console.error('Error retrieving reports:', err);
-    return errorResponse(res, 'Server error', 500);
+    console.error("Error retrieving reports:", err);
+    return errorResponse(res, "Server error", 500);
   }
 };
-
-
 
 // Update a report by ID
 exports.updateReport = async (req, res) => {
@@ -412,13 +486,15 @@ exports.updateReport = async (req, res) => {
     const report = await Reporting.findById(id);
 
     if (!report) {
-      return errorResponse(res, 'Report not found', 404);
+      return errorResponse(res, "Report not found", 404);
     }
 
     // Check permissions - only allow updates by the submitter
-    if (report.submittedById.toString() !== req.user._id.toString() &&
-      req.user.role !== 'superadmin') {
-      return errorResponse(res, 'Not authorized to update this report', 403);
+    if (
+      report.submittedById.toString() !== req.user._id.toString() &&
+      req.user.role !== "superadmin"
+    ) {
+      return errorResponse(res, "Not authorized to update this report", 403);
     }
 
     // Don't allow changing submittingSanghId or recipientSanghId
@@ -429,13 +505,13 @@ exports.updateReport = async (req, res) => {
     const updatedReport = await Reporting.findByIdAndUpdate(
       id,
       { $set: updates },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
-    return successResponse(res, 'Report updated successfully', updatedReport);
+    return successResponse(res, "Report updated successfully", updatedReport);
   } catch (err) {
-    console.error('Error updating report:', err);
-    return errorResponse(res, 'Server error', 500);
+    console.error("Error updating report:", err);
+    return errorResponse(res, "Server error", 500);
   }
 };
 
@@ -446,22 +522,31 @@ exports.updateReportStatus = async (req, res) => {
 
   try {
     // Find the report
-    const report = await Reporting.findById(id)
-      .populate('recipientSanghId', 'name level');
+    const report = await Reporting.findById(id).populate(
+      "recipientSanghId",
+      "name level",
+    );
 
     if (!report) {
-      return errorResponse(res, 'Report not found', 404);
+      return errorResponse(res, "Report not found", 404);
     }
 
     // Check permissions - only allow status updates by the recipient
     // This depends on your user-Sangh association structure
     // Simplified example:
-    const userSanghIds = req.user.sanghRoles ?
-      req.user.sanghRoles.map(role => role.sanghId.toString()) : [];
+    const userSanghIds = req.user.sanghRoles
+      ? req.user.sanghRoles.map((role) => role.sanghId.toString())
+      : [];
 
-    if (!userSanghIds.includes(report.recipientSanghId._id.toString()) &&
-      req.user.role !== 'superadmin') {
-      return errorResponse(res, 'Not authorized to update this report status', 403);
+    if (
+      !userSanghIds.includes(report.recipientSanghId._id.toString()) &&
+      req.user.role !== "superadmin"
+    ) {
+      return errorResponse(
+        res,
+        "Not authorized to update this report status",
+        403,
+      );
     }
 
     // Update status and feedback
@@ -472,10 +557,10 @@ exports.updateReportStatus = async (req, res) => {
 
     await report.save();
 
-    return successResponse(res, 'Report status updated successfully', report);
+    return successResponse(res, "Report status updated successfully", report);
   } catch (err) {
-    console.error('Error updating report status:', err);
-    return errorResponse(res, 'Server error', 500);
+    console.error("Error updating report status:", err);
+    return errorResponse(res, "Server error", 500);
   }
 };
 
@@ -487,28 +572,30 @@ exports.deleteReport = async (req, res) => {
     const report = await Reporting.findById(id);
 
     if (!report) {
-      return errorResponse(res, 'Report not found', 404);
+      return errorResponse(res, "Report not found", 404);
     }
 
     // Check permissions - only allow deletion by the submitter or superadmin
-    if (report.submittedById.toString() !== req.user._id.toString() &&
-      req.user.role !== 'superadmin') {
-      return errorResponse(res, 'Not authorized to delete this report', 403);
+    if (
+      report.submittedById.toString() !== req.user._id.toString() &&
+      req.user.role !== "superadmin"
+    ) {
+      return errorResponse(res, "Not authorized to delete this report", 403);
     }
 
     await Reporting.findByIdAndDelete(id);
 
-    return successResponse(res, 'Report deleted successfully');
+    return successResponse(res, "Report deleted successfully");
   } catch (err) {
-    console.error('Error deleting report:', err);
-    return errorResponse(res, 'Server error', 500);
+    console.error("Error deleting report:", err);
+    return errorResponse(res, "Server error", 500);
   }
 };
 
 // Get top performing Sanghs - Simplified to only consider membership and Jain Aadhar counts
 exports.getTopPerformers = async (req, res) => {
   try {
-    const { level = 'all', period = 'month', limit = 3 } = req.query;
+    const { level = "all", period = "month", limit = 3 } = req.query;
 
     const currentDate = new Date();
     const currentMonth = currentDate.getMonth() + 1;
@@ -516,93 +603,101 @@ exports.getTopPerformers = async (req, res) => {
 
     let dateFilter = {};
 
-    if (period === 'month') {
+    if (period === "month") {
       dateFilter = {
         reportMonth: currentMonth,
-        reportYear: currentYear
+        reportYear: currentYear,
       };
-    } else if (period === 'quarter') {
+    } else if (period === "quarter") {
       const currentQuarter = Math.ceil(currentMonth / 3);
       const startMonth = (currentQuarter - 1) * 3 + 1;
       const endMonth = currentQuarter * 3;
 
       dateFilter = {
         reportMonth: { $gte: startMonth, $lte: endMonth },
-        reportYear: currentYear
+        reportYear: currentYear,
       };
-    } else if (period === 'year') {
+    } else if (period === "year") {
       dateFilter = { reportYear: currentYear };
-    } else if (period === 'custom' && req.query.startDate && req.query.endDate) {
+    } else if (
+      period === "custom" &&
+      req.query.startDate &&
+      req.query.endDate
+    ) {
       const startDate = new Date(req.query.startDate);
       const endDate = new Date(req.query.endDate);
 
       dateFilter = {
-        createdAt: { $gte: startDate, $lte: endDate }
+        createdAt: { $gte: startDate, $lte: endDate },
       };
     }
 
     let levelFilter = {};
-    if (level !== 'all') {
+    if (level !== "all") {
       const sanghs = await HierarchicalSangh.find({ level });
-      const sanghIds = sanghs.map(s => s._id);
+      const sanghIds = sanghs.map((s) => s._id);
       levelFilter = { submittingSanghId: { $in: sanghIds } };
     }
 
     const filter = {
       ...dateFilter,
       ...levelFilter,
-      status: 'approved'
+      status: "approved",
     };
 
     const topPerformers = await Reporting.aggregate([
       { $match: filter },
       {
         $group: {
-          _id: '$submittingSanghId',
-          membershipCount: { $max: '$membershipCount' },
-          jainAadharCount: { $max: '$jainAadharCount' },
-          lastReport: { $max: '$createdAt' }
-        }
+          _id: "$submittingSanghId",
+          membershipCount: { $max: "$membershipCount" },
+          jainAadharCount: { $max: "$jainAadharCount" },
+          lastReport: { $max: "$createdAt" },
+        },
       },
       {
         $addFields: {
           performanceScore: {
             $add: [
-              { $multiply: ['$membershipCount', 1] },
-              { $multiply: ['$jainAadharCount', 1] }
-            ]
-          }
-        }
+              { $multiply: ["$membershipCount", 1] },
+              { $multiply: ["$jainAadharCount", 1] },
+            ],
+          },
+        },
       },
       { $sort: { performanceScore: -1 } },
       { $limit: parseInt(limit) },
       {
         $lookup: {
-          from: 'hierarchicalsanghs',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'sanghDetails'
-        }
+          from: "hierarchicalsanghs",
+          localField: "_id",
+          foreignField: "_id",
+          as: "sanghDetails",
+        },
       },
-      { $unwind: '$sanghDetails' },
+      { $unwind: "$sanghDetails" },
       {
         $project: {
           _id: 1,
-          sanghName: '$sanghDetails.name',
-          sanghLevel: '$sanghDetails.level',
+          sanghName: "$sanghDetails.name",
+          sanghLevel: "$sanghDetails.level",
           performanceScore: 1,
           metrics: {
-            membershipCount: '$membershipCount',
-            jainAadharCount: '$jainAadharCount'
+            membershipCount: "$membershipCount",
+            jainAadharCount: "$jainAadharCount",
           },
-          lastReportDate: '$lastReport'
-        }
-      }
+          lastReportDate: "$lastReport",
+        },
+      },
     ]);
 
-    return successResponse(res, 'Top performing Sanghs retrieved successfully', topPerformers);
+    return successResponse(
+      res,
+      "Top performing Sanghs retrieved successfully",
+      topPerformers,
+    );
   } catch (err) {
-    console.error('Error getting top performers:', err);
-    return errorResponse(res, 'Server error', 500);
+    console.error("Error getting top performers:", err);
+    return errorResponse(res, "Server error", 500);
   }
 };

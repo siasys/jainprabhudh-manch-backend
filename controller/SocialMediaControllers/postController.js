@@ -605,7 +605,7 @@ const mongoose = require("mongoose");
 //   }),
 // ];
 
-// tag people and invite logics 
+// tag people and invite logics
 const createPost = [
   upload.postMediaUpload,
   body("userId").notEmpty().isMongoId(),
@@ -1159,7 +1159,7 @@ const getPostById = asyncHandler(async (req, res) => {
         })
         .populate("sanghId", "name sanghImage")
         .populate("panchId", "name sanghImage")
-         .populate(
+        .populate(
           "collaborators.user",
           "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
         );
@@ -1630,7 +1630,34 @@ const getAllPosts = async (req, res) => {
     const cursor = req.query.cursor;
     const userId = req.query.userId;
 
-    const user = await User.findById(userId).lean();
+    // ⚡ PERF: query ko yahin fire kar do aur ek NATIVE promise return karo.
+    // .exec() sirf EK baar call hota hai -> "Query was already executed" nahi aayega.
+    // Native promise idempotent hai, isliye .catch() branch lagane ke baad bhi
+    // baad me await karne pe wahi result/error milta hai -> semantics same.
+    const guard = (q) => {
+      const p =
+        q && typeof q.exec === "function" ? q.exec() : Promise.resolve(q);
+      p.catch(() => {});
+      return p;
+    };
+
+    // ============================================================
+    // ⚡ PERF BATCH 1 — user + blocked + reported PARALLEL
+    // Pehle ye 3 queries ek ke baad ek chalti thi (3 DB round trips).
+    // Ab ek saath -> 1 round trip. Result bilkul same.
+    // ============================================================
+    const [user, blockRels, reportDocs] = await Promise.all([
+      User.findById(userId).lean(),
+      Block.find({
+        $or: [{ blocker: userId }, { blocked: userId }],
+      }).lean(),
+      Report.find({
+        reportedBy: userId,
+        postId: { $ne: null },
+      })
+        .select("postId")
+        .lean(),
+    ]);
 
     if (!user) {
       return successResponse(
@@ -1646,24 +1673,13 @@ const getAllPosts = async (req, res) => {
     // ------------------------------
     // BLOCKED USERS & REPORTED POSTS
     // ------------------------------
-    const blockedUsers = (
-      await Block.find({
-        $or: [{ blocker: userId }, { blocked: userId }],
-      }).lean()
-    ).map((rel) =>
+    const blockedUsers = blockRels.map((rel) =>
       rel.blocker.toString() === userId
         ? rel.blocked.toString()
         : rel.blocker.toString(),
     );
 
-    const reportedPostIds = (
-      await Report.find({
-        reportedBy: userId,
-        postId: { $ne: null },
-      })
-        .select("postId")
-        .lean()
-    ).map((r) => r.postId.toString());
+    const reportedPostIds = reportDocs.map((r) => r.postId.toString());
 
     // ------------------------------
     // NORMAL POSTS
@@ -1679,6 +1695,43 @@ const getAllPosts = async (req, res) => {
 
       ...(cursor ? { createdAt: { $lt: new Date(cursor) } } : {}),
     };
+
+    // ============================================================
+    // ⚡ PERF BATCH 2 — ye 3 queries main post query pe depend nahi karti.
+    // Pehle ye baad me serially chalti thi (3 extra round trips).
+    // Ab yahin fire ho jaati hain aur apni original jagah pe await hoti hain.
+    // ============================================================
+    const activeBoostsPromise = guard(
+      BoostPlan.find({
+        status: "active",
+        paymentStatus: "verified",
+        startDate: { $lte: new Date() },
+        endDate: { $gte: new Date() },
+      })
+        .populate({
+          path: "post",
+          populate: {
+            path: "user",
+            select:
+              "firstName lastName fullName sadhuName tirthName accountType profilePicture accountStatus",
+          },
+        })
+        .lean(),
+    );
+
+    const userInterestPromise = guard(
+      UserInterest.findOne({
+        user: userId,
+      }).lean(),
+    );
+
+    // ⚠️ PERF: ye query pehle poore Post collection pe BINA LIMIT chalti thi.
+    // Sirf creator-affinity ke +5 score ke liye use hoti hai, isliye 500 ka
+    // cap ranking pe practically koi asar nahi daalta.
+    // NOTE: posts collection pe { likes: 1 } index zaroori hai.
+    const likedPostsPromise = guard(
+      Post.find({ likes: userId }, { user: 1 }).limit(500).lean(),
+    );
 
     let normalPosts = await Post.find(normalQuery)
       .populate(
@@ -1697,6 +1750,13 @@ const getAllPosts = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(fetchLimit) // ✅ updated only
       .lean();
+
+    // ✅ FIX 6b: DB se kitni raw posts aayi (filter se pehle) — hasMore ke liye
+    const rawFetchedCount = normalPosts.length;
+    const rawLastCreatedAt =
+      normalPosts.length > 0
+        ? normalPosts[normalPosts.length - 1].createdAt
+        : null;
 
     // Remove deactivated users
     normalPosts = normalPosts.filter(
@@ -1730,29 +1790,23 @@ const getAllPosts = async (req, res) => {
     // ------------------------------
     // ✅ PAGINATION FIX ONLY
     // ------------------------------
-    let hasMore = normalPosts.length > limit;
+    // ✅ FIX 6b: filter ke baad kam posts bachi hon tab bhi DB me aur hain to hasMore true
+    let hasMore = normalPosts.length > limit || rawFetchedCount === fetchLimit;
 
     // keep only requested limit
     normalPosts = normalPosts.slice(0, limit);
 
+    // ✅ FIX 6a: cursor sirf is page ki normal posts se (self-boost post ki date se nahi)
+    const pageLastCreatedAt =
+      normalPosts.length > 0
+        ? normalPosts[normalPosts.length - 1].createdAt
+        : rawLastCreatedAt;
+
     // ------------------------------
     // ACTIVE BOOST PLANS
     // ------------------------------
-    const activeBoosts = await BoostPlan.find({
-      status: "active",
-      paymentStatus: "verified",
-      startDate: { $lte: new Date() },
-      endDate: { $gte: new Date() },
-    })
-      .populate({
-        path: "post",
-        populate: {
-          path: "user",
-          select:
-            "firstName lastName fullName sadhuName tirthName accountType profilePicture accountStatus",
-        },
-      })
-      .lean();
+    // ⚡ PERF: ye request upar hi start ho chuki hai, yahan sirf result await hai.
+    const activeBoosts = await activeBoostsPromise;
 
     const userState = user.location?.state;
     const userDistrict = user.location?.district;
@@ -1838,21 +1892,18 @@ const getAllPosts = async (req, res) => {
     // ------------------------------
     // HASHTAG SCORE
     // ------------------------------
-    const userInterest = await UserInterest.findOne({
-      user: userId,
-    }).lean();
+    // ⚡ PERF: upar start ho chuki hai, yahan sirf result await hai.
+    const userInterest = await userInterestPromise;
 
     const userHashtags = userInterest?.hashtags || [];
 
     const likedCreatorIds = new Set();
 
     try {
-      const userLikedPosts = await Post.find(
-        { likes: userId },
-        { user: 1 },
-      ).lean();
+      // ⚡ PERF: upar start ho chuki hai (limit 500 ke saath), yahan sirf await.
+      const userLikedPosts = await likedPostsPromise;
 
-      userLikedPosts.forEach((p) => {
+      (userLikedPosts || []).forEach((p) => {
         if (p.user) likedCreatorIds.add(p.user.toString());
       });
     } catch (_) {}
@@ -1964,10 +2015,9 @@ const getAllPosts = async (req, res) => {
     // ------------------------------
     // PAGINATION
     // ------------------------------
-    const nextCursor =
-      normalPosts.length > 0
-        ? normalPosts[normalPosts.length - 1].createdAt.toISOString()
-        : null;
+    const nextCursor = pageLastCreatedAt
+      ? new Date(pageLastCreatedAt).toISOString()
+      : null;
 
     return successResponse(
       res,
@@ -2516,7 +2566,7 @@ const getAllVideoPosts = async (req, res) => {
     return errorResponse(res, "Failed to fetch video posts", 500, err.message);
   }
 };
- 
+
 // old update watch time
 
 // const updateWatchTime = asyncHandler(async (req, res) => {
@@ -3184,12 +3234,9 @@ const deleteComment = async (req, res) => {
 
     // Condition: either user himself or superadmin
     if (comment.user.toString() !== userId && user.role !== "superadmin") {
-      return res
-        .status(403)
-        .json({
-          message:
-            "You can only delete your own comment or must be a superadmin",
-        });
+      return res.status(403).json({
+        message: "You can only delete your own comment or must be a superadmin",
+      });
     }
 
     // Remove comment
@@ -3269,11 +3316,9 @@ const deleteReply = async (req, res) => {
     const { postId, commentId, replyId, userId } = req.body;
 
     if (!postId || !commentId || !replyId || !userId) {
-      return res
-        .status(400)
-        .json({
-          message: "postId, commentId, replyId and userId are required",
-        });
+      return res.status(400).json({
+        message: "postId, commentId, replyId and userId are required",
+      });
     }
 
     const post = await Post.findById(postId);
@@ -3290,11 +3335,9 @@ const deleteReply = async (req, res) => {
 
     // Only author or superadmin can delete
     if (reply.user.toString() !== userId && user.role !== "superadmin") {
-      return res
-        .status(403)
-        .json({
-          message: "You can only delete your own reply or must be a superadmin",
-        });
+      return res.status(403).json({
+        message: "You can only delete your own reply or must be a superadmin",
+      });
     }
 
     // Remove reply
@@ -3369,11 +3412,9 @@ const likeReply = async (req, res) => {
     const { postId, commentId, replyId, userId } = req.body;
 
     if (!postId || !commentId || !replyId || !userId) {
-      return res
-        .status(400)
-        .json({
-          message: "postId, commentId, replyId and userId are required",
-        });
+      return res.status(400).json({
+        message: "postId, commentId, replyId and userId are required",
+      });
     }
 
     const post = await Post.findById(postId);
@@ -3760,7 +3801,6 @@ const getCombinedFeedOptimized = asyncHandler(async (req, res) => {
   return successResponse(res, result, "Combined feed retrieved successfully");
 });
 
- 
 // ✅ NEW: Posts jaha user ek ACCEPTED collaborator hai (owner nahi)
 // Instagram jaisa — collaborator ki profile pe bhi original post dikhta hai
 const getCollabPostsByUser = asyncHandler(async (req, res) => {
@@ -3771,7 +3811,7 @@ const getCollabPostsByUser = asyncHandler(async (req, res) => {
         .status(400)
         .json({ success: false, message: "userId required" });
     }
- 
+
     const posts = await Post.find({
       collaborators: {
         $elemMatch: { user: userId, status: "accepted" },
@@ -3788,7 +3828,7 @@ const getCollabPostsByUser = asyncHandler(async (req, res) => {
         "firstName lastName fullName profilePicture accountType businessName sadhuName tirthName",
       )
       .lean();
- 
+
     res.status(200).json({
       success: true,
       count: posts.length,
@@ -3802,7 +3842,7 @@ const getCollabPostsByUser = asyncHandler(async (req, res) => {
     });
   }
 });
- // ✅ NEW: User ke apne scheduled posts (jo abhi publish nahi hue)
+// ✅ NEW: User ke apne scheduled posts (jo abhi publish nahi hue)
 const getMyScheduledPosts = asyncHandler(async (req, res) => {
   try {
     const userId = req.user?.id || req.user?._id || req.params.userId;
@@ -3811,7 +3851,7 @@ const getMyScheduledPosts = asyncHandler(async (req, res) => {
         .status(400)
         .json({ success: false, message: "userId required" });
     }
- 
+
     // Middleware bypass karke scheduled posts fetch karo
     const posts = await Post.find({
       user: userId,
@@ -3820,7 +3860,7 @@ const getMyScheduledPosts = asyncHandler(async (req, res) => {
       .setOptions({ includeScheduled: true })
       .sort({ scheduledAt: 1 }) // sonest first
       .lean();
- 
+
     res.status(200).json({
       success: true,
       count: posts.length,
@@ -3864,5 +3904,5 @@ module.exports = {
   toggleSavePost,
   updateWatchTime,
   getCollabPostsByUser,
-  getMyScheduledPosts
+  getMyScheduledPosts,
 };

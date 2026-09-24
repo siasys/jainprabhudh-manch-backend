@@ -1,6 +1,29 @@
-const mongoose = require('mongoose');
-const validator = require('validator');
-const { hashPassword, isPasswordMatched } = require('../../helpers/userHelpers');
+const mongoose = require("mongoose");
+const validator = require("validator");
+const {
+  hashPassword,
+  isPasswordMatched,
+} = require("../../helpers/userHelpers");
+
+// ---------------------------------------------------------------------------
+// USER LOCATION SUB-SCHEMA
+// strict:false -> Aadhar form jaise country-wise field names bhi save honge
+//   India:  state, district, city
+//   USA:    state, county, city
+//   Canada: province, region, city
+//   Japan:  prefecture, city
+// address aur postal (pinCode/zip_code) yahan store NAHI hote.
+// state/district/city declared rakhe hain -- purani India queries chalti rahein.
+// ---------------------------------------------------------------------------
+const userLocationSchema = new mongoose.Schema(
+  {
+    country: { type: String },
+    state: { type: String },
+    district: { type: String },
+    city: { type: String },
+  },
+  { _id: false, strict: false, minimize: false },
+);
 
 const userSchema = new mongoose.Schema(
   {
@@ -102,18 +125,8 @@ const userSchema = new mongoose.Schema(
       default: "user",
     },
     location: {
-      country: {
-        type: String,
-      },
-      state: {
-        type: String,
-      },
-      district: {
-        type: String,
-      },
-      city: {
-        type: String,
-      },
+      type: userLocationSchema,
+      default: () => ({}),
     },
     profilePicture: {
       type: String,
@@ -310,6 +323,34 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
     blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
+    // ── Saved delivery addresses (marketplace checkout) ──────
+    // These used to live in browser localStorage, which meant every user
+    // on the same device saw the same address book. Keeping them on the
+    // user keeps them private and available on any device.
+    addresses: [
+      {
+        fullName: { type: String, trim: true },
+        phone: { type: String, trim: true },
+        altPhone: { type: String, trim: true, default: "" },
+        pincode: { type: String, trim: true },
+        house: { type: String, trim: true },
+        area: { type: String, trim: true },
+        landmark: { type: String, trim: true, default: "" },
+        city: { type: String, trim: true },
+        state: { type: String, trim: true },
+        type: {
+          type: String,
+          enum: ["Home", "Work", "Other"],
+          default: "Home",
+        },
+        // Preselected at checkout. Only one may be true — enforced in the
+        // controller, since Mongoose cannot express it on a subdocument.
+        isDefault: { type: Boolean, default: false },
+        createdAt: { type: Date, default: Date.now },
+        updatedAt: { type: Date, default: Date.now },
+      },
+    ],
     fcmTokens: {
       type: [String],
       default: [],
@@ -361,7 +402,7 @@ const userSchema = new mongoose.Schema(
         },
         sanghType: {
           type: String,
-          enum: ["main", "women", "youth"],
+          enum: ["main", "women", "youth", "veerSena"],
           default: "main",
         },
       },
@@ -441,7 +482,7 @@ const userSchema = new mongoose.Schema(
   },
 );
 
-userSchema.pre('save', hashPassword);
+userSchema.pre("save", hashPassword);
 userSchema.methods.isPasswordMatched = isPasswordMatched;
 
 // Update indexes to match schema changes
@@ -456,12 +497,12 @@ userSchema.index({ createdAt: -1 });
 userSchema.index({ role: 1, createdAt: -1 });
 userSchema.index({ jainAadharStatus: 1, createdAt: -1 });
 
-userSchema.methods.incrementLoginAttempts = async function() {
-    this.loginAttempts += 1;
-    if (this.loginAttempts >= 5) {
-        this.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
-    }
-    await this.save();
+userSchema.methods.incrementLoginAttempts = async function () {
+  this.loginAttempts += 1;
+  if (this.loginAttempts >= 5) {
+    this.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+  }
+  await this.save();
 };
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = mongoose.model("User", userSchema);

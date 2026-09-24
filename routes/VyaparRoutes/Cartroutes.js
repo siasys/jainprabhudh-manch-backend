@@ -3,8 +3,8 @@ const router = express.Router();
 const { authMiddleware } = require("../../middlewares/authMiddlewares");
 const {
   addToCart,
-  getMyCart,
-  updateCartItemQty,
+  getCart,
+  updateCartItem,
   removeCartItem,
   clearCart,
   getCartCount,
@@ -29,12 +29,12 @@ router.post("/move-to-wishlist/:productId", moveCartItemToWishlist);
 router.post("/add", addToCart);
 
 // PATCH /api/cart/item/:productId  → update qty
-router.patch("/item/:productId", updateCartItemQty);
+router.patch("/item/:productId", updateCartItem);
 
 // DELETE /api/cart/item/:productId → remove one item
 router.delete("/item/:productId", removeCartItem);
 
 // GET /api/cart            → my full cart
-router.get("/", getMyCart);
+router.get("/", getCart);
 
 module.exports = router;

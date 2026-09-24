@@ -16,10 +16,67 @@ const fontPath = path.resolve(
 
 if (fs.existsSync(fontPath)) {
   registerFont(fontPath, { family: "NotoDevanagari" });
-//  console.log("✅ Font Loaded");
+  //  console.log("✅ Font Loaded");
 } else {
   console.error("❌ Font not found:", fontPath);
 }
+
+// ================= SCRIPT DETECTION HELPERS (ADDITIVE) =================
+/**
+ * Detect Devanagari script (Hindi/Marathi)
+ * Unicode range: \u0900-\u097F
+ */
+function isDevanagariScript(text) {
+  if (!text) return false;
+  const devanagariRegex = /[\u0900-\u097F]/g;
+  return devanagariRegex.test(String(text));
+}
+
+/**
+ * Detect Gujarati script
+ * Unicode range: \u0A80-\u0AFF
+ */
+function isGujaratiScript(text) {
+  if (!text) return false;
+  const gujaratiRegex = /[\u0A80-\u0AFF]/g;
+  return gujaratiRegex.test(String(text));
+}
+
+/**
+ * Auto-detect script and return correct font family
+ * NotoDevanagari supports both Devanagari (Hindi/Marathi) and Gujarati
+ */
+function getCorrectFont(text, fontSize = 24, isBold = false) {
+  const isDev = isDevanagariScript(text);
+  const isGuj = isGujaratiScript(text);
+
+  const fontWeight = isBold ? "bold " : "";
+  const baseFontSize = `${fontSize}px`;
+
+  if (isDev || isGuj) {
+    // Use Devanagari font for Hindi, Marathi, Gujarati
+    return `${fontWeight}${baseFontSize} NotoDevanagari`;
+  }
+
+  // Fallback to Georgia for English/Numbers
+  return `${fontWeight}${baseFontSize} Georgia`;
+}
+
+/**
+ * Verify font is loaded at startup (ADDITIVE)
+ */
+function verifyFontLoaded() {
+  if (!fs.existsSync(fontPath)) {
+    console.warn("⚠️ Devanagari font not found at:", fontPath);
+    console.warn("⚠️ Hindi/Marathi/Gujarati text may not render correctly");
+    return false;
+  }
+  //console.log("✅ Devanagari font verified for regional languages");
+  return true;
+}
+
+// Run verification on startup
+verifyFontLoaded();
 
 // ================= TEMPLATE PRELOAD =================
 let templateShravak1;
@@ -57,7 +114,7 @@ async function loadTemplates() {
       path.join(__dirname, "../../Public/sharavk_2.jpeg"),
     );
 
-   // console.log("✅ Card Templates Loaded");
+    // console.log("✅ Card Templates Loaded");
   } catch (err) {
     console.error("❌ Template Load Error:", err);
   }
@@ -75,8 +132,8 @@ const generateJainAadharCard = async (req, res) => {
     }
 
     // === Template Selection Logic ===
-    // jain_shravak_1.jpeg → "FATHER" label → Male (any) + Female (Unmarried)
-    // jain_shravak_2.jpeg → "HUSBAND" label → Female (Married) only
+    // shravak_1.jpeg → "FATHER" label → Male (any) + Female (Unmarried)
+    // shravak_3.jpeg → "HUSBAND" label → Female (Married) only
     let templateName = "";
     let pitaOrPatiLabel = "";
 
@@ -84,16 +141,16 @@ const generateJainAadharCard = async (req, res) => {
       application.gender === "Female" &&
       application.marriedStatus === "Yes"
     ) {
-      // Married Female → Husband name + jain_shravak_2 (HUSBAND label)
-      templateName = "jain_shravak_2.jpeg";
+      // Married Female → Husband name + shravak_3 (HUSBAND label front)
+      templateName = "shravak_3.jpeg"; // ✅ FIXED: was "sharavk_2.jpeg" (that is the BACK file)
       pitaOrPatiLabel =
         application.husbandName ||
         application.husbandWifeName ||
         application.pitaOrpatiName ||
         "N/A";
     } else {
-      // Male (married/unmarried) + Female (unmarried) → Father name + jain_shravak_1 (FATHER label)
-      templateName = "jain_shravak_1.jpeg";
+      // Male (married/unmarried) + Female (unmarried) → Father name + shravak_1 (FATHER label)
+      templateName = "shravak_1.jpeg";
       pitaOrPatiLabel =
         application.fatherName ||
         application.pitaOrpatiName ||
@@ -129,8 +186,8 @@ const generateJainAadharCard = async (req, res) => {
 
       const profileImg = await loadImage(resizedBuffer);
 
-      const imgX = 760;
-      const imgY = 170;
+      const imgX = 748;
+      const imgY = 210;
       const imgWidth = 215;
       const imgHeight = 240;
       const radius = 25;
@@ -169,22 +226,32 @@ const generateJainAadharCard = async (req, res) => {
       ctx.restore();
     }
 
-    // TEXT POSITIONS
+    // TEXT POSITIONS (ADDITIVE: Auto-detect script for regional languages)
     ctx.fillStyle = "#333333";
-    ctx.font = "28px Georgia";
 
-    ctx.fillText(application.name || "N/A", 335, 225);
-    ctx.fillText(pitaOrPatiLabel, 335, 275);
-    ctx.fillText(formatDOB(application.dob), 335, 330);
-    ctx.fillText(application.mulJain || "N/A", 335, 384);
+    // NAME - Auto-detect Hindi/Marathi/Gujarati
+    ctx.font = getCorrectFont(application.name, 24);
+    ctx.fillText(application.name || "N/A", 360, 215);
 
-    // Hindi font for Panth
-    ctx.font = "27px NotoDevanagari";
-    ctx.fillText(application.panth || "N/A", 335, 435);
+    // FATHER/HUSBAND NAME - Auto-detect regional languages
+    ctx.font = getCorrectFont(pitaOrPatiLabel, 24);
+    ctx.fillText(pitaOrPatiLabel, 360, 270);
 
-    // Aadhar Number
-    ctx.font = "bold 30px Georgia";
-    ctx.fillText(application.jainAadharNumber || "N/A", 380, 560);
+    // DOB - English format (keep Georgia)
+    ctx.font = getCorrectFont(formatDOB(application.dob), 24);
+    ctx.fillText(formatDOB(application.dob), 360, 322);
+
+    // MUL JAIN - Auto-detect regional languages
+    ctx.font = getCorrectFont(application.mulJain, 24);
+    ctx.fillText(application.mulJain || "N/A", 360, 382);
+
+    // PANTH - Auto-detect Hindi/Marathi/Gujarati (supports all scripts)
+    ctx.font = getCorrectFont(application.panth, 27);
+    ctx.fillText(application.panth || "N/A", 360, 439);
+
+    // Aadhar Number (Usually English/Numbers)
+    ctx.font = getCorrectFont(application.jainAadharNumber, 30, true); // true = bold
+    ctx.fillText(application.jainAadharNumber || "N/A", 450, 528);
 
     // === BACK SIDE ===
     const backTemplate = await loadImage(
@@ -193,13 +260,16 @@ const generateJainAadharCard = async (req, res) => {
     ctx.drawImage(backTemplate, 0, height + GAP_BETWEEN_CARDS, width, height);
 
     ctx.fillStyle = "#333333";
-    ctx.font = "27px Georgia";
-    const xPos = 370;
-    let yPos = height + 240;
-    const maxWidth = 500;
 
+    // ADDITIVE: Auto-detect font for address (supports Hindi/Marathi/Gujarati)
     const fullAddress =
       `${application.location?.address || "N/A"} ${application.location?.city || ""} - ${application.location?.pinCode || ""}`.trim();
+
+    ctx.font = getCorrectFont(fullAddress, 25);
+
+    const xPos = 353;
+    let yPos = height + 240;
+    const maxWidth = 500;
 
     function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
       const words = text.split(" ");
@@ -225,13 +295,13 @@ const generateJainAadharCard = async (req, res) => {
     const qrUrl = `https://jainprabhudh-manch-backend.onrender.com/api/generate-card/verify/jain-shravak/${application.jainAadharNumber}`;
     const qrBuffer = await QRCode.toBuffer(qrUrl, { width: 200 });
     const qrImage = await loadImage(qrBuffer);
-    ctx.drawImage(qrImage, 750, height + 280, 180, 180);
+    ctx.drawImage(qrImage, 700, height + 280, 180, 180);
     ctx.font = "bold 24px Georgia";
     ctx.fillStyle = "#333333";
     ctx.fillText(
       "Reg. No: DL/2025/0487190",
       350, // ← 310 → 340 (thoda right)
-      height + GAP_BETWEEN_CARDS + 490, 
+      height + GAP_BETWEEN_CARDS + 490,
     );
     const issueDate = formatDOB(application.createdAt);
     ctx.font = "bold 24px Georgia";
@@ -256,7 +326,7 @@ async function loadMinorityTemplate() {
     templateMinority = await loadImage(
       path.join(__dirname, "../../Public/minoritycard.png"),
     );
-   // console.log("Minority Card Template Loaded");
+    // console.log("Minority Card Template Loaded");
   } catch (err) {
     console.error("❌ Minority Template Load Error:", err);
   }
@@ -267,10 +337,13 @@ loadMinorityTemplate();
 function truncateText(ctx, text, maxWidth) {
   if (ctx.measureText(text).width <= maxWidth) return text;
   let truncated = text;
-  while (ctx.measureText(truncated + '...').width > maxWidth && truncated.length > 0) {
+  while (
+    ctx.measureText(truncated + "...").width > maxWidth &&
+    truncated.length > 0
+  ) {
     truncated = truncated.slice(0, -1);
   }
-  return truncated + '...';
+  return truncated + "...";
 }
 
 // Helper: wrap text into max 2 lines (with ellipsis if even 2 lines overflow)
@@ -322,9 +395,9 @@ const generateMinorityCard = async (req, res) => {
     const ctx = canvas.getContext("2d");
 
     // === Background: minority_card.png ===
-    const template = templateMinority || await loadImage(
-      path.join(__dirname, "../../Public/minoritycard.png"),
-    );
+    const template =
+      templateMinority ||
+      (await loadImage(path.join(__dirname, "../../Public/minoritycard.png")));
     ctx.drawImage(template, 0, 0, width, height);
 
     // === PROFILE IMAGE (left box) ===
@@ -349,11 +422,26 @@ const generateMinorityCard = async (req, res) => {
         ctx.beginPath();
         ctx.moveTo(imgX + radius, imgY);
         ctx.lineTo(imgX + imgWidth - radius, imgY);
-        ctx.quadraticCurveTo(imgX + imgWidth, imgY, imgX + imgWidth, imgY + radius);
+        ctx.quadraticCurveTo(
+          imgX + imgWidth,
+          imgY,
+          imgX + imgWidth,
+          imgY + radius,
+        );
         ctx.lineTo(imgX + imgWidth, imgY + imgHeight - radius);
-        ctx.quadraticCurveTo(imgX + imgWidth, imgY + imgHeight, imgX + imgWidth - radius, imgY + imgHeight);
+        ctx.quadraticCurveTo(
+          imgX + imgWidth,
+          imgY + imgHeight,
+          imgX + imgWidth - radius,
+          imgY + imgHeight,
+        );
         ctx.lineTo(imgX + radius, imgY + imgHeight);
-        ctx.quadraticCurveTo(imgX, imgY + imgHeight, imgX, imgY + imgHeight - radius);
+        ctx.quadraticCurveTo(
+          imgX,
+          imgY + imgHeight,
+          imgX,
+          imgY + imgHeight - radius,
+        );
         ctx.lineTo(imgX, imgY + radius);
         ctx.quadraticCurveTo(imgX, imgY, imgX + radius, imgY);
         ctx.closePath();
@@ -365,9 +453,9 @@ const generateMinorityCard = async (req, res) => {
       }
     }
 
-    // === Name (top) ===
+    // === Name (top) - ADDITIVE: Auto-detect regional languages ===
     ctx.fillStyle = "#333333";
-    ctx.font = "bold 24px Georgia";
+    ctx.font = getCorrectFont(application.name, 24, true); // true = bold
     ctx.fillText(application.name || "N/A", 350, 500); // adjust y as needed
 
     // === Father/Husband Name logic ===
@@ -390,11 +478,12 @@ const generateMinorityCard = async (req, res) => {
     }
 
     ctx.fillStyle = "#333333";
-    ctx.font = "18px Georgia";
 
     const maxFieldWidth = 220; // colon ke baad available space
 
-    // === Father's Name → 2-line wrap if needed ===
+    // === Father's Name → 2-line wrap if needed - ADDITIVE: Auto-detect regional languages ===
+    ctx.font = getCorrectFont(fatherOrHusband, 18); // Auto-detect for father/husband name
+
     const fatherLines = wrapTextTwoLines(ctx, fatherOrHusband, maxFieldWidth);
     if (fatherLines.length === 1) {
       // Single line → original position (no visual change for short names)
@@ -405,23 +494,31 @@ const generateMinorityCard = async (req, res) => {
       ctx.fillText(fatherLines[1], 535, 560);
     }
 
+    // Gender field (English)
+    ctx.font = getCorrectFont(application.gender || "N/A", 18);
     ctx.fillText(
       truncateText(ctx, application.gender || "N/A", maxFieldWidth),
       535,
       598,
     );
-   ctx.fillText(
-     truncateText(ctx, formatDOB(application.dob), maxFieldWidth),
-     535,
-     650,
-   );
+
+    // DOB field (English format)
+    ctx.font = getCorrectFont(formatDOB(application.dob), 18);
+    ctx.fillText(
+      truncateText(ctx, formatDOB(application.dob), maxFieldWidth),
+      535,
+      650,
+    );
+
+    // Aadhar Number (English/Numbers)
+    ctx.font = getCorrectFont(application.jainAadharNumber || "N/A", 18);
     ctx.fillText(
       truncateText(ctx, application.jainAadharNumber || "N/A", maxFieldWidth),
       535,
       703,
     );
 
-    // === Permanent Address ===
+    // === Permanent Address - ADDITIVE: Auto-detect regional languages ===
     const fullAddress =
       [
         application.location?.address,
@@ -435,11 +532,11 @@ const generateMinorityCard = async (req, res) => {
         .join(" ")
         .trim() || "N/A";
 
-    ctx.font = "23px Georgia";
+    ctx.font = getCorrectFont(fullAddress, 23); // Auto-detect for address
     wrapTextMinority(ctx, fullAddress, 100, 830, 600, 36);
 
-    // === Certify Name (between "certify that" and "belongs") ===
-    ctx.font = "25px bold Georgia";
+    // === Certify Name (between "certify that" and "belongs") - ADDITIVE: Auto-detect regional languages ===
+    ctx.font = getCorrectFont(application.name, 25, true); // true = bold
     ctx.fillStyle = "#8B0000"; // dark red to match card style
     ctx.fillText(application.name || "N/A", 320, 959);
 
@@ -457,7 +554,7 @@ const generateMinorityCard = async (req, res) => {
         });
 
     ctx.fillStyle = "#333333";
-    ctx.font = "20px Georgia";
+    ctx.font = getCorrectFont(issueDate, 20); // Auto-detect (usually English, but safe)
     ctx.fillText(issueDate, 100, 1080);
 
     // === Send Response ===

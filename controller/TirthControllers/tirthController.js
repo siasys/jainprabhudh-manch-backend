@@ -1,526 +1,799 @@
-const Tirth = require('../../model/TirthModels/tirthModel');
-const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
-const { successResponse, errorResponse } = require('../../utils/apiResponse');
-const { s3Client, DeleteObjectCommand } = require('../../config/config');
-const { extractS3KeyFromUrl } = require('../../utils/s3Utils');
-const { convertS3UrlToCDN } = require('../../utils/s3Utils');
+const Tirth = require("../../model/TirthModels/tirthModel");
 
-// Get available cities with active Sanghs
-const getAvailableCities = async (req, res) => {
+/* ══════════════════════════════════════════════════════════════
+   ✅ COUNTRY-WISE ADDRESS (Shravak / Matrimonial jaisa)
+   Frontend `addressFields` JSON bhejta hai — countryConfig ke naam se:
+     India  → { state, district, pincode, regionLabels }
+     UK     → { county, town_borough, postcode, regionLabels }
+     Canada → { province, region, postal_code, regionLabels }
+   Model me ye keys likhi nahi hain, isliye doc.set(..., {strict:false})
+   — model badalne ki zaroorat nahi. state/district/pincode pehle jaise
+   bhi save hote hain (list, filter, search inhi par chalte hain).
+   ══════════════════════════════════════════════════════════════ */
+const BASE_ADDRESS_KEYS = [
+  "country",
+  "state",
+  "district",
+  "city",
+  "fullAddress",
+  "pincode",
+  "mapLink",
+];
+const PROTECTED_ADDRESS_KEYS = [
+  "country",
+  "city",
+  "fullAddress",
+  "mapLink",
+  "_id",
+  "__proto__",
+  "constructor",
+  "prototype",
+];
+
+const parseCountryAddress = (raw) => {
+  if (!raw) return {};
+  let obj = raw;
+  if (typeof raw === "string") {
     try {
-        const cities = await HierarchicalSangh.find(
-            { level: 'city', status: 'active' },
-            'location.city location.state location.district _id'
-        ).sort({ 'location.city': 1 });
-
-        return successResponse(res, cities);
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
+      obj = JSON.parse(raw);
+    } catch {
+      return {};
     }
+  }
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return {};
+
+  const clean = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (key === "regionLabels" && val && typeof val === "object") {
+      clean.regionLabels = {
+        region1: String(val.region1 || "").slice(0, 60),
+        region2: String(val.region2 || "").slice(0, 60),
+      };
+      continue;
+    }
+    // sirf simple snake_case keys (province, town_borough, postal_code)
+    if (!/^[a-z][a-z0-9_]{1,39}$/.test(key)) continue;
+    if (PROTECTED_ADDRESS_KEYS.includes(key)) continue;
+    if (val === null || val === undefined || typeof val === "object") continue;
+    clean[key] = String(val).trim().slice(0, 200);
+  }
+  return clean;
 };
 
-// Submit new Tirth application
+const applyCountryAddress = (doc, fields) => {
+  for (const [key, val] of Object.entries(fields || {})) {
+    doc.set(`address.${key}`, val, { strict: false });
+  }
+};
+const HierarchicalSangh = require("../../model/SanghModels/hierarchicalSanghModel");
+const { successResponse, errorResponse } = require("../../utils/apiResponse");
+const { s3Client, DeleteObjectCommand } = require("../../config/config");
+const {
+  extractS3KeyFromUrl,
+  convertS3UrlToCDN,
+} = require("../../utils/s3Utils");
+
+/* ==================================================================
+   HELPERS
+================================================================== */
+
+/**
+ * FormData se aane wale nested fields strings hote hain.
+ * Agar string JSON hai to parse kar do, warna jaisa hai waisa.
+ */
+const parseMaybeJSON = (val, fallback) => {
+  if (val === undefined || val === null || val === "") return fallback;
+  if (typeof val === "object") return val;
+  try {
+    return JSON.parse(val);
+  } catch {
+    return fallback;
+  }
+};
+
+const toBool = (v, def = false) => {
+  if (v === undefined || v === null || v === "") return def;
+  if (typeof v === "boolean") return v;
+  return v === "true" || v === "1" || v === 1;
+};
+
+/**
+ * req.body (JSON ya FormData) se naye structure ka object banao.
+ * Sirf wahi keys return hoti hain jo body me aayi hain — partial update safe.
+ */
+const buildTirthPayload = (body = {}) => {
+  const out = {};
+
+  const objectFields = [
+    "basic",
+    "contact",
+    "address",
+    "temple",
+    "acc",
+    "bhoj",
+    "school",
+    "hostel",
+    "nearbyInfo",
+    "team",
+  ];
+  objectFields.forEach((k) => {
+    if (body[k] !== undefined) {
+      const parsed = parseMaybeJSON(body[k], null);
+      if (parsed && typeof parsed === "object") out[k] = parsed;
+    }
+  });
+
+  // facilities — Map<string, boolean>
+  if (body.facilities !== undefined) {
+    const f = parseMaybeJSON(body.facilities, null);
+    if (f && typeof f === "object") {
+      const clean = {};
+      Object.keys(f).forEach((key) => {
+        clean[key] = !!f[key];
+      });
+      out.facilities = clean;
+    }
+  }
+
+  // transports — array of { type, timing, charges }
+  if (body.transports !== undefined) {
+    const t = parseMaybeJSON(body.transports, null);
+    if (Array.isArray(t)) {
+      out.transports = t
+        .filter((x) => x && (x.type || x.timing || x.charges))
+        .map((x) => ({
+          type: x.type || "",
+          timing: x.timing || "",
+          charges: x.charges || "",
+        }));
+    }
+  }
+
+  // toggles
+  ["accOn", "bhojOn", "schoolOn", "hostelOn", "transportOn"].forEach((k) => {
+    if (body[k] !== undefined) out[k] = toBool(body[k]);
+  });
+
+  return out;
+};
+
+/** Card/list ke liye chhota shape */
+const toCard = (t) => ({
+  _id: t._id,
+  name: t.basic?.name || "",
+  trust: t.basic?.trust || "",
+  sect: t.basic?.sect || "",
+  type: t.basic?.type || "",
+  kshetra: t.basic?.kshetra || "",
+  city: t.address?.city || "",
+  district: t.address?.district || "",
+  state: t.address?.state || "",
+  country: t.address?.country || "",
+  photo: t.photos?.[0] || "",
+  photos: t.photos || [],
+  applicationStatus: t.applicationStatus,
+  createdAt: t.createdAt,
+});
+
+/* ==================================================================
+   PUBLIC
+================================================================== */
+
+// Cities jinme active Sangh hai
+const getAvailableCities = async (req, res) => {
+  try {
+    const cities = await HierarchicalSangh.find(
+      { level: "city", status: "active" },
+      "location.city location.state location.district _id",
+    ).sort({ "location.city": 1 });
+
+    return successResponse(res, cities);
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
+};
+
+/**
+ * Tirthlist.jsx — saare tirth (search + filter support)
+ * GET /api/tirth/get?search=&sect=&state=&city=
+ */
+const getAllTirth = async (req, res) => {
+  try {
+    const { search, sect, state, city } = req.query;
+
+    // CHANGED - status filter hata diya, ab list direct saara data laati hai
+    const filter = {};
+    if (sect) filter["basic.sect"] = sect;
+    if (state) filter["address.state"] = state;
+    if (city) filter["address.city"] = new RegExp(`^${city}$`, "i");
+
+    if (search && search.trim()) {
+      const rx = new RegExp(search.trim(), "i");
+      filter.$or = [
+        { "basic.name": rx },
+        { "basic.trust": rx },
+        { "address.city": rx },
+        { "address.district": rx },
+        { "address.state": rx },
+      ];
+    }
+
+    const tirths = await Tirth.find(filter).sort({ "basic.name": 1 }).lean();
+
+    return successResponse(res, tirths.map(toCard));
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
+};
+
+// Approved tirths ki chhoti list
+const getAllTirths = async (req, res) => {
+  try {
+    const tirths = await Tirth.find({
+      status: "active",
+      applicationStatus: "approved",
+    })
+      .select("basic address photos applicationStatus createdAt")
+      .sort({ "basic.name": 1 })
+      .lean();
+
+    return successResponse(res, tirths.map(toCard));
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
+};
+
+// Ek city ke tirths
+const getCityTirths = async (req, res) => {
+  try {
+    const { citySanghId } = req.params; // ab city ka naam bhi chal jayega
+
+    const sangh = await HierarchicalSangh.findById(citySanghId)
+      .select("location.city")
+      .lean()
+      .catch(() => null);
+
+    const cityName = sangh?.location?.city || citySanghId;
+
+    const tirths = await Tirth.find({
+      "address.city": new RegExp(`^${cityName}$`, "i"),
+      status: "active",
+      applicationStatus: "approved",
+    })
+      .sort({ "basic.name": 1 })
+      .lean();
+
+    return successResponse(res, tirths.map(toCard));
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
+};
+
+// Tirthfullprofile.jsx — poori detail
+const getTirthDetails = async (req, res) => {
+  try {
+    const { tirthId } = req.params;
+
+    // CHANGED - status filter hata diya, taaki list ka har card khul sake
+    const tirth = await Tirth.findOne({ _id: tirthId }).lean();
+    if (!tirth) return errorResponse(res, "Tirth not found", 404);
+
+    // Map → plain object (frontend ke liye)
+    if (tirth.facilities instanceof Map) {
+      tirth.facilities = Object.fromEntries(tirth.facilities);
+    }
+
+    return successResponse(res, tirth);
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
+};
+
+/* ==================================================================
+   CREATE / UPDATE
+================================================================== */
+
+// Tirthform.jsx — naya tirth submit
 const submitTirthApplication = async (req, res) => {
   try {
-    console.log("📩 Received Body → ", req.body);
-
-    const data = req.body;
-
-    // ---------------------------------------------------
-    // PROCESS PHOTOS (ONLY STRING URL ARRAY)
-    // ---------------------------------------------------
-    let tirthPhotos = [];
+    // photos (S3 → CDN url)
+    let photos = [];
     if (req.files && req.files.tirthPhoto) {
-      tirthPhotos = req.files.tirthPhoto.map(file =>
-        convertS3UrlToCDN(file.location) // 📌 only URL string
+      photos = req.files.tirthPhoto.map((file) =>
+        convertS3UrlToCDN(file.location),
       );
     }
 
-    // ---------------------------------------------------
-    // GENERATE RANDOM TIRTH ID
-    // ---------------------------------------------------
-    const random6Digit = Math.floor(100000 + Math.random() * 900000); // 6-digit
-    const generatedTirthID = `TIRTH${random6Digit}`;
+    const payload = buildTirthPayload(req.body);
 
-    // ---------------------------------------------------
-    // CREATE NEW TIRTH DOCUMENT
-    // ---------------------------------------------------
+    if (!payload.basic?.name) {
+      return errorResponse(res, "Tirth name is required", 400);
+    }
+
     const tirth = new Tirth({
-      ...data,
-      tirthPhotos,
-      userId: req.user._id,
+      ...payload,
+      photos,
       submittedBy: req.user._id,
-      tirthID: generatedTirthID,
     });
+
+    // ✅ Country ke naam wali address keys bhi (county / province / postcode)
+    applyCountryAddress(tirth, parseCountryAddress(req.body.addressFields));
 
     await tirth.save();
 
-    // ---------------------------------------------------
-    // UPDATE USER SCHEMA WITH TIRTH ROLE
-    // ---------------------------------------------------
-    const User = require("../../model/UserRegistrationModels/userModel"); // import User model
+    // user ko is tirth ka manager bana do
+    const User = require("../../model/UserRegistrationModels/userModel");
     await User.findByIdAndUpdate(
       req.user._id,
       {
         $push: {
           tirthRoles: {
-            tirthId: tirth._id, // reference the saved Tirth document
+            tirthId: tirth._id,
             role: "manager",
-            approvedAt: new Date()
-          }
-        }
+            approvedAt: new Date(),
+          },
+        },
       },
-      { new: true }
+      { new: true },
     );
 
     return successResponse(res, {
       message: "Tirth created successfully and role assigned",
-       tirthId: tirth._id
+      tirthId: tirth._id,
     });
-
   } catch (error) {
     console.error("❌ Error creating Tirth:", error);
 
-    // DELETE FILES IF ERROR HAPPENS
+    // error par uploaded files delete
     if (req.files && req.files.tirthPhoto) {
       await Promise.all(
-        req.files.tirthPhoto.map(file =>
+        req.files.tirthPhoto.map((file) =>
           s3Client.send(
             new DeleteObjectCommand({
               Bucket: process.env.AWS_BUCKET_NAME,
-              Key: file.key
-            })
-          )
-        )
-      );
+              Key: file.key,
+            }),
+          ),
+        ),
+      ).catch(() => {});
     }
 
     return errorResponse(res, error.message, 500);
   }
 };
 
-
-// Get pending applications for city president
-const getPendingApplications = async (req, res) => {
-    try {
-        const { citySanghId } = req.params;
-
-        const applications = await Tirth.find({
-            citySanghId,
-            applicationStatus: 'pending'
-        }).sort({ createdAt: -1 });
-
-        return successResponse(res, applications);
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
-    }
-};
-
-// Review Tirth application
-const reviewApplication = async (req, res) => {
-    try {
-        const { tirthId } = req.params;
-        const { status } = req.body;
-
-        if (!['approved', 'rejected'].includes(status)) {
-            return errorResponse(res, 'Invalid review status', 400);
-        }
-
-        const tirth = await Tirth.findOneAndUpdate(
-            { _id: tirthId, applicationStatus: 'pending' },
-            {
-                applicationStatus: status,
-                // reviewNotes: {
-                //     text: notes,
-                //     reviewedBy: req.user._id,
-                //     reviewedAt: new Date()
-                // }
-            },
-            { new: true }
-        );
-
-        if (!tirth) {
-            return errorResponse(res, 'Tirth application not found or already reviewed', 404);
-        }
-
-        // ✅ DEBUG: Check if tirth.manager is present
-        console.log("Tirth Manager Object:", tirth.managerName);
-
-        // If approved, add Tirth role to the manager's user account
-        if (status === 'approved' && tirth.managerName && tirth.managerName.jainAadharNumber) {
-            const User = require('../../model/UserRegistrationModels/userModel');
-            const user = await User.findOne({ jainAadharNumber: tirth.managerName.jainAadharNumber });
-
-            if (!user) {
-                console.log("❌ User not found for Jain Aadhar:", tirth.managerName.jainAadharNumber);
-            } else {
-                console.log("✅ User found:", user._id);
-
-                // Initialize tirthRoles array if it doesn't exist
-                if (!Array.isArray(user.tirthRoles)) {
-                    user.tirthRoles = [];
-                }
-
-                // ✅ DEBUG: Check if user already has the role
-                console.log("Existing tirthRoles:", user.tirthRoles);
-
-                const hasRole = user.tirthRoles.some(role =>
-                    role.tirthId.toString() === tirth._id.toString()
-                );
-
-                if (!hasRole) {
-                    // ✅ Add the Tirth role
-                    user.tirthRoles.push({
-                        tirthId: tirth._id,
-                        role: 'manager',
-                        startDate: new Date()
-                    });
-
-                    // ✅ Ensure correct save
-                    await user.markModified('tirthRoles');  // Ensure Mongoose recognizes the change
-                    await user.save();
-
-                    console.log("✅ Updated tirthRoles:", user.tirthRoles);
-                } else {
-                    console.log("ℹ️ User already has this role, skipping update.");
-                }
-            }
-        }
-
-        return successResponse(res, {
-            message: `Tirth application ${status}`,
-            tirth
-        });
-
-    } catch (error) {
-        console.error("❌ Error in reviewApplication:", error);
-        return errorResponse(res, error.message, 500);
-    }
-};
-
-// Get Tirth details
-const getTirthDetails = async (req, res) => {
-    try {
-        const { tirthId } = req.params;
-
-        const tirth = await Tirth.findOne({
-            _id: tirthId,
-            status: 'active'
-        })
-
-        if (!tirth) {
-            return errorResponse(res, 'Tirth not found', 404);
-        }
-
-        return successResponse(res, tirth);
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
-    }
-};
-// Delete Tirth by ID
-const deleteTirth = async (req, res) => {
+// TirthEdit.jsx — details update
+const updateTirthDetails = async (req, res) => {
   try {
     const { tirthId } = req.params;
 
-    // Check if tirth exists
-    const tirth = await Tirth.findById(tirthId);
-    if (!tirth) {
-      return res.status(404).json({
-        success: false,
-        message: "Tirth not found"
-      });
+    const tirth = await Tirth.findOne({ _id: tirthId, status: "active" });
+    if (!tirth) return errorResponse(res, "Tirth not found", 404);
+
+    const payload = buildTirthPayload(req.body);
+
+    // sensitive fields kabhi body se update na ho
+    delete payload.applicationStatus;
+    delete payload.reviewNotes;
+    delete payload.status;
+    delete payload.submittedBy;
+
+    // ✅ address ki country-wise keys (county / province...) yaad rakho —
+    // neeche naya object assign hote hi ye mit jaati thin
+    const prevAddress = tirth.toObject().address || {};
+
+    // nested objects merge karo (poora replace na ho)
+    const mergeKeys = [
+      "basic",
+      "contact",
+      "address",
+      "temple",
+      "acc",
+      "bhoj",
+      "school",
+      "hostel",
+      "nearbyInfo",
+      "team",
+    ];
+    mergeKeys.forEach((k) => {
+      if (payload[k]) {
+        tirth[k] = {
+          ...(tirth[k]?.toObject?.() || tirth[k] || {}),
+          ...payload[k],
+        };
+      }
+    });
+
+    // purani country-wise keys wapas — par country badli ho to nahi
+    // (UK ki "county" Canada wale address me na rahe)
+    const countryChanged =
+      payload.address?.country &&
+      payload.address.country !== prevAddress.country;
+    if (!countryChanged) {
+      applyCountryAddress(
+        tirth,
+        Object.fromEntries(
+          Object.entries(prevAddress).filter(
+            ([k]) => !BASE_ADDRESS_KEYS.includes(k),
+          ),
+        ),
+      );
+    }
+    // naye bheje gaye
+    applyCountryAddress(tirth, parseCountryAddress(req.body.addressFields));
+
+    if (payload.facilities) tirth.facilities = payload.facilities;
+    if (payload.transports) tirth.transports = payload.transports;
+
+    ["accOn", "bhojOn", "schoolOn", "hostelOn", "transportOn"].forEach((k) => {
+      if (payload[k] !== undefined) tirth[k] = payload[k];
+    });
+
+    // photos — frontend jo list bhejta hai wahi final (removed hate hue)
+    if (req.body.photos !== undefined) {
+      const kept = parseMaybeJSON(req.body.photos, null);
+      if (Array.isArray(kept)) {
+        const removed = (tirth.photos || []).filter((p) => !kept.includes(p));
+        tirth.photos = kept;
+
+        // S3 se hataye gaye photos delete
+        await Promise.all(
+          removed.map(async (url) => {
+            try {
+              const key = extractS3KeyFromUrl(url);
+              if (key) {
+                await s3Client.send(
+                  new DeleteObjectCommand({
+                    Bucket: process.env.AWS_BUCKET_NAME,
+                    Key: key,
+                  }),
+                );
+              }
+            } catch (e) {
+              console.error("S3 delete failed:", url, e.message);
+            }
+          }),
+        );
+      }
     }
 
-    // Soft delete: mark as deleted
-    tirth.status = "deleted"; // ya hard delete: await Tirth.deleteOne({ _id: tirthId });
+    // nayi photos add
+    if (req.files && req.files.tirthPhoto) {
+      const newPhotos = req.files.tirthPhoto.map((f) =>
+        convertS3UrlToCDN(f.location),
+      );
+      tirth.photos.push(...newPhotos);
+    }
+
     await tirth.save();
 
-    return res.status(200).json({
-      success: true,
-      message: "Tirth deleted successfully"
+    return successResponse(res, {
+      message: "Tirth details updated successfully",
+      tirth,
     });
-
   } catch (error) {
-    console.error("Delete Tirth Error:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-// Update Tirth details
-const updateTirthDetails = async (req, res) => {
-    try {
-        const { tirthId } = req.params;
-        const updateData = req.body;
-
-        // Remove sensitive fields that shouldn't be updated
-        delete updateData.accessCredentials;
-        delete updateData.applicationStatus;
-        delete updateData.reviewNotes;
-        delete updateData.status;
-        delete updateData.citySanghId;
-
-        const tirth = await Tirth.findOne({ _id: tirthId, status: 'active' });
-
-        if (!tirth) {
-            return errorResponse(res, 'Tirth not found', 404);
-        }
-
-        // Handle photo updates if replacePhotos flag is set
-        if (req.body.replacePhotos === 'true' && tirth.photos && tirth.photos.length > 0) {
-            const deletePromises = tirth.photos.map(async (photo) => {
-                try {
-                    const key = extractS3KeyFromUrl(photo.url);
-                    if (key) {
-                        await s3Client.send(new DeleteObjectCommand({
-                            Bucket: process.env.AWS_BUCKET_NAME,
-                            Key: key
-                        }));
-                    }
-                } catch (error) {
-                    console.error(`Error deleting photo from S3: ${photo.url}`, error);
-                }
-            });
-            
-            await Promise.all(deletePromises);
-            tirth.photos = [];
-        }
-
-        // Handle document updates if replaceDocuments flag is set
-        if (req.body.replaceDocuments === 'true' && tirth.documents && tirth.documents.length > 0) {
-            const deletePromises = tirth.documents.map(async (doc) => {
-                try {
-                    const key = extractS3KeyFromUrl(doc.url);
-                    if (key) {
-                        await s3Client.send(new DeleteObjectCommand({
-                            Bucket: process.env.AWS_BUCKET_NAME,
-                            Key: key
-                        }));
-                    }
-                } catch (error) {
-                    console.error(`Error deleting document from S3: ${doc.url}`, error);
-                }
-            });
-            
-            await Promise.all(deletePromises);
-            tirth.documents = [];
-        }
-
-        // Add new photos and documents if provided
-        if (req.files) {
-            if (req.files.entityPhoto) {
-                tirth.photos.push(...req.files.entityPhoto.map(file => ({
-                    url: file.location,
-                    caption: ''
-                })));
-            }
-            if (req.files.entityDocuments) {
-                tirth.documents.push(...req.files.entityDocuments.map(file => ({
-                    url: file.location,
-                    type: file.mimetype,
-                    name: file.originalname
-                })));
-            }
-        }
-
-        // Update other fields
-        Object.assign(tirth, updateData);
-        await tirth.save();
-
-        return successResponse(res, {
-            message: 'Tirth details updated successfully',
-            tirth
-        });
-    } catch (error) {
-        // If there's an error and new files were uploaded, clean them up
-        if (req.files) {
-            const deletePromises = [];
-            if (req.files.entityPhoto) {
-                deletePromises.push(...req.files.entityPhoto.map(file => 
-                    s3Client.send(new DeleteObjectCommand({
-                        Bucket: process.env.AWS_BUCKET_NAME,
-                        Key: extractS3KeyFromUrl(file.location)
-                    }))
-                ));
-            }
-            if (req.files.entityDocuments) {
-                deletePromises.push(...req.files.entityDocuments.map(file => 
-                    s3Client.send(new DeleteObjectCommand({
-                        Bucket: process.env.AWS_BUCKET_NAME,
-                        Key: extractS3KeyFromUrl(file.location)
-                    }))
-                ));
-            }
-            await Promise.all(deletePromises);
-        }
-        return errorResponse(res, error.message, 500);
+    // error par nayi uploaded files clean
+    if (req.files && req.files.tirthPhoto) {
+      await Promise.all(
+        req.files.tirthPhoto.map((file) =>
+          s3Client.send(
+            new DeleteObjectCommand({
+              Bucket: process.env.AWS_BUCKET_NAME,
+              Key: file.key,
+            }),
+          ),
+        ),
+      ).catch(() => {});
     }
-};
-
-// Get all Tirths in a city
-const getCityTirths = async (req, res) => {
-    try {
-        const { citySanghId } = req.params;
-
-        const tirths = await Tirth.find({
-            citySanghId,
-            status: 'active',
-            applicationStatus: 'approved'
-        }).sort({ name: 1 });
-
-        return successResponse(res, tirths);
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
-    }
-};
-
-// Tirth login with JWT token
-const tirthLogin = async (req, res) => {
-    try {
-        // The user should already be authenticated via JWT token
-        // We just need to verify they have the appropriate Tirth role
-        const userId = req.user._id;
-        const { tirthId } = req.params;
-
-        const User = require('../../model/UserRegistrationModels/userModel');
-        const user = await User.findById(userId);
-
-        if (!user) {
-            return errorResponse(res, 'User not found', 404);
-        }
-
-        // Check if user has the role for this Tirth
-        const hasTirthRole = user.tirthRoles && user.tirthRoles.some(role => 
-            role.tirthId.toString() === tirthId
-        );
-
-        if (!hasTirthRole) {
-            return errorResponse(res, 'You do not have permission to access this Tirth', 403);
-        }
-
-        // Get the Tirth details
-        const tirth = await Tirth.findOne({
-            _id: tirthId,
-            status: 'active',
-            applicationStatus: 'approved'
-        });
-
-        if (!tirth) {
-            return errorResponse(res, 'Tirth not found or not active', 404);
-        }
-
-        return successResponse(res, {
-            message: 'Access granted',
-            tirth
-        });
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
-    }
-};
-
-// Get all Tirths (public)
-const getAllTirths = async (req, res) => {
-    try {
-        const tirths = await Tirth.find(
-            { status: 'active', applicationStatus: 'approved' },
-            'name tirthType location description uploadImage applicationStatus managerName'
-        ).sort({ name: 1 });
-
-        return successResponse(res, tirths);
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
-    }
-};
-// Get all Tirths (public)
-const getAllTirth = async (req, res) => {
-  try {
-    // Fetch all active tirths without projection
-    const tirths = await Tirth.find({ status: 'active' }).sort({ tirthName: 1 });
-
-    return successResponse(res, tirths);
-  } catch (error) {
     return errorResponse(res, error.message, 500);
   }
 };
 
-// Update Tirth Images
+// Sirf images update
 const updateTirthImages = async (req, res) => {
   try {
     const { tirthId } = req.params;
-    const { replaceIndex } = req.body; // optional: index of image to replace
+    const { replaceIndex } = req.body;
 
     if (!tirthId) return errorResponse(res, "Tirth ID is required", 400);
 
     const tirth = await Tirth.findById(tirthId);
     if (!tirth) return errorResponse(res, "Tirth not found", 404);
 
-    // Process new uploaded images
     let newImages = [];
-    if (req.files && Array.isArray(req.files.tirthPhoto) && req.files.tirthPhoto.length > 0) {
+    if (
+      req.files &&
+      Array.isArray(req.files.tirthPhoto) &&
+      req.files.tirthPhoto.length > 0
+    ) {
       newImages = req.files.tirthPhoto
-        .filter(file => file?.location) // make sure file has location
-        .map(file => convertS3UrlToCDN(file.location));
+        .filter((file) => file?.location)
+        .map((file) => convertS3UrlToCDN(file.location));
     }
 
     if (newImages.length === 0) {
       return errorResponse(res, "No valid images uploaded", 400);
     }
 
-    // Update logic
+    const idx = Number(replaceIndex);
     if (
       replaceIndex !== undefined &&
-      Number.isInteger(Number(replaceIndex)) &&
-      replaceIndex >= 0 &&
-      replaceIndex < tirth.tirthPhotos.length
+      Number.isInteger(idx) &&
+      idx >= 0 &&
+      idx < tirth.photos.length
     ) {
-      // Replace specific image
-      tirth.tirthPhotos[replaceIndex] = newImages[0]; // only first image used
+      tirth.photos[idx] = newImages[0];
     } else {
-      // Add new images at the end
-      tirth.tirthPhotos.push(...newImages);
+      tirth.photos.push(...newImages);
     }
 
     await tirth.save();
 
     return successResponse(res, {
       message: "Tirth images updated successfully",
-      tirthPhotos: tirth.tirthPhotos
+      photos: tirth.photos,
     });
-
   } catch (error) {
     console.error("❌ Error updating Tirth images:", error);
 
-    // Delete uploaded files in case of error
     if (req.files && Array.isArray(req.files.tirthPhoto)) {
       await Promise.all(
-        req.files.tirthPhoto.map(file =>
+        req.files.tirthPhoto.map((file) =>
           s3Client.send(
             new DeleteObjectCommand({
               Bucket: process.env.AWS_BUCKET_NAME,
-              Key: file.key
-            })
-          )
-        )
-      );
+              Key: file.key,
+            }),
+          ),
+        ),
+      ).catch(() => {});
     }
 
     return errorResponse(res, error.message, 500);
   }
 };
 
+// Soft delete
+const deleteTirth = async (req, res) => {
+  try {
+    const { tirthId } = req.params;
+
+    const tirth = await Tirth.findById(tirthId);
+    if (!tirth) return errorResponse(res, "Tirth not found", 404);
+
+    const User = require("../../model/UserRegistrationModels/userModel");
+
+    // ADDED - sirf owner (submittedBy) ya jiske paas is tirth ka
+    // tirthRole hai wahi delete kar sake. req.user na ho to purana behaviour.
+    const requesterId = req.user?._id;
+    if (requesterId) {
+      const isOwner = String(tirth.submittedBy || "") === String(requesterId);
+      let hasRole = false;
+      if (!isOwner) {
+        const me = await User.findById(requesterId).select("tirthRoles").lean();
+        hasRole = (me?.tirthRoles || []).some(
+          (r) => String(r.tirthId) === String(tirthId),
+        );
+      }
+      if (!isOwner && !hasRole) {
+        return errorResponse(
+          res,
+          "You are not allowed to delete this Tirth",
+          403,
+        );
+      }
+    }
+
+    tirth.status = "inactive"; // enum: active | inactive
+    await tirth.save();
+
+    // ADDED - tirthRoles cleanup.
+    // userId in priority order:
+    //   1) explicitly bheja hua userId (body ya query se)
+    //   2) tirth.submittedBy  -> jis account se tirth register hua tha
+    //   3) request karne wala logged-in user
+    // aur last me safety-net: baaki koi bhi user jiske paas ye role bacha ho.
+    const mongoose = require("mongoose");
+    const toObjectId = (v) => {
+      try {
+        return new mongoose.Types.ObjectId(String(v));
+      } catch {
+        return null;
+      }
+    };
+
+    const tirthObjId = tirth._id;
+
+    const candidateIds = [
+      req.body?.userId,
+      req.query?.userId,
+      req.params?.userId,
+      tirth.submittedBy,
+      requesterId,
+    ]
+      .filter(Boolean)
+      .map((v) => String(v));
+
+    const uniqueUserIds = [...new Set(candidateIds)]
+      .map(toObjectId)
+      .filter(Boolean);
+
+    const removedFromUsers = [];
+    for (const uid of uniqueUserIds) {
+      try {
+        const r = await User.updateOne(
+          { _id: uid },
+          { $pull: { tirthRoles: { tirthId: tirthObjId } } },
+        );
+        if ((r?.modifiedCount ?? r?.nModified ?? 0) > 0) {
+          removedFromUsers.push(String(uid));
+        }
+      } catch (e) {
+        console.error(
+          "tirthRoles pull failed for user:",
+          String(uid),
+          e.message,
+        );
+      }
+    }
+
+    // safety-net - agar kisi aur user ke paas bhi ye role pada ho
+    let extraRemoved = 0;
+    try {
+      const pulled = await User.updateMany(
+        { "tirthRoles.tirthId": tirthObjId },
+        { $pull: { tirthRoles: { tirthId: tirthObjId } } },
+      );
+      extraRemoved = pulled?.modifiedCount ?? pulled?.nModified ?? 0;
+    } catch (e) {
+      console.error("tirthRoles cleanup failed:", e.message);
+    }
+
+    return successResponse(res, {
+      message: "Tirth deleted successfully",
+      tirthId: tirth._id,
+      removedFromUsers,
+      rolesRemovedFrom: removedFromUsers.length + extraRemoved,
+    });
+  } catch (error) {
+    console.error("Delete Tirth Error:", error);
+    return errorResponse(res, error.message, 500);
+  }
+};
+
+/* ==================================================================
+   REVIEW / ACCESS
+================================================================== */
+
+const getPendingApplications = async (req, res) => {
+  try {
+    const { citySanghId } = req.params;
+
+    const sangh = await HierarchicalSangh.findById(citySanghId)
+      .select("location.city")
+      .lean()
+      .catch(() => null);
+
+    const filter = { applicationStatus: "pending" };
+    if (sangh?.location?.city) {
+      filter["address.city"] = new RegExp(`^${sangh.location.city}$`, "i");
+    }
+
+    const applications = await Tirth.find(filter)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return successResponse(res, applications.map(toCard));
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
+};
+
+const reviewApplication = async (req, res) => {
+  try {
+    const { tirthId } = req.params;
+    const { status, notes } = req.body;
+
+    if (!["approved", "rejected"].includes(status)) {
+      return errorResponse(res, "Invalid review status", 400);
+    }
+
+    const tirth = await Tirth.findOneAndUpdate(
+      { _id: tirthId, applicationStatus: "pending" },
+      {
+        applicationStatus: status,
+        reviewNotes: {
+          text: notes || "",
+          reviewedBy: req.user?._id,
+          reviewedAt: new Date(),
+        },
+      },
+      { new: true },
+    );
+
+    if (!tirth) {
+      return errorResponse(
+        res,
+        "Tirth application not found or already reviewed",
+        404,
+      );
+    }
+
+    // approve hone par submittedBy user ko manager role (agar pehle se na ho)
+    if (status === "approved" && tirth.submittedBy) {
+      const User = require("../../model/UserRegistrationModels/userModel");
+      const user = await User.findById(tirth.submittedBy);
+
+      if (user) {
+        if (!Array.isArray(user.tirthRoles)) user.tirthRoles = [];
+
+        const hasRole = user.tirthRoles.some(
+          (r) => String(r.tirthId) === String(tirth._id),
+        );
+
+        if (!hasRole) {
+          user.tirthRoles.push({
+            tirthId: tirth._id,
+            role: "manager",
+            startDate: new Date(),
+          });
+          user.markModified("tirthRoles");
+          await user.save();
+        }
+      }
+    }
+
+    return successResponse(res, {
+      message: `Tirth application ${status}`,
+      tirth,
+    });
+  } catch (error) {
+    console.error("❌ Error in reviewApplication:", error);
+    return errorResponse(res, error.message, 500);
+  }
+};
+
+const tirthLogin = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { tirthId } = req.params;
+
+    const User = require("../../model/UserRegistrationModels/userModel");
+    const user = await User.findById(userId);
+    if (!user) return errorResponse(res, "User not found", 404);
+
+    const hasTirthRole =
+      user.tirthRoles &&
+      user.tirthRoles.some((r) => String(r.tirthId) === String(tirthId));
+
+    if (!hasTirthRole) {
+      return errorResponse(
+        res,
+        "You do not have permission to access this Tirth",
+        403,
+      );
+    }
+
+    const tirth = await Tirth.findOne({ _id: tirthId, status: "active" });
+    if (!tirth) return errorResponse(res, "Tirth not found or not active", 404);
+
+    return successResponse(res, { message: "Access granted", tirth });
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
+};
 
 module.exports = {
-    getAvailableCities,
-    submitTirthApplication,
-    getPendingApplications,
-    reviewApplication,
-    getTirthDetails,
-    updateTirthDetails,
-    getCityTirths,
-    tirthLogin,
-    getAllTirths,
-    getAllTirth,
-    deleteTirth,
-    updateTirthImages
+  getAvailableCities,
+  submitTirthApplication,
+  getPendingApplications,
+  reviewApplication,
+  getTirthDetails,
+  updateTirthDetails,
+  getCityTirths,
+  tirthLogin,
+  getAllTirths,
+  getAllTirth,
+  deleteTirth,
+  updateTirthImages,
 };

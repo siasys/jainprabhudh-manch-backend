@@ -41,6 +41,13 @@ const activitySchema = new mongoose.Schema(
       trim: true,
     },
 
+    // 🔹 Category (competition type) — additive
+    category: {
+      type: String,
+      trim: true,
+      default: "Other",
+    },
+
     // Participants full detail
     participants: [
       {
@@ -97,8 +104,8 @@ const activitySchema = new mongoose.Schema(
     //Price Distribution
     priceDistribution: {
       firstPrice: { type: String },
-      secondPrice: { type: String},
-      thirdPrice: { type: String},
+      secondPrice: { type: String },
+      thirdPrice: { type: String },
     },
 
     // Deadline
@@ -106,20 +113,32 @@ const activitySchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
- winners: {
-  firstWinner: {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-    marks: { type: Number, default: 0 },
-  },
-  secondWinner: {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-    marks: { type: Number, default: 0 },
-  },
-  thirdWinner: {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-    marks: { type: Number, default: 0 },
-  },
-},
+    winners: {
+      firstWinner: {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          default: null,
+        },
+        marks: { type: Number, default: 0 },
+      },
+      secondWinner: {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          default: null,
+        },
+        marks: { type: Number, default: 0 },
+      },
+      thirdWinner: {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          default: null,
+        },
+        marks: { type: Number, default: 0 },
+      },
+    },
 
     //Uploaded media (jpg/png/pdf)
     uploadActivity: [
@@ -132,7 +151,7 @@ const activitySchema = new mongoose.Schema(
       },
     ],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 module.exports = mongoose.model("Activity", activitySchema);

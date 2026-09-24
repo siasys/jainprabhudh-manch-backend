@@ -126,6 +126,9 @@ const getS3Folder = (fieldname, req) => {
       return "jainItihas/image/";
     case "jainGranth":
       return "jainGranth/";
+    case "jainBhajan":
+    case "jainBhajanImage":
+      return "jainBhajan/";
     case "govtYojana":
       return "govtYojana/image/";
     case "tirthPhoto":
@@ -197,6 +200,9 @@ const getS3Folder = (fieldname, req) => {
     case "visit_3_pdf":
     case "visit_4_pdf":
       return "reporting/visits/pdfs/";
+    case "training_image_0":
+    case "training_image_1":
+      return "reporting/trainings/";
     case "entityPhoto":
       if (req && req.baseUrl) {
         if (req.baseUrl.includes("sadhu")) {
@@ -221,6 +227,8 @@ const getS3Folder = (fieldname, req) => {
       return "others/";
     case "audio":
       return "music/";
+    case "niyamMedia":
+      return "sadhu/niyam/";
     case "productPhotos":
       return "products/photos/";
     default:
@@ -527,6 +535,14 @@ module.exports.jainGranthUpload = [
   compressFiles,
   uploadToS3,
 ];
+module.exports.jainBhajanUpload = [
+  upload.fields([
+    { name: "jainBhajan", maxCount: 1 },
+    { name: "jainBhajanImage", maxCount: 1 },
+  ]),
+  compressFiles,
+  uploadToS3,
+];
 module.exports.trainingMaterialUpload = [
   upload.fields([
     { name: "trainingPdf", maxCount: 5 },
@@ -654,10 +670,18 @@ module.exports.reportingUpload = [
     { name: "visit_4_image_0", maxCount: 1 },
     { name: "visit_4_image_1", maxCount: 1 },
     { name: "visit_4_pdf", maxCount: 1 },
+    { name: "training_image_0", maxCount: 1 },
+    { name: "training_image_1", maxCount: 1 },
   ]),
   compressFiles,
   uploadToS3,
 ];
+module.exports.sadhuNiyamMedia = [
+  upload.fields([{ name: "niyamMedia", maxCount: 1 }]),
+  compressFiles,
+  uploadToS3,
+];
+ 
 module.exports.sadhuDocs = [
   upload.fields([
     { name: "entityPhoto", maxCount: 5 },
@@ -686,6 +710,7 @@ module.exports.vyaparDocs = [
     { name: "panFront", maxCount: 1 },
     { name: "panBack", maxCount: 1 },
     { name: "udyamImage", maxCount: 1 },
+    { name: "countryDocImages", maxCount: 10 },
   ]),
   compressFiles,
   uploadToS3,

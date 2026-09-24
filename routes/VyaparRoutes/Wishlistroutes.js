@@ -13,24 +13,24 @@ const {
 // ─── Protected — auth required for all wishlist routes ───
 router.use(authMiddleware);
 
-// ⚠️ ORDER MATTERS — specific routes BEFORE dynamic :productId
+// ⚠️ ORDER MATTERS — fixed paths before anything dynamic
 
-// GET /api/wishlist/count  → count for header badge
+// GET    /api/wishlist/count                    → header badge
 router.get("/count", getWishlistCount);
 
-// DELETE /api/wishlist/clear → empty wishlist
+// DELETE /api/wishlist/clear                    → empty the wishlist
 router.delete("/clear", clearWishlist);
 
-// POST /api/wishlist/toggle/:productId → add or remove
+// POST   /api/wishlist/toggle/:productId        → add or remove in one call
 router.post("/toggle/:productId", toggleWishlistItem);
 
-// POST /api/wishlist/move-to-cart/:productId
+// POST   /api/wishlist/move-to-cart/:productId  → remove here, add to cart
 router.post("/move-to-cart/:productId", moveWishlistItemToCart);
 
-// DELETE /api/wishlist/item/:productId → remove single
+// DELETE /api/wishlist/item/:productId          → remove one item
 router.delete("/item/:productId", removeWishlistItem);
 
-// GET /api/wishlist        → my full wishlist
+// GET    /api/wishlist                          → my saved products
 router.get("/", getMyWishlist);
 
 module.exports = router;

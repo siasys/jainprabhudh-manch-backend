@@ -1,8 +1,12 @@
-const SuggestionComplaint = require('../../model/SuggestionComplaintModels/SuggestionComplaint');
-const User = require('../../model/UserRegistrationModels/userModel');
-const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
-const { successResponse, errorResponse } = require('../../utils/apiResponse');
-const { createSuggestionNotification, createComplaintNotification, createNotification } = require('../../utils/notificationUtils');
+const SuggestionComplaint = require("../../model/SuggestionComplaintModels/SuggestionComplaint");
+const User = require("../../model/UserRegistrationModels/userModel");
+const HierarchicalSangh = require("../../model/SanghModels/hierarchicalSanghModel");
+const { successResponse, errorResponse } = require("../../utils/apiResponse");
+const {
+  createSuggestionNotification,
+  createComplaintNotification,
+  createNotification,
+} = require("../../utils/notificationUtils");
 
 // Create Suggestion / Complaint
 exports.createSuggestionComplaint = async (req, res) => {
@@ -11,28 +15,28 @@ exports.createSuggestionComplaint = async (req, res) => {
 
     // Basic validation
     if (!type || !subject || !description) {
-      return errorResponse(res, 'All required fields must be provided', 400);
+      return errorResponse(res, "All required fields must be provided", 400);
     }
 
     // ❌ Allow only superadmin
-    if (!recipient || recipient.type !== 'superadmin') {
+    if (!recipient || recipient.type !== "superadmin") {
       return errorResponse(
         res,
-        'Suggestion / Complaint can only be sent to Superadmin',
-        403
+        "Suggestion / Complaint can only be sent to Superadmin",
+        403,
       );
     }
 
     // Find superadmin
-    const superadmin = await User.findOne({ role: 'superadmin' }).select('_id');
+    const superadmin = await User.findOne({ role: "superadmin" }).select("_id");
     if (!superadmin) {
-      return errorResponse(res, 'Superadmin user not found', 404);
+      return errorResponse(res, "Superadmin user not found", 404);
     }
 
     // Force recipient to superadmin
     const finalRecipient = {
-      type: 'superadmin',
-      userId: superadmin._id
+      type: "superadmin",
+      userId: superadmin._id,
     };
 
     // Save submission
@@ -41,44 +45,42 @@ exports.createSuggestionComplaint = async (req, res) => {
       subject,
       description,
       recipient: finalRecipient,
-      submittedBy: req.user._id
+      submittedBy: req.user._id,
     });
 
     await newSubmission.save();
 
     // Sender name
-    const sender = await User.findById(req.user._id, 'firstName lastName');
+    const sender = await User.findById(req.user._id, "firstName lastName");
     const senderName = sender
       ? `${sender.firstName} ${sender.lastName}`
-      : 'A user';
+      : "A user";
 
     // 🔔 Notification only to superadmin
-    if (type === 'suggestion') {
+    if (type === "suggestion") {
       await createSuggestionNotification({
         senderId: req.user._id,
         receiverId: superadmin._id,
         entityId: newSubmission._id,
         subject,
-        senderName
+        senderName,
       });
-    } 
-    else if (type === 'complaint') {
+    } else if (type === "complaint") {
       await createComplaintNotification({
         senderId: req.user._id,
         receiverId: superadmin._id,
         entityId: newSubmission._id,
         subject,
-        senderName
+        senderName,
       });
-    } 
-    else if (type === 'request') {
+    } else if (type === "request") {
       await createNotification({
         senderId: req.user._id,
         receiverId: superadmin._id,
         entityId: newSubmission._id,
         subject,
         senderName,
-        type: 'request'
+        type: "request",
       });
     }
 
@@ -86,12 +88,11 @@ exports.createSuggestionComplaint = async (req, res) => {
       res,
       `Your ${type} has been submitted to Superadmin successfully`,
       { reference: newSubmission._id },
-      201
+      201,
     );
-
   } catch (error) {
-    console.error('Error creating suggestion/complaint:', error);
-    return errorResponse(res, 'Internal Server Error', 500);
+    console.error("Error creating suggestion/complaint:", error);
+    return errorResponse(res, "Internal Server Error", 500);
   }
 };
 
@@ -102,8 +103,8 @@ exports.getAllSuggestionsComplaint = async (req, res) => {
 
     const submissions = await SuggestionComplaint.find()
       .populate(
-        'submittedBy',
-        'firstName lastName fullName profilePicture phoneNumber location jainAadharNumber'
+        "submittedBy",
+        "firstName lastName fullName profilePicture phoneNumber location jainAadharNumber",
       )
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
@@ -113,7 +114,7 @@ exports.getAllSuggestionsComplaint = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'All suggestions/complaints retrieved successfully',
+      message: "All suggestions/complaints retrieved successfully",
       data: {
         submissions,
         pagination: {
@@ -124,10 +125,10 @@ exports.getAllSuggestionsComplaint = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error fetching complaints:', error);
+    console.error("Error fetching complaints:", error);
     return res
       .status(500)
-      .json({ success: false, message: 'Internal Server Error' });
+      .json({ success: false, message: "Internal Server Error" });
   }
 };
 
@@ -136,7 +137,7 @@ exports.getAllSuggestionsComplaints = async (req, res) => {
   try {
     const { type, status, view } = req.query;
     const userId = req.user._id;
-    const isSuperAdmin = req.user.role === 'superadmin';
+    const isSuperAdmin = req.user.role === "superadmin";
 
     let query = {};
 
@@ -152,24 +153,28 @@ exports.getAllSuggestionsComplaints = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const submissions = await SuggestionComplaint.find(query)
-      .populate('submittedBy', 'firstName lastName fullName')
+      .populate("submittedBy", "firstName lastName fullName")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
     const total = await SuggestionComplaint.countDocuments(query);
 
-    return successResponse(res, 'Suggestions/complaints retrieved successfully', {
-      submissions,
-      pagination: {
-        total,
-        page,
-        pages: Math.ceil(total / limit),
+    return successResponse(
+      res,
+      "Suggestions/complaints retrieved successfully",
+      {
+        submissions,
+        pagination: {
+          total,
+          page,
+          pages: Math.ceil(total / limit),
+        },
       },
-    });
+    );
   } catch (error) {
-    console.error('Error retrieving suggestions/complaints:', error);
-    return errorResponse(res, 'Internal Server Error', 500);
+    console.error("Error retrieving suggestions/complaints:", error);
+    return errorResponse(res, "Internal Server Error", 500);
   }
 };
 
@@ -180,10 +185,10 @@ exports.getSuggestionComplaintById = async (req, res) => {
     const userId = req.user._id.toString();
     const isSuperAdmin = req.user.role === "superadmin";
 
- const allowedAdminIds = [
-   "688378b981449c14306611d7",
-   "6883812f016032eba93b4a0b",
- ];
+    const allowedAdminIds = [
+      "688378b981449c14306611d7",
+      "6883812f016032eba93b4a0b",
+    ];
 
     const submission = await SuggestionComplaint.findById(id).populate(
       "submittedBy",
@@ -246,6 +251,21 @@ exports.updateSuggestionComplaint = async (req, res) => {
     if (status) submission.status = status;
     if (response) submission.response = response;
 
+    // 👇 NEW: resolvedAt timestamp logic
+    if (status && status !== oldStatus) {
+      if (status === "resolved") {
+        submission.resolvedAt = new Date(); // resolve hua -> time set
+      } else {
+        submission.resolvedAt = null; // wapas pending/in-review -> clear
+      }
+    }
+
+    // 👇 NEW: respondedBy / respondedAt (already model me hai, use kar lete hain)
+    if (response && response !== "") {
+      submission.respondedBy = req.user._id;
+      submission.respondedAt = new Date();
+    }
+
     await submission.save();
 
     if (status && status !== oldStatus) {
@@ -275,20 +295,24 @@ exports.deleteSuggestionComplaint = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user._id;
-    const isSuperAdmin = req.user.role === 'superadmin';
+    const isSuperAdmin = req.user.role === "superadmin";
     const submission = await SuggestionComplaint.findById(id);
     if (!submission) {
-      return errorResponse(res, 'Suggestion/complaint not found', 404);
+      return errorResponse(res, "Suggestion/complaint not found", 404);
     }
     // Only submitter or superadmin can delete
     const isSubmitter = submission.submittedBy.toString() === userId.toString();
     if (!isSubmitter && !isSuperAdmin) {
-      return errorResponse(res, 'You do not have permission to delete this submission', 403);
+      return errorResponse(
+        res,
+        "You do not have permission to delete this submission",
+        403,
+      );
     }
     await SuggestionComplaint.findByIdAndDelete(id);
-    return successResponse(res, 'Suggestion/complaint deleted successfully');
+    return successResponse(res, "Suggestion/complaint deleted successfully");
   } catch (error) {
-    console.error('Error deleting suggestion/complaint:', error);
-    return errorResponse(res, 'Internal Server Error', 500);
+    console.error("Error deleting suggestion/complaint:", error);
+    return errorResponse(res, "Internal Server Error", 500);
   }
 };

@@ -387,7 +387,7 @@ module.exports = {
     "Agar-Malwa",
     "Alirajpur",
     "Anuppur",
-    "Ashok Nagar",
+    "Ashoknagar",
     "Balaghat",
     "Barwani",
     "Betul",

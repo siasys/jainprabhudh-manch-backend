@@ -7,7 +7,18 @@ const { param } = require('express-validator');
 const router = express.Router();
 const { chatImageUpload } = require("../../middlewares/upload");
 // Apply authentication middleware to all routes
-router.use(authenticate);
+const jwt = require('jsonwebtoken');
+const authOnce = (req, res, next) => {
+  try {
+    const token = (req.headers.authorization || '').split(' ')[1];
+    const decoded = token ? jwt.verify(token, process.env.JWT_SECRET) : null;
+    if (decoded && req.user && String(req.user._id) === String(decoded._id)) {
+      return next(); // user pehle se load hai, DB call skip
+    }
+  } catch (e) {}
+  return authenticate(req, res, next);
+};
+router.use(authOnce);
 
 // Create a new message
 router.post('/create', createMessage);
@@ -29,8 +40,8 @@ router.get('/conversations/:userId',
 router.get('/:messageId', getMessageById);
 router.get('/block-status/:userId/:targetUserId', getBlockStatus);
 
-router.delete('/delete', authenticate, deleteMessageById);
-router.delete('/delete-onlyme', authenticate, deleteMessageOnlyForMe);
+router.delete('/delete', deleteMessageById);
+router.delete('/delete-onlyme', deleteMessageOnlyForMe);
 
 router.patch('/clear/:receiverId', clearAllMessagesBetweenUsers);
 

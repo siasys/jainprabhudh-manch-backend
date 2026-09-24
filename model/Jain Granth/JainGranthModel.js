@@ -48,6 +48,29 @@ const JainGranthSchema = new mongoose.Schema(
         ref: "User",
       },
     ],
+    // ─── BHAJAN (audio) support ─ ADDITIVE only ───
+    // contentType absent ya "pdf" = Swadhyay Granth (purana data)
+    // contentType === "audio"    = Bhajan
+    contentType: {
+      type: String,
+    },
+    singer: {
+      type: String,
+    },
+    bhajanCategory: {
+      type: String,
+    },
+    language: {
+      type: String,
+    },
+    duration: {
+      type: Number,
+      default: 0,
+    },
+    plays: {
+      type: Number,
+      default: 0,
+    },
     uploadedAt: {
       type: Date,
       default: Date.now,

@@ -83,6 +83,17 @@ const jainVyaparSchema = new mongoose.Schema(
       image: { type: String, default: "" }, // S3/CDN URL of certificate
     },
 
+    // ✅ NON-INDIA COUNTRY DOCUMENTS (EIN / ABN / UEN / TRN / VAT ... )
+    // India ke liye upar wale gst / pan / udyam hi use hote rahenge — ye array khali rahega
+    countryDocuments: [
+      {
+        docId: String, // 'ein', 'abn', 'uen', 'trn' ...
+        label: String, // 'EIN Certificate'
+        number: { type: String, default: "" },
+        image: { type: String, default: "" }, // S3/CDN URL
+      },
+    ],
+
     // ✅ Entity Type (Partnership / Pvt Ltd / LLP / etc.)
     entityType: {
       type: String,

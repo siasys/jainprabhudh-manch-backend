@@ -84,9 +84,47 @@ const storySchema = new mongoose.Schema({
           },
         },
       ],
+      isDeleted: { type: Boolean, default: false },
+      deletedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "AdminUser",
+        default: null,
+      },
+      deletedAt: { type: Date, default: null },
+      deleteReason: { type: String, default: "" },
       createdAt: {
         type: Date,
         default: Date.now,
+      },
+      status: {
+        type: String,
+        enum: ["Pending", "Reviewed", "Resolved", "Rejected"],
+        default: "Pending",
+      },
+
+      // ── Admin review fields ──
+      reviewedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "AdminUser",
+        default: null,
+      },
+      reviewedAt: { type: Date, default: null },
+      actionTaken: {
+        type: String,
+        enum: [
+          "none",
+          "ignored",
+          "warned",
+          "content_removed",
+          "user_suspended",
+        ],
+        default: "none",
+      },
+      adminNote: { type: String, default: "" },
+      assignedTo: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "AdminUser",
+        default: null,
       },
     },
   ],

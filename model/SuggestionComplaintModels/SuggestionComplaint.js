@@ -46,7 +46,17 @@ const suggestionComplaintSchema = new mongoose.Schema(
     response: {
       type: String,
       default: ''
-    }
+    },
+
+    // ── Admin panel fields ──
+    respondedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AdminUser',
+      default: null
+    },
+    respondedAt: { type: Date, default: null },
+
+     resolvedAt: { type: Date, default: null }
   },
   { timestamps: true }
 );

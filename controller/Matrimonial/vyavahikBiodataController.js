@@ -1,26 +1,130 @@
-const { VyavahikBiodata } = require('../../model/Matrimonial/VyavahikBiodata');
-const JainAadhar = require('../../model/UserRegistrationModels/jainAadharModel');
-const { convertS3UrlToCDN } = require('../../utils/s3Utils');
+const { VyavahikBiodata } = require("../../model/Matrimonial/VyavahikBiodata");
+const JainAadhar = require("../../model/UserRegistrationModels/jainAadharModel");
+const { convertS3UrlToCDN } = require("../../utils/s3Utils");
 const mongoose = require("mongoose");
+
+/* ══════════════════════════════════════════════════════════════
+   ✅ COUNTRY-WISE ADDRESS (Shravak jaisa, countryConfig fieldName se)
+   ──────────────────────────────────────────────────────────────
+   Frontend bhejta hai: addressFields = JSON
+     India  → { state, district, pincode, regionLabels }
+     Canada → { province, region, postal_code, regionLabels }
+     UK     → { county, town_borough, postcode, regionLabels }
+   Model me ye keys likhi nahi hain, isliye doc.set(..., {strict:false})
+   se save karte hain — model badalne ki zaroorat nahi.
+   ══════════════════════════════════════════════════════════════ */
+const PROTECTED_ADDRESS_KEYS = [
+  "country",
+  "city",
+  "fullAddress",
+  "_id",
+  "__proto__",
+  "constructor",
+  "prototype",
+];
+
+const parseCountryAddress = (raw) => {
+  if (!raw) return {};
+  let obj = raw;
+  if (typeof raw === "string") {
+    try {
+      obj = JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  }
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return {};
+
+  const clean = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (key === "regionLabels" && val && typeof val === "object") {
+      clean.regionLabels = {
+        region1: String(val.region1 || "").slice(0, 60),
+        region2: String(val.region2 || "").slice(0, 60),
+      };
+      continue;
+    }
+    // sirf simple snake_case keys (province, town_borough, postal_code)
+    if (!/^[a-z][a-z0-9_]{1,39}$/.test(key)) continue;
+    if (PROTECTED_ADDRESS_KEYS.includes(key)) continue;
+    if (val === null || val === undefined) continue;
+    if (typeof val === "object") continue;
+    clean[key] = String(val).trim().slice(0, 200);
+  }
+  return clean;
+};
+
+const applyCountryAddress = (doc, fields) => {
+  for (const [key, val] of Object.entries(fields || {})) {
+    doc.set(`addressInfo.${key}`, val, { strict: false });
+  }
+};
+
+/* ══════════════════════════════════════════════════════════════
+   ✅ DUPLICATE BIODATA GUARD — ek user ka sirf ek biodata
+   1) DB check: pehle se biodata hai to naya nahi banega (409)
+   2) In-memory lock: same user ki 2 request ek saath aayi (double tap /
+      retry) to doosri request turant 409 le legi
+   3) catch me E11000 (unique index) bhi 409 me convert hota hai
+   ══════════════════════════════════════════════════════════════ */
+const creatingUsers = new Set();
+
+const sendAlreadyExists = (res, existing) =>
+  res.status(409).json({
+    success: false,
+    alreadyExists: true,
+    message: "Aapka biodata pehle se bana hua hai",
+    data: existing || null,
+  });
 
 // Create API
 const createBiodata = async (req, res) => {
+  const lockKey = String(req.user?._id || req.body?.userId || "");
+  let lockTaken = false;
   try {
+    if (!lockKey) {
+      return res.status(401).json({
+        success: false,
+        message: "User not identified. Please login again.",
+      });
+    }
+    if (creatingUsers.has(lockKey)) {
+      return sendAlreadyExists(res, null);
+    }
+    creatingUsers.add(lockKey);
+    lockTaken = true;
+
+    const existingBiodata = await VyavahikBiodata.findOne({ userId: lockKey });
+    if (existingBiodata) {
+      return sendAlreadyExists(res, existingBiodata);
+    }
+
     // Extract S3 uploaded URLs
     const passportPhotoS3 = req.files?.passportPhoto?.[0]?.location || null;
     const fullPhotoS3 = req.files?.fullPhoto?.[0]?.location || null;
     const familyPhotoS3 = req.files?.familyPhoto?.[0]?.location || null;
-    const healthCertificateS3 = req.files?.healthCertificate?.[0]?.location || null;
-    const educationCertificateS3 = req.files?.educationCertificate?.[0]?.location || null;
-    const divorceCertificateS3 = req.files?.divorceCertificate?.[0]?.location || null;
+    const healthCertificateS3 =
+      req.files?.healthCertificate?.[0]?.location || null;
+    const educationCertificateS3 =
+      req.files?.educationCertificate?.[0]?.location || null;
+    const divorceCertificateS3 =
+      req.files?.divorceCertificate?.[0]?.location || null;
 
     // Convert S3 URLs → CDN
-    const passportPhoto = passportPhotoS3 ? convertS3UrlToCDN(passportPhotoS3) : null;
+    const passportPhoto = passportPhotoS3
+      ? convertS3UrlToCDN(passportPhotoS3)
+      : null;
     const fullPhoto = fullPhotoS3 ? convertS3UrlToCDN(fullPhotoS3) : null;
     const familyPhoto = familyPhotoS3 ? convertS3UrlToCDN(familyPhotoS3) : null;
-    const healthCertificate = healthCertificateS3 ? convertS3UrlToCDN(healthCertificateS3) : null;
-    const educationCertificate = educationCertificateS3 ? convertS3UrlToCDN(educationCertificateS3) : null;
-    const divorceCertificate = divorceCertificateS3 ? convertS3UrlToCDN(divorceCertificateS3) : null;
+    const healthCertificate = healthCertificateS3
+      ? convertS3UrlToCDN(healthCertificateS3)
+      : null;
+    const educationCertificate = educationCertificateS3
+      ? convertS3UrlToCDN(educationCertificateS3)
+      : null;
+    const divorceCertificate = divorceCertificateS3
+      ? convertS3UrlToCDN(divorceCertificateS3)
+      : null;
 
     // ============= DOB & AGE PROCESSING (BACKEND FIX) =============
     let processedDob = null;
@@ -29,7 +133,6 @@ const createBiodata = async (req, res) => {
     if (req.body.dob) {
       // Parse DOB (Expected format: YYYY-MM-DD)
       const dobDate = new Date(req.body.dob);
-      
       // Check if valid date
       if (!isNaN(dobDate.getTime())) {
         processedDob = dobDate;
@@ -40,7 +143,10 @@ const createBiodata = async (req, res) => {
         const monthDiff = today.getMonth() - dobDate.getMonth();
 
         // Adjust age if birthday hasn't occurred this year
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) {
+        if (
+          monthDiff < 0 ||
+          (monthDiff === 0 && today.getDate() < dobDate.getDate())
+        ) {
           age--;
         }
 
@@ -82,8 +188,9 @@ const createBiodata = async (req, res) => {
     // ============= PREPARE DATA FOR SAVING =============
     const biodataData = {
       ...req.body,
-      dob: processedDob,           // ✅ Override with backend-processed DOB
-      age: processedAge,            // ✅ Override with backend-calculated Age
+      userId: lockKey, // ✅ duplicate check isi userId par hota hai
+      dob: processedDob, // ✅ Override with backend-processed DOB
+      age: processedAge, // ✅ Override with backend-calculated Age
       passportPhoto,
       fullPhoto,
       familyPhoto,
@@ -101,14 +208,21 @@ const createBiodata = async (req, res) => {
       message: "Biodata created successfully!",
       data: biodata,
     });
-
   } catch (error) {
+    if (error?.code === 11000) {
+      const existing = await VyavahikBiodata.findOne({ userId: lockKey }).catch(
+        () => null,
+      );
+      return sendAlreadyExists(res, existing);
+    }
     console.error("❌ Biodata Creation Error:", error);
     res.status(500).json({
       success: false,
       message: "Error creating biodata",
       error: error.message,
     });
+  } finally {
+    if (lockTaken) creatingUsers.delete(lockKey);
   }
 };
 // // ─── Helper: safe CDN convert ────────────────────────────────────────────────
@@ -124,7 +238,7 @@ const updateBiodata = async (req, res) => {
     const updatedBiodata = await VyavahikBiodata.findByIdAndUpdate(
       id,
       updateData,
-      { new: true }
+      { new: true },
     );
 
     if (!updatedBiodata) {
@@ -139,7 +253,6 @@ const updateBiodata = async (req, res) => {
       message: "Biodata details updated successfully!",
       data: updatedBiodata,
     });
-
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -159,9 +272,13 @@ const updateBiodataImages = async (req, res) => {
     const familyPhotoS3 = req.files?.familyPhoto?.[0]?.location || null;
 
     // Convert S3 URL → CDN URL
-    const passportPhoto = passportPhotoS3 ? convertS3UrlToCDN(passportPhotoS3) : undefined;
+    const passportPhoto = passportPhotoS3
+      ? convertS3UrlToCDN(passportPhotoS3)
+      : undefined;
     const fullPhoto = fullPhotoS3 ? convertS3UrlToCDN(fullPhotoS3) : undefined;
-    const familyPhoto = familyPhotoS3 ? convertS3UrlToCDN(familyPhotoS3) : undefined;
+    const familyPhoto = familyPhotoS3
+      ? convertS3UrlToCDN(familyPhotoS3)
+      : undefined;
 
     // Prepare update object
     let updateData = {};
@@ -182,7 +299,7 @@ const updateBiodataImages = async (req, res) => {
     const updatedBiodata = await VyavahikBiodata.findByIdAndUpdate(
       id,
       updateData,
-      { new: true }
+      { new: true },
     );
 
     if (!updatedBiodata) {
@@ -197,7 +314,6 @@ const updateBiodataImages = async (req, res) => {
       message: "Biodata images updated successfully!",
       data: updatedBiodata,
     });
-
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -206,7 +322,6 @@ const updateBiodataImages = async (req, res) => {
     });
   }
 };
-
 
 // Delete API
 const deleteBiodata = async (req, res) => {
@@ -226,7 +341,6 @@ const deleteBiodata = async (req, res) => {
       success: true,
       message: "Biodata deleted successfully!",
     });
-
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -236,7 +350,6 @@ const deleteBiodata = async (req, res) => {
   }
 };
 
-
 // Get Single Biodata API
 const getBiodata = async (req, res) => {
   try {
@@ -245,7 +358,7 @@ const getBiodata = async (req, res) => {
     if (!biodata) {
       return res.status(404).json({
         success: false,
-        message: 'Biodata not found',
+        message: "Biodata not found",
       });
     }
     res.status(200).json({
@@ -255,7 +368,7 @@ const getBiodata = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error fetching biodata',
+      message: "Error fetching biodata",
       error: error.message,
     });
   }
@@ -266,38 +379,40 @@ const getAllBiodatas = async (req, res) => {
   try {
     let filter = {};
     // Search Parameters
-    const { age, name, gotra, panth, mulJain, upJati, dobPlace} = req.query;
+    const { age, name, gotra, panth, mulJain, upJati, dobPlace } = req.query;
     if (name) {
-      filter.name = { $regex: name, $options: 'i' };
+      filter.name = { $regex: name, $options: "i" };
     }
     if (age) {
       filter.age = age;
     }
     if (gotra) {
-      filter.gotra = { $regex: gotra, $options: 'i' };
+      filter.gotra = { $regex: gotra, $options: "i" };
     }
     if (panth) {
-      filter.panth = { $regex: panth, $options: 'i' };
+      filter.panth = { $regex: panth, $options: "i" };
     }
     if (mulJain) {
-      filter.mulJain = { $regex: mulJain, $options: 'i' };
+      filter.mulJain = { $regex: mulJain, $options: "i" };
     }
     if (upJati) {
-      filter.upJati = { $regex: upJati, $options: 'i' };
+      filter.upJati = { $regex: upJati, $options: "i" };
     }
     if (dobPlace) {
-      filter.dobPlace = { $regex: dobPlace, $options: 'i' };
+      filter.dobPlace = { $regex: dobPlace, $options: "i" };
     }
-    const biodatas = await VyavahikBiodata.find(filter)
-      .populate('userId', 'firstName lastName fullName profilePicture');
-      res.status(200).json({
-        success: true,
-        data: biodatas,
-      });
+    const biodatas = await VyavahikBiodata.find(filter).populate(
+      "userId",
+      "firstName lastName fullName profilePicture",
+    );
+    res.status(200).json({
+      success: true,
+      data: biodatas,
+    });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error fetching biodatas',
+      message: "Error fetching biodatas",
       error: error.message,
     });
   }
@@ -310,21 +425,21 @@ const checkUserBiodata = async (req, res) => {
     if (!biodata) {
       return res.status(200).json({
         success: true,
-        hasBiodata: false
+        hasBiodata: false,
       });
     }
 
     res.status(200).json({
       success: true,
       hasBiodata: true,
-      isPaid: biodata.paymentStatus === 'paid',
+      isPaid: biodata.paymentStatus === "paid",
       isVisible: biodata.isVisible,
-      biodataId: biodata._id
+      biodataId: biodata._id,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error checking biodata status',
+      message: "Error checking biodata status",
       error: error.message,
     });
   }
@@ -334,13 +449,15 @@ const getBiodataByUserId = async (req, res) => {
     const { userId } = req.params;
 
     // Find biodata using userId
-    const biodata = await VyavahikBiodata.findOne({ userId })
-      .populate('userId', 'firstName lastName fullName profilePicture');
+    const biodata = await VyavahikBiodata.findOne({ userId }).populate(
+      "userId",
+      "firstName lastName fullName profilePicture",
+    );
 
     if (!biodata) {
       return res.status(404).json({
         success: false,
-        message: 'Biodata not found for this user',
+        message: "Biodata not found for this user",
       });
     }
 
@@ -351,7 +468,7 @@ const getBiodataByUserId = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error fetching biodata by userId',
+      message: "Error fetching biodata by userId",
       error: error.message,
     });
   }
@@ -364,8 +481,29 @@ const toCDN = (files, key) => {
 
 // ─── CREATE ──────────────────────────────────────────────────────────────────
 const createBiodatas = async (req, res) => {
+  const lockKey = String(req.user?._id || "");
+  let lockTaken = false;
   try {
     const { body, files } = req;
+
+    // ✅ Duplicate guard — ek user ka sirf ek biodata
+    if (!lockKey) {
+      return res.status(401).json({
+        success: false,
+        message: "User not identified. Please login again.",
+      });
+    }
+    if (creatingUsers.has(lockKey)) {
+      // same user ki pehli request abhi chal rahi hai (double tap)
+      return sendAlreadyExists(res, null);
+    }
+    creatingUsers.add(lockKey);
+    lockTaken = true;
+
+    const existingBiodata = await VyavahikBiodata.findOne({ userId: lockKey });
+    if (existingBiodata) {
+      return sendAlreadyExists(res, existingBiodata);
+    }
 
     // ── File uploads → CDN URLs ──────────────────────────────────
     const educationCertificateUrl = toCDN(files, "educationCertificate");
@@ -559,7 +697,7 @@ const createBiodatas = async (req, res) => {
     };
     // ── Assemble Document (schema ke exact fields) ────────────────
     const biodataData = {
-      userId: req.user?._id,
+      userId: lockKey,
 
       // profile
       profile: body.profile,
@@ -601,6 +739,10 @@ const createBiodatas = async (req, res) => {
     };
 
     const biodata = new VyavahikBiodata(biodataData);
+
+    // ✅ Country-wise address keys (province / postal_code ...) bhi save ho
+    applyCountryAddress(biodata, parseCountryAddress(body.addressFields));
+
     await biodata.save();
 
     res.status(201).json({
@@ -609,15 +751,22 @@ const createBiodatas = async (req, res) => {
       data: biodata,
     });
   } catch (error) {
+    if (error?.code === 11000) {
+      const existing = await VyavahikBiodata.findOne({ userId: lockKey }).catch(
+        () => null,
+      );
+      return sendAlreadyExists(res, existing);
+    }
     console.error("❌ Biodata Creation Error:", error);
     res.status(500).json({
       success: false,
       message: "Error creating biodata",
       error: error.message,
     });
+  } finally {
+    if (lockTaken) creatingUsers.delete(lockKey);
   }
 };
-
 
 // ─── UPDATE / EDIT ───────────────────────────────────────────────────────────
 const editBiodata = async (req, res) => {
@@ -866,9 +1015,19 @@ const editBiodata = async (req, res) => {
       subCaste: body.subCaste ?? biodata.communityInfo?.subCaste,
       mamaGotra: body.mamaGotra ?? biodata.communityInfo?.mamaGotra,
       manglik: body.manglik ?? biodata.communityInfo?.manglik,
-      motherTongue:
-        body.motherTongue ?? biodata.communityInfo?.motherTongue,
+      motherTongue: body.motherTongue ?? biodata.communityInfo?.motherTongue,
     };
+
+    // ✅ Pehle ki country-wise keys (province / postal_code ...) yaad rakho —
+    // neeche naya object assign hote hi ye mit jaati thi
+    const BASE_ADDRESS_KEYS = [
+      "country",
+      "state",
+      "district",
+      "city",
+      "fullAddress",
+    ];
+    const prevAddress = biodata.toObject().addressInfo || {};
 
     biodata.addressInfo = {
       country: body.country ?? biodata.addressInfo?.country ?? "India",
@@ -878,53 +1037,54 @@ const editBiodata = async (req, res) => {
       fullAddress: body.fullAddress ?? biodata.addressInfo?.fullAddress,
     };
 
+    // purani extra keys wapas
+    applyCountryAddress(
+      biodata,
+      Object.fromEntries(
+        Object.entries(prevAddress).filter(
+          ([k]) => !BASE_ADDRESS_KEYS.includes(k),
+        ),
+      ),
+    );
+    // naye bheje gaye country-wise fields (agar edit me address badla)
+    applyCountryAddress(biodata, parseCountryAddress(body.addressFields));
+
     biodata.contactInfo = {
       mobileNumber:
         body.contactMobile ??
         body.mobileNumber ??
         biodata.contactInfo?.mobileNumber,
 
-      contactPerson:
-        body.contactPerson ?? biodata.contactInfo?.contactPerson,
+      contactPerson: body.contactPerson ?? biodata.contactInfo?.contactPerson,
 
       email: body.email ?? biodata.contactInfo?.email,
 
       addNumber: {
-        name:
-          body.addNumberName ?? biodata.contactInfo?.addNumber?.name,
-        number:
-          body.addNumber ?? biodata.contactInfo?.addNumber?.number,
+        name: body.addNumberName ?? biodata.contactInfo?.addNumber?.name,
+        number: body.addNumber ?? biodata.contactInfo?.addNumber?.number,
         relation:
-          body.addNumberRelation ??
-          biodata.contactInfo?.addNumber?.relation,
+          body.addNumberRelation ?? biodata.contactInfo?.addNumber?.relation,
         address:
-          body.addNumberAddress ??
-          biodata.contactInfo?.addNumber?.address,
+          body.addNumberAddress ?? biodata.contactInfo?.addNumber?.address,
       },
     };
 
     biodata.partnerPreference = {
       preferredAgeFrom:
-        body.preferredAgeFrom ??
-        biodata.partnerPreference?.preferredAgeFrom,
+        body.preferredAgeFrom ?? biodata.partnerPreference?.preferredAgeFrom,
 
       preferredAgeTo:
-        body.preferredAgeTo ??
-        biodata.partnerPreference?.preferredAgeTo,
+        body.preferredAgeTo ?? biodata.partnerPreference?.preferredAgeTo,
 
-      heightFrom:
-        body.heightFrom ?? biodata.partnerPreference?.heightFrom,
+      heightFrom: body.heightFrom ?? biodata.partnerPreference?.heightFrom,
 
-      heightTo:
-        body.heightTo ?? biodata.partnerPreference?.heightTo,
+      heightTo: body.heightTo ?? biodata.partnerPreference?.heightTo,
 
       incomePreference:
-        body.incomePreference ??
-        biodata.partnerPreference?.incomePreference,
+        body.incomePreference ?? biodata.partnerPreference?.incomePreference,
 
       maritalStatus:
-        body.partnerMaritalStatus ??
-        biodata.partnerPreference?.maritalStatus,
+        body.partnerMaritalStatus ?? biodata.partnerPreference?.maritalStatus,
 
       educationPreference:
         body.educationPreference ??
@@ -979,26 +1139,32 @@ const getAllBiodata = async (req, res) => {
     const filter = { isVisible: true };
 
     // ── Filters ──────────────────────────────────────────────────
-    if (gender)        filter.gender = gender;
-    if (city)          filter["addressInfo.city"]         = new RegExp(city, "i");
-    if (state)         filter["addressInfo.state"]        = new RegExp(state, "i");
-    if (mulJain)       filter["communityInfo.mulJain"]    = new RegExp(mulJain, "i");
-    if (panth)         filter["communityInfo.panth"]      = new RegExp(panth, "i");
-    if (caste)         filter["communityInfo.caste"]      = new RegExp(caste, "i");
-    if (maritalStatus) filter["marriageInfo.marriageType"]= maritalStatus;
+    if (gender) filter.gender = gender;
+    if (city) filter["addressInfo.city"] = new RegExp(city, "i");
+    if (state) filter["addressInfo.state"] = new RegExp(state, "i");
+    if (mulJain) filter["communityInfo.mulJain"] = new RegExp(mulJain, "i");
+    if (panth) filter["communityInfo.panth"] = new RegExp(panth, "i");
+    if (caste) filter["communityInfo.caste"] = new RegExp(caste, "i");
+    if (maritalStatus) filter["marriageInfo.marriageType"] = maritalStatus;
 
     // age filter via dob range
     if (ageFrom || ageTo) {
       filter.dob = {};
-      if (ageTo)   filter.dob.$gte = new Date(new Date().setFullYear(new Date().getFullYear() - ageTo));
-      if (ageFrom) filter.dob.$lte = new Date(new Date().setFullYear(new Date().getFullYear() - ageFrom));
+      if (ageTo)
+        filter.dob.$gte = new Date(
+          new Date().setFullYear(new Date().getFullYear() - ageTo),
+        );
+      if (ageFrom)
+        filter.dob.$lte = new Date(
+          new Date().setFullYear(new Date().getFullYear() - ageFrom),
+        );
     }
 
     // height filter
     if (heightFrom || heightTo) {
       filter.height = {};
       if (heightFrom) filter.height.$gte = Number(heightFrom);
-      if (heightTo)   filter.height.$lte = Number(heightTo);
+      if (heightTo) filter.height.$lte = Number(heightTo);
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -1112,16 +1278,16 @@ const likeProfile = async (req, res) => {
       });
     }
     // target exist karta he?
-const targetBiodata = await VyavahikBiodata.findOne({
-  $or: [{ _id: targetId }, { userId: targetId }],
-});
+    const targetBiodata = await VyavahikBiodata.findOne({
+      $or: [{ _id: targetId }, { userId: targetId }],
+    });
 
-if (!targetBiodata) {
-  return res.status(404).json({
-    success: false,
-    message: "Target profile not found",
-  });
-}
+    if (!targetBiodata) {
+      return res.status(404).json({
+        success: false,
+        message: "Target profile not found",
+      });
+    }
 
     // apne aap ko like nahi kar sakte
     if (myBiodata._id.toString() === targetId) {
@@ -1132,7 +1298,7 @@ if (!targetBiodata) {
     }
     // pehle se liked he?
     const alreadyLiked = myBiodata.likedProfiles.some(
-      (id) => id.toString() === targetId
+      (id) => id.toString() === targetId,
     );
     if (alreadyLiked) {
       return res.status(400).json({
@@ -1175,7 +1341,7 @@ const unlikeProfile = async (req, res) => {
 
     // liked he?
     const likedIndex = myBiodata.likedProfiles.findIndex(
-      (id) => id.toString() === targetId
+      (id) => id.toString() === targetId,
     );
     if (likedIndex === -1) {
       return res.status(400).json({
@@ -1210,7 +1376,7 @@ const getLikedProfiles = async (req, res) => {
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
       .populate(
         "likedProfiles",
-        "name gender dob height complexion addressInfo uploadedPhotos communityInfo marriageInfo"
+        "name gender dob height complexion addressInfo uploadedPhotos communityInfo marriageInfo",
       )
       .lean();
 
@@ -1236,7 +1402,7 @@ const getLikedProfiles = async (req, res) => {
     });
   }
 };
- // ─── SEND INTEREST ────────────────────────────────────────────────────────────
+// ─── SEND INTEREST ────────────────────────────────────────────────────────────
 // POST /biodata/interest/:targetId
 const sendInterest = async (req, res) => {
   try {
@@ -1286,12 +1452,14 @@ const sendInterest = async (req, res) => {
       ? myBiodata.interestsSent
       : [];
 
-    targetBiodata.interestsReceived = Array.isArray(targetBiodata.interestsReceived)
+    targetBiodata.interestsReceived = Array.isArray(
+      targetBiodata.interestsReceived,
+    )
       ? targetBiodata.interestsReceived
       : [];
 
     const alreadySent = myBiodata.interestsSent.some(
-      (i) => i?.profileId?.toString() === targetProfileId
+      (i) => i?.profileId?.toString() === targetProfileId,
     );
 
     if (alreadySent) {
@@ -1340,25 +1508,35 @@ const respondToInterest = async (req, res) => {
     const { status } = req.body;
 
     if (!["accepted", "rejected"].includes(status)) {
-      return res.status(400).json({ success: false, message: "Status must be 'accepted' or 'rejected'" });
+      return res.status(400).json({
+        success: false,
+        message: "Status must be 'accepted' or 'rejected'",
+      });
     }
 
     // apna biodata (receiver)
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id });
     if (!myBiodata) {
-      return res.status(404).json({ success: false, message: "Your biodata not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Your biodata not found" });
     }
 
     // apne received mein entry dhundo
     const receivedEntry = myBiodata.interestsReceived.find(
-      (i) => i.profileId.toString() === senderBiodataId
+      (i) => i.profileId.toString() === senderBiodataId,
     );
     if (!receivedEntry) {
-      return res.status(404).json({ success: false, message: "Interest request not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Interest request not found" });
     }
 
     if (receivedEntry.status !== "pending") {
-      return res.status(400).json({ success: false, message: `Interest already ${receivedEntry.status}` });
+      return res.status(400).json({
+        success: false,
+        message: `Interest already ${receivedEntry.status}`,
+      });
     }
 
     // apna received update
@@ -1368,7 +1546,7 @@ const respondToInterest = async (req, res) => {
     const senderBiodata = await VyavahikBiodata.findById(senderBiodataId);
     if (senderBiodata) {
       const sentEntry = senderBiodata.interestsSent.find(
-        (i) => i.profileId.toString() === myBiodata._id.toString()
+        (i) => i.profileId.toString() === myBiodata._id.toString(),
       );
       if (sentEntry) sentEntry.status = status;
       await senderBiodata.save();
@@ -1382,7 +1560,11 @@ const respondToInterest = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Respond Interest Error:", error);
-    res.status(500).json({ success: false, message: "Error responding to interest", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Error responding to interest",
+      error: error.message,
+    });
   }
 };
 // ─── GET MY SENT INTERESTS ────────────────────────────────────────────────────
@@ -1392,7 +1574,7 @@ const getSentInterests = async (req, res) => {
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
       .populate(
         "interestsSent.profileId",
-        "name gender dob uploadedPhotos addressInfo"
+        "name gender dob uploadedPhotos addressInfo",
       )
       .lean();
 
@@ -1434,7 +1616,7 @@ const getReceivedInterests = async (req, res) => {
     const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
       .populate(
         "interestsReceived.profileId",
-        "name gender dob uploadedPhotos addressInfo"
+        "name gender dob uploadedPhotos addressInfo",
       )
       .lean();
 

@@ -6,7 +6,7 @@ const meetingSchema = new mongoose.Schema({
   date: { type: Date },
   attendanceCount: { type: String },
   description: { type: String },
-  images: [{ type: String }], // CDN URLs
+  images: [{ type: String }],
 });
 
 const projectSchema = new mongoose.Schema({
@@ -28,8 +28,16 @@ const visitSchema = new mongoose.Schema({
     default: null,
   },
   summary: { type: String },
-  pdf: { type: String }, // CDN URL
-  images: [{ type: String }], // CDN URLs
+  pdf: { type: String },
+  images: [{ type: String }],
+});
+
+// ── NEW (online training): sangh members ne kaunsi training complete ki ──
+const onlineTrainingSchema = new mongoose.Schema({
+  trainingId: { type: mongoose.Schema.Types.ObjectId, ref: "TrainingModule" },
+  trainingName: { type: String },
+  completedCount: { type: Number, default: 0 },
+  memberNames: [{ type: String }],
 });
 
 const reportingSchema = new mongoose.Schema(
@@ -60,6 +68,9 @@ const reportingSchema = new mongoose.Schema(
     panchActivityCount: { type: String },
     membershipFeesCount: { type: String },
     employmentCount: { type: String },
+    // ── NEW (score module): additive fields ──
+    donationAmount: { type: String },
+    trainingCount: { type: String },
     reportMonth: { type: Number },
     reportYear: { type: Number },
     meetings: [meetingSchema],
@@ -72,6 +83,11 @@ const reportingSchema = new mongoose.Schema(
     visits: [visitSchema],
     trainingHeld: { type: Boolean, default: null },
     trainingInput: { type: String },
+    // ── NEW: offline training images (2) ──
+    trainingImages: [{ type: String }],
+    // ── NEW (online training): auto-fetched from TrainingModule participants ──
+    onlineTrainings: [onlineTrainingSchema],
+    onlineTrainingTotal: { type: Number, default: 0 },
     selectedOption: { type: String },
     fieldBy: { type: String },
     status: {

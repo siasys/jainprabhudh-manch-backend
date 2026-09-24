@@ -30,6 +30,26 @@ const notificationSchema = new mongoose.Schema(
         "collaborator_invite",
         "collaborator_accepted",
         "collaborator_rejected",
+        // NEW: job application
+        "job_application",
+        "job_posted",
+        // NEW: freelancer interest
+        "freelancer_interest",
+        "jain_aadhar_approved",
+        "tirth_approved",
+        "tirth_rejected",
+        "tirth_complaint",
+        "tirth_complaint_reply",
+        "tirth_puja_booking",
+        "tirth_puja_status",
+        "tirth_donation_settled",
+        "tirth_food_order",
+        "sangh_office_bearer",
+        // NEW: marketplace orders
+        "order_placed",
+        "order_status",
+        // NEW: sadhu ne naya niyam post kiya
+        "sadhu_niyam",
       ],
       required: true,
     },
@@ -46,6 +66,46 @@ const notificationSchema = new mongoose.Schema(
     },
     mediaId: {
       type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+    // NEW: job application deep-link
+    jobId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Rojgar",
+      default: null,
+    },
+    // NEW: freelancer interest deep-link
+    freelancerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Freelancer",
+      default: null,
+    },
+    // NEW: marketplace order deep-link
+    orderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Order",
+      default: null,
+    },
+    // NEW: which store the order belongs to
+    vyaparId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "JainVyapar",
+      default: null,
+    },
+    // NEW: sadhu niyam deep-link
+    sadhuId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Sadhu",
+      default: null,
+    },
+    niyamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SadhuNiyam",
+      default: null,
+    },
+    tirthId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tirth",
       default: null,
     },
     message: { type: String, required: true },
@@ -116,6 +176,12 @@ notificationSchema.post("save", async function (doc) {
       collaborator_invite: "invited you to collaborate on a post",
       collaborator_accepted: "accepted your collaboration invite",
       collaborator_rejected: "declined your collaboration invite",
+      // NEW
+      job_application: "applied to your job",
+      job_posted: "posted a new job",
+      freelancer_interest: "is interested in your service",
+      // NEW
+      sadhu_niyam: "posted a new niyam",
     };
     const body =
       doc.message ||
@@ -129,6 +195,10 @@ notificationSchema.post("save", async function (doc) {
         notifId: doc._id ? doc._id.toString() : "",
         postId: doc.postId ? doc.postId.toString() : "",
         storyId: doc.storyId ? doc.storyId.toString() : "",
+        jobId: doc.jobId ? doc.jobId.toString() : "",
+        freelancerId: doc.freelancerId ? doc.freelancerId.toString() : "",
+        sadhuId: doc.sadhuId ? doc.sadhuId.toString() : "",
+        niyamId: doc.niyamId ? doc.niyamId.toString() : "",
         senderId: doc.senderId ? doc.senderId.toString() : "",
       },
     });

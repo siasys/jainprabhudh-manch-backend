@@ -1,44 +1,50 @@
+// routes/MarketplaceRoutes/productRoutes.js
+// ─────────────────────────────────────────────────────────────
+// Mounted from vyaparRoutes.js via `router.use("/products", productRoutes)`,
+// so every path here is relative to `/products`.
+//
+// Uploads reuse the existing middlewares/upload.js chain — nothing in that
+// file was changed. `upload.productUpload` is already defined there as:
+//     upload.fields([{ name: "productPhotos", maxCount: 6 }])
+//       → compressFiles → uploadToS3
+// and getS3Folder already routes "productPhotos" to "products/photos/".
+// ─────────────────────────────────────────────────────────────
 const express = require("express");
 const router = express.Router();
+
 const { authMiddleware } = require("../../middlewares/authMiddlewares");
 const upload = require("../../middlewares/upload");
-const { getMyProducts, getProductsByBusiness, getAllProducts, uploadProduct, getProductById, updateProduct, deleteProduct } = require("../../controller/VyaparControllers/Productcontroller");
 
+const {
+  getMarketplaceProducts,
+  getSellerProducts,
+  getProductById,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  deleteProductPhoto,
+} = require("../../controller/VyaparControllers/Productcontroller");
 
-// ─── Protected — auth required for all product routes ───
 router.use(authMiddleware);
 
-// ─── LIST endpoints ─────────────────────────────────────────
-// ⚠️ ORDER MATTERS — specific routes BEFORE dynamic /:productId
+// `/seller/:vyaparId` must come BEFORE `/:id`, otherwise "seller"
+// gets read as a product id.
+router.get("/seller/:vyaparId", getSellerProducts);
 
-// Seller's own products
-// GET /api/vyapar/products/my/list
-router.get("/my/list", getMyProducts);
+router.get("/", getMarketplaceProducts);
+router.get("/:id", getProductById);
 
-// Products of a specific business
-// GET /api/vyapar/products/business/:vyaparId
-router.get("/business/:vyaparId", getProductsByBusiness);
+// Field name must stay "productPhotos" — that is what UploadProduct.jsx
+// sends and what upload.js is configured for. Spreading the array runs
+// multer → compressFiles → uploadToS3 in order, so by the time the
+// controller runs, every file already carries `file.location` (S3 URL).
+router.post("/", ...upload.productUpload, createProduct);
+router.patch("/:id", ...upload.productUpload, updateProduct);
 
-// All products (marketplace with filters + pagination)
-// GET /api/vyapar/products
-router.get("/", getAllProducts);
+router.delete("/:id/photo/:index", deleteProductPhoto);
+router.delete("/:id", deleteProduct);
 
-// ─── CRUD ────────────────────────────────────────────────────
-
-// Create — seller uploads a new product
-// POST /api/vyapar/products/upload
-router.post("/upload", upload.productUpload, uploadProduct);
-
-// Read single — product details screen
-// GET /api/vyapar/products/:productId
-router.get("/:productId", getProductById);
-
-// Update — edit product (owner only, supports adding/replacing photos)
-// PUT /api/vyapar/products/:productId
-router.put("/:productId", upload.productUpload, updateProduct);
-
-// Delete — soft delete (owner only)
-// DELETE /api/vyapar/products/:productId
-router.delete("/:productId", deleteProduct);
+// Turns "Unexpected field" / "File too large" into a clean 400
+router.use(upload.handleMulterError);
 
 module.exports = router;

@@ -3,7 +3,7 @@ const { createReport, getReportById, getAllReports, updateReport, deleteReport }
 const router = express.Router();
 
 // POST: Create a new report
-router.post('/',createReport);
+router.post('/', createReport);
 
 // GET: Get a single report by ID
 router.get('/:id', getReportById);

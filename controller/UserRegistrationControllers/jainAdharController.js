@@ -1,16 +1,24 @@
-const JainAadhar = require('../../model/UserRegistrationModels/jainAadharModel');
-const User = require('../../model/UserRegistrationModels/userModel');
-const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
-const asyncHandler = require('express-async-handler');
-const { validationResult } = require('express-validator');
-const { jainAadharValidation } = require('../../validators/validations');
-const { successResponse, errorResponse } = require('../../utils/apiResponse');
-const { convertS3UrlToCDN } = require('../../utils/s3Utils');
-const { sendVerificationEmail } = require('../../services/nodemailerEmailService');
-
-const EmailVerification = require('../../model/UserRegistrationModels/EmailVerification');
-const { sendVerificationSms } = require('../../services/smsHelper');
-const SharavakOtpVerification = require('../../model/UserRegistrationModels/SharavakOtpVerification');
+const JainAadhar = require("../../model/UserRegistrationModels/jainAadharModel");
+const User = require("../../model/UserRegistrationModels/userModel");
+const HierarchicalSangh = require("../../model/SanghModels/hierarchicalSanghModel");
+const asyncHandler = require("express-async-handler");
+const { validationResult } = require("express-validator");
+const { jainAadharValidation } = require("../../validators/validations");
+const { successResponse, errorResponse } = require("../../utils/apiResponse");
+const { convertS3UrlToCDN } = require("../../utils/s3Utils");
+const {
+  sendVerificationEmail,
+} = require("../../services/nodemailerEmailService");
+const EmailVerification = require("../../model/UserRegistrationModels/EmailVerification");
+const { sendVerificationSms } = require("../../services/smsHelper");
+const SharavakOtpVerification = require("../../model/UserRegistrationModels/SharavakOtpVerification");
+const { sendVerificationWhatsApp } = require("../../services/Whatsapphelper");
+const {
+  processLocation,
+  validateLocation,
+  processUserLocation,
+} = require("../../helpers/locationHelper");
+const { getCountryConfig } = require("../../config/countryConfig");
 
 // Check if user has existing application
 // const checkExistingApplication = asyncHandler(async (req, res, next) => {
@@ -22,15 +30,15 @@ const SharavakOtpVerification = require('../../model/UserRegistrationModels/Shar
 // });
 // Determine application level based on location
 const determineApplicationLevel = (location) => {
-    if (location.area) return 'area';
-    if (location.city) return 'city';
-    if (location.district) return 'district';
-    if (location.state) return 'state';
-    return 'superadmin';
+  if (location.area) return "area";
+  if (location.city) return "city";
+  if (location.district) return "district";
+  if (location.state) return "state";
+  return "superadmin";
 };
 // Utility: escape regex to build exact case-insensitive matches
-const escapeRegex = (str = '') => {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegex = (str = "") => {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 };
 
 // Create Jain Aadhar application with level-based routing
@@ -472,9 +480,7 @@ const createJainAadhar = asyncHandler(async (req, res) => {
       )
         return false;
       return sangh.officeBearers.some(
-        (ob) =>
-          ob.role === "president" &&
-          ob.userId != null,
+        (ob) => ob.role === "president" && ob.userId != null,
       );
     };
 
@@ -677,6 +683,301 @@ const createJainAadhar = asyncHandler(async (req, res) => {
 });
 
 // New Logic
+// const createJainShravak = asyncHandler(async (req, res) => {
+//   try {
+//     const number = req.body.contactDetails?.number;
+//     const enteredOtp = req.body.otp;
+
+//     if (!number || !enteredOtp) {
+//       return errorResponse(
+//         res,
+//         "Mobile number and OTP are required for verification",
+//         400,
+//       );
+//     }
+
+//     const otpEntry = await SharavakOtpVerification.findOne({
+//       phoneNumber: number,
+//     });
+
+//     if (!otpEntry)
+//       return errorResponse(res, "No OTP sent to this mobile number", 404);
+
+//     if (otpEntry.code !== enteredOtp)
+//       return errorResponse(res, "Incorrect OTP", 400);
+
+//     if (new Date() > otpEntry.expiresAt)
+//       return errorResponse(res, "OTP expired", 400);
+
+//     otpEntry.isVerified = true;
+//     await otpEntry.save();
+//     req.body.isPhoneVerified = true;
+
+//     const { location } = req.body;
+
+//     if (!location || !location.state) {
+//       return errorResponse(res, "State is required in location data", 400);
+//     }
+
+//     // ✅ Name Formatting
+//     if (req.body.name) {
+//       let fullName = req.body.name.trim();
+//       const nameParts = fullName.split(" ");
+
+//       if (nameParts.length >= 2) {
+//         const firstName = nameParts[0];
+//         const lastName = nameParts[nameParts.length - 1];
+//         const lowerFull = fullName.toLowerCase();
+
+//         if (!lowerFull.includes("jain")) {
+//           req.body.name = `${firstName} Jain (${lastName})`;
+//         } else {
+//           req.body.name = fullName;
+//         }
+//       }
+//     }
+
+//     // ✅ Gender + DOB validation only
+//     const gender = (req.body.gender || "").toLowerCase().trim();
+//     if (!gender) return errorResponse(res, "Gender is required", 400);
+
+//     const dob = req.body.dob || req.body.dateOfBirth;
+//     if (!dob) return errorResponse(res, "Date of birth is required", 400);
+
+//     const birthDate = new Date(dob);
+//     if (isNaN(birthDate.getTime())) {
+//       return errorResponse(
+//         res,
+//         "Invalid date of birth format. Use YYYY-MM-DD",
+//         400,
+//       );
+//     }
+
+//     // ✅ Normalize location
+//     const norm = {
+//       country: (location.country || "India").trim(),
+//       state: (location.state || "").trim(),
+//       district: (location.district || "").trim(),
+//       city: (location.city || "").trim(),
+//     };
+
+//     const cityRegex = norm.city
+//       ? new RegExp("^" + escapeRegex(norm.city) + "$", "i")
+//       : null;
+
+//     const districtRegex = norm.district
+//       ? new RegExp("^" + escapeRegex(norm.district) + "$", "i")
+//       : null;
+
+//     const stateRegex = norm.state
+//       ? new RegExp("^" + escapeRegex(norm.state) + "$", "i")
+//       : null;
+
+//     const countryRegex = norm.country
+//       ? new RegExp("^" + escapeRegex(norm.country) + "$", "i")
+//       : null;
+
+//     // ✅ President check
+//     const hasActivePresident = (sangh) => {
+//       if (!sangh) return false;
+
+//       if (
+//         !Array.isArray(sangh.officeBearers) ||
+//         sangh.officeBearers.length === 0
+//       ) {
+//         return false;
+//       }
+
+//       return sangh.officeBearers.some(
+//         (ob) => ob.role === "president" && ob.userId != null,
+//       );
+//     };
+
+//     let applicationLevel = null;
+//     let reviewingSanghId = null;
+//     let reviewingSangh = null;
+//     let targetSanghType = null;
+
+//     /*
+//       ✅ NEW LOGIC:
+//       1. Frontend se selectedSanghId aaye to first priority
+//       2. Agar selected city sangh valid nahi / president nahi
+//          to city → district → state → country → superadmin
+//       3. Ab sanghType age/gender se force nahi hoga
+//       4. Jis sangh me application ja rahi hai, uska sanghType save hoga
+//     */
+
+//     // ✅ Step 1: Frontend selected sangh
+//     const selectedSanghId =
+//       req.body.selectedSanghId || req.body.reviewingSanghId || null;
+
+//     if (selectedSanghId) {
+//       const selectedSangh = await HierarchicalSangh.findOne({
+//         _id: selectedSanghId,
+//         status: "active",
+//       }).exec();
+
+//       if (selectedSangh && hasActivePresident(selectedSangh)) {
+//         reviewingSangh = selectedSangh;
+//         reviewingSanghId = selectedSangh._id;
+//         applicationLevel = selectedSangh.level;
+//         targetSanghType =
+//           selectedSangh.sanghType || req.body.sanghType || "main";
+//       }
+//     }
+
+//     // ✅ Any sanghType search helper
+//     const findAnyTypeSangh = async (level, locFilters = {}) => {
+//       return await HierarchicalSangh.findOne({
+//         level,
+//         status: "active",
+//         ...locFilters,
+//       }).exec();
+//     };
+
+//     // ✅ Step 2: City fallback
+//     if (!reviewingSangh && norm.city && norm.district && norm.state) {
+//       const citySangh = await findAnyTypeSangh("city", {
+//         "location.city": cityRegex,
+//         "location.district": districtRegex,
+//         "location.state": stateRegex,
+//       });
+
+//       if (citySangh && hasActivePresident(citySangh)) {
+//         reviewingSangh = citySangh;
+//         reviewingSanghId = citySangh._id;
+//         applicationLevel = "city";
+//         targetSanghType = citySangh.sanghType || req.body.sanghType || "main";
+//       }
+//     }
+
+//     // ✅ Step 3: District fallback
+//     if (!reviewingSangh && norm.district && norm.state) {
+//       const districtSangh = await findAnyTypeSangh("district", {
+//         "location.district": districtRegex,
+//         "location.state": stateRegex,
+//       });
+
+//       if (districtSangh && hasActivePresident(districtSangh)) {
+//         reviewingSangh = districtSangh;
+//         reviewingSanghId = districtSangh._id;
+//         applicationLevel = "district";
+//         targetSanghType =
+//           districtSangh.sanghType || req.body.sanghType || "main";
+//       }
+//     }
+
+//     // ✅ Step 4: State fallback
+//     if (!reviewingSangh && norm.state) {
+//       const stateSangh = await findAnyTypeSangh("state", {
+//         "location.state": stateRegex,
+//       });
+
+//       if (stateSangh && hasActivePresident(stateSangh)) {
+//         reviewingSangh = stateSangh;
+//         reviewingSanghId = stateSangh._id;
+//         applicationLevel = "state";
+//         targetSanghType = stateSangh.sanghType || req.body.sanghType || "main";
+//       }
+//     }
+
+//     // ✅ Step 5: Country fallback
+//     if (!reviewingSangh) {
+//       const countrySangh = await findAnyTypeSangh("country", {
+//         "location.country": countryRegex,
+//       });
+
+//       if (countrySangh && hasActivePresident(countrySangh)) {
+//         reviewingSangh = countrySangh;
+//         reviewingSanghId = countrySangh._id;
+//         applicationLevel = "country";
+//         targetSanghType =
+//           countrySangh.sanghType || req.body.sanghType || "main";
+//       } else {
+//         applicationLevel = "superadmin";
+//         reviewingSanghId = null;
+//         targetSanghType = req.body.sanghType || "main";
+//       }
+//     }
+
+//     // ✅ Country office bearer → superadmin
+//     if (req.body.isOfficeBearer && applicationLevel === "country") {
+//       applicationLevel = "superadmin";
+//       reviewingSanghId = null;
+//     }
+
+//     // ✅ Safety fallback
+//     if (!applicationLevel) {
+//       applicationLevel = "superadmin";
+//       reviewingSanghId = null;
+//       targetSanghType = req.body.sanghType || "main";
+//     }
+
+//     // ─────────────────────────────────────────
+//     // Prepare & Save
+//     // ─────────────────────────────────────────
+//     const applicantUserId = req.body.applicantUserId || req.user._id;
+
+//     const jainAadharData = {
+//       ...req.body,
+//       userId: applicantUserId,
+//       createdBy: req.user._id,
+//       applicationLevel,
+//       reviewingSanghId,
+//       targetSanghType,
+//       status: "pending",
+//       location: {
+//         country: norm.country,
+//         state: norm.state,
+//         district: norm.district,
+//         city: norm.city,
+//         address: location.address || "",
+//         pinCode: location.pinCode || "",
+//       },
+//       reviewHistory: [
+//         {
+//           action: "submitted",
+//           by: req.user._id,
+//           level: "user",
+//           remarks: "Application submitted",
+//           timestamp: new Date(),
+//         },
+//       ],
+//     };
+
+//     if (req.files?.userProfile?.[0]) {
+//       const profileUrl =
+//         req.files.userProfile[0].location || req.files.userProfile[0].path;
+
+//       jainAadharData.userProfile = convertS3UrlToCDN(profileUrl);
+//     }
+
+//     if (!req.files?.userProfile?.[0]) {
+//       return errorResponse(res, "Profile photo is required", 400);
+//     }
+
+//     const newJainAadhar = await JainAadhar.create(jainAadharData);
+
+//     const user = await User.findById(req.user._id);
+
+//     if (user && user.jainAadharStatus !== "verified") {
+//       await User.findByIdAndUpdate(req.user._id, {
+//         jainAadharStatus: "pending",
+//         jainAadharApplication: newJainAadhar._id,
+//       });
+//     }
+
+//     return successResponse(
+//       res,
+//       newJainAadhar,
+//       "Application submitted successfully",
+//       201,
+//     );
+//   } catch (error) {
+//     return errorResponse(res, error.message, 500);
+//   }
+// });
+
 const createJainShravak = asyncHandler(async (req, res) => {
   try {
     const number = req.body.contactDetails?.number;
@@ -709,7 +1010,15 @@ const createJainShravak = asyncHandler(async (req, res) => {
 
     const { location } = req.body;
 
-    if (!location || !location.state) {
+    if (!location) {
+      return errorResponse(res, "Location data is required", 400);
+    }
+
+    const country = location.country || "India";
+    const cfg = getCountryConfig(country);
+
+    // India: state must be present
+    if (country === "India" && !location.state) {
       return errorResponse(res, "State is required in location data", 400);
     }
 
@@ -829,68 +1138,117 @@ const createJainShravak = asyncHandler(async (req, res) => {
       }).exec();
     };
 
-    // ✅ Step 2: City fallback
-    if (!reviewingSangh && norm.city && norm.district && norm.state) {
-      const citySangh = await findAnyTypeSangh("city", {
-        "location.city": cityRegex,
-        "location.district": districtRegex,
-        "location.state": stateRegex,
-      });
+    // ═════════════════════════════════════════════════════════════════════════
+    // ROUTING LOGIC: INDIA vs INTERNATIONAL
+    // ═════════════════════════════════════════════════════════════════════════
 
-      if (citySangh && hasActivePresident(citySangh)) {
-        reviewingSangh = citySangh;
-        reviewingSanghId = citySangh._id;
-        applicationLevel = "city";
-        targetSanghType = citySangh.sanghType || req.body.sanghType || "main";
+    if (norm.country === "India") {
+      // ✅ INDIA ROUTING (City → District → State → Country)
+
+      // ✅ Step 2: City fallback
+      if (!reviewingSangh && norm.city && norm.district && norm.state) {
+        const citySangh = await findAnyTypeSangh("city", {
+          "location.city": cityRegex,
+          "location.district": districtRegex,
+          "location.state": stateRegex,
+        });
+
+        if (citySangh && hasActivePresident(citySangh)) {
+          reviewingSangh = citySangh;
+          reviewingSanghId = citySangh._id;
+          applicationLevel = "city";
+          targetSanghType = citySangh.sanghType || req.body.sanghType || "main";
+        }
       }
-    }
 
-    // ✅ Step 3: District fallback
-    if (!reviewingSangh && norm.district && norm.state) {
-      const districtSangh = await findAnyTypeSangh("district", {
-        "location.district": districtRegex,
-        "location.state": stateRegex,
-      });
+      // ✅ Step 3: District fallback
+      if (!reviewingSangh && norm.district && norm.state) {
+        const districtSangh = await findAnyTypeSangh("district", {
+          "location.district": districtRegex,
+          "location.state": stateRegex,
+        });
 
-      if (districtSangh && hasActivePresident(districtSangh)) {
-        reviewingSangh = districtSangh;
-        reviewingSanghId = districtSangh._id;
-        applicationLevel = "district";
-        targetSanghType =
-          districtSangh.sanghType || req.body.sanghType || "main";
+        if (districtSangh && hasActivePresident(districtSangh)) {
+          reviewingSangh = districtSangh;
+          reviewingSanghId = districtSangh._id;
+          applicationLevel = "district";
+          targetSanghType =
+            districtSangh.sanghType || req.body.sanghType || "main";
+        }
       }
-    }
 
-    // ✅ Step 4: State fallback
-    if (!reviewingSangh && norm.state) {
-      const stateSangh = await findAnyTypeSangh("state", {
-        "location.state": stateRegex,
-      });
+      // ✅ Step 4: State fallback
+      if (!reviewingSangh && norm.state) {
+        const stateSangh = await findAnyTypeSangh("state", {
+          "location.state": stateRegex,
+        });
 
-      if (stateSangh && hasActivePresident(stateSangh)) {
-        reviewingSangh = stateSangh;
-        reviewingSanghId = stateSangh._id;
-        applicationLevel = "state";
-        targetSanghType = stateSangh.sanghType || req.body.sanghType || "main";
+        if (stateSangh && hasActivePresident(stateSangh)) {
+          reviewingSangh = stateSangh;
+          reviewingSanghId = stateSangh._id;
+          applicationLevel = "state";
+          targetSanghType =
+            stateSangh.sanghType || req.body.sanghType || "main";
+        }
       }
-    }
 
-    // ✅ Step 5: Country fallback
-    if (!reviewingSangh) {
-      const countrySangh = await findAnyTypeSangh("country", {
-        "location.country": countryRegex,
-      });
+      // ✅ Step 5: Country fallback
+      if (!reviewingSangh) {
+        const countrySangh = await findAnyTypeSangh("country", {
+          "location.country": countryRegex,
+        });
 
-      if (countrySangh && hasActivePresident(countrySangh)) {
-        reviewingSangh = countrySangh;
-        reviewingSanghId = countrySangh._id;
-        applicationLevel = "country";
-        targetSanghType =
-          countrySangh.sanghType || req.body.sanghType || "main";
-      } else {
-        applicationLevel = "superadmin";
-        reviewingSanghId = null;
-        targetSanghType = req.body.sanghType || "main";
+        if (countrySangh && hasActivePresident(countrySangh)) {
+          reviewingSangh = countrySangh;
+          reviewingSanghId = countrySangh._id;
+          applicationLevel = "country";
+          targetSanghType =
+            countrySangh.sanghType || req.body.sanghType || "main";
+        } else {
+          applicationLevel = "superadmin";
+          reviewingSanghId = null;
+          targetSanghType = req.body.sanghType || "main";
+        }
+      }
+    } else {
+      // ✅ INTERNATIONAL ROUTING (City → Country → Superadmin)
+
+      const countryRegex = norm.country
+        ? new RegExp("^" + escapeRegex(norm.country) + "$", "i")
+        : null;
+
+      // ✅ Step 2: City fallback (International - country level only)
+      if (!reviewingSangh && norm.city && norm.country) {
+        const citySangh = await findAnyTypeSangh("city", {
+          "location.city": cityRegex,
+          "location.country": countryRegex,
+        });
+
+        if (citySangh && hasActivePresident(citySangh)) {
+          reviewingSangh = citySangh;
+          reviewingSanghId = citySangh._id;
+          applicationLevel = "city";
+          targetSanghType = citySangh.sanghType || req.body.sanghType || "main";
+        }
+      }
+
+      // ✅ Step 3: Country fallback
+      if (!reviewingSangh && norm.country) {
+        const countrySangh = await findAnyTypeSangh("country", {
+          "location.country": countryRegex,
+        });
+
+        if (countrySangh && hasActivePresident(countrySangh)) {
+          reviewingSangh = countrySangh;
+          reviewingSanghId = countrySangh._id;
+          applicationLevel = "country";
+          targetSanghType =
+            countrySangh.sanghType || req.body.sanghType || "main";
+        } else {
+          applicationLevel = "superadmin";
+          reviewingSanghId = null;
+          targetSanghType = req.body.sanghType || "main";
+        }
       }
     }
 
@@ -912,6 +1270,9 @@ const createJainShravak = asyncHandler(async (req, res) => {
     // ─────────────────────────────────────────
     const applicantUserId = req.body.applicantUserId || req.user._id;
 
+    // ✅ PROCESS LOCATION (handles all countries - India, USA, Canada, Japan, etc.)
+    const processedLocation = processLocation(location);
+
     const jainAadharData = {
       ...req.body,
       userId: applicantUserId,
@@ -920,14 +1281,7 @@ const createJainShravak = asyncHandler(async (req, res) => {
       reviewingSanghId,
       targetSanghType,
       status: "pending",
-      location: {
-        country: norm.country,
-        state: norm.state,
-        district: norm.district,
-        city: norm.city,
-        address: location.address || "",
-        pinCode: location.pinCode || "",
-      },
+      location: processedLocation,
       reviewHistory: [
         {
           action: "submitted",
@@ -971,18 +1325,21 @@ const createJainShravak = asyncHandler(async (req, res) => {
     return errorResponse(res, error.message, 500);
   }
 });
+// Simplified Sharavak OTP Controller - SMS for India, WhatsApp for Others
+
 const sendSharavakOtp = asyncHandler(async (req, res) => {
-  let { phoneNumber, name } = req.body;
+  let { phoneNumber, name, country = "India" } = req.body; // ✅ Extract country
 
   if (!phoneNumber) {
-    return errorResponse(res, 'Phone number is required', 400);
+    return errorResponse(res, "Phone number is required", 400);
   }
 
   // Remove non-digits
-  phoneNumber = phoneNumber.replace(/\D/g, '');
+  phoneNumber = phoneNumber.replace(/\D/g, "");
 
   // DB me store last 10 digits
-  const dbNumber = phoneNumber.length > 10 ? phoneNumber.slice(-10) : phoneNumber;
+  const dbNumber =
+    phoneNumber.length > 10 ? phoneNumber.slice(-10) : phoneNumber;
 
   // SMS bhejne ke liye ab same number bhejo (91 prefix mat lagao)
   const smsNumber = dbNumber;
@@ -992,35 +1349,75 @@ const sendSharavakOtp = asyncHandler(async (req, res) => {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
   try {
-    await sendVerificationSms(smsNumber, code, name || 'User');
+    // ✅ NEW: Country के हिसाब से routing (India: SMS, Others: WhatsApp)
+    const isIndiaUser = country.toLowerCase() === "india";
 
-    // DB me last 10 digits store karo
-    await SharavakOtpVerification.findOneAndUpdate(
-      { phoneNumber: dbNumber },
-      { code, expiresAt, isVerified: false },
-      { upsert: true }
-    );
+    if (isIndiaUser) {
+      // 📱 SMS भेजो (India के लिए - existing logic, no changes)
+      await sendVerificationSms(smsNumber, code, name || "User");
 
-    return successResponse(res, null, 'OTP sent to your mobile number');
+      // DB me last 10 digits store karo
+      await SharavakOtpVerification.findOneAndUpdate(
+        { phoneNumber: dbNumber },
+        { code, expiresAt, isVerified: false },
+        { upsert: true },
+      );
+
+      return successResponse(res, null, "OTP sent to your mobile number");
+    } else {
+      // 💬 WhatsApp भेजो (International के लिए - जैसे user में किया)
+      const whatsappResult = await sendVerificationWhatsApp(
+        phoneNumber,
+        code,
+        name || "User",
+        country, // ✅ Pass country for correct formatting
+      );
+
+      if (whatsappResult.statusCode === 0 || whatsappResult.success) {
+        // DB me last 10 digits store karo
+        await SharavakOtpVerification.findOneAndUpdate(
+          { phoneNumber: dbNumber },
+          { code, expiresAt, isVerified: false },
+          { upsert: true },
+        );
+
+        return successResponse(
+          res,
+          {},
+          `Verification OTP sent via WhatsApp for ${country} 💬`,
+        );
+      } else {
+        return errorResponse(
+          res,
+          whatsappResult.message || "Failed to send WhatsApp OTP",
+          500,
+        );
+      }
+    }
   } catch (err) {
-    console.error('Sharavak OTP send error:', err);
-    return errorResponse(res, 'Failed to send OTP', 500);
+    console.error("Sharavak OTP send error:", err);
+    return errorResponse(res, "Failed to send OTP", 500);
   }
 });
 
-
 const resendSharavakOtp = asyncHandler(async (req, res) => {
-  const { phoneNumber, name } = req.body;
+  const { phoneNumber, name, country = "India" } = req.body; // ✅ Extract country
 
   if (!phoneNumber) {
-    return errorResponse(res, 'Phone number is required', 400);
+    return errorResponse(res, "Phone number is required", 400);
   }
 
   try {
     // Check if record exists in SharavakOtpVerification
-    const existingRecord = await SharavakOtpVerification.findOne({ phoneNumber });
+    const existingRecord = await SharavakOtpVerification.findOne({
+      phoneNumber,
+    });
     if (!existingRecord) {
-      return errorResponse(res, 'No OTP request found for this mobile number', 404);
+      return errorResponse(
+        res,
+        "No OTP request found for this mobile number",
+        404,
+      );
     }
 
     // Generate new 6-digit OTP
@@ -1031,16 +1428,43 @@ const resendSharavakOtp = asyncHandler(async (req, res) => {
     await SharavakOtpVerification.findOneAndUpdate(
       { phoneNumber },
       { code: newCode, expiresAt: newExpiresAt, isVerified: false },
-      { upsert: true }
+      { upsert: true },
     );
 
-    // Send OTP via SMS
-    await sendVerificationSms(phoneNumber, newCode, name || 'User');
+    // ✅ NEW: Country के हिसाब से routing (India: SMS, Others: WhatsApp)
+    const isIndiaUser = country.toLowerCase() === "india";
 
-    return successResponse(res, null, 'OTP resent to your mobile number');
+    if (isIndiaUser) {
+      // 📱 SMS भेजो (India के लिए - existing logic, no changes)
+      await sendVerificationSms(phoneNumber, newCode, name || "User");
+
+      return successResponse(res, null, "OTP resent to your mobile number");
+    } else {
+      // 💬 WhatsApp भेजो (International के लिए - जैसे user में किया)
+      const whatsappResult = await sendVerificationWhatsApp(
+        phoneNumber,
+        newCode,
+        name || "User",
+        country, // ✅ Pass country for correct formatting
+      );
+
+      if (whatsappResult.statusCode === 0 || whatsappResult.success) {
+        return successResponse(
+          res,
+          {},
+          `OTP resent via WhatsApp for ${country} 💬`,
+        );
+      } else {
+        return errorResponse(
+          res,
+          whatsappResult.message || "Failed to resend WhatsApp OTP",
+          500,
+        );
+      }
+    }
   } catch (err) {
-    console.error('Resend Sharavak OTP Error:', err);
-    return errorResponse(res, 'Failed to resend OTP', 500);
+    console.error("Resend Sharavak OTP Error:", err);
+    return errorResponse(res, "Failed to resend OTP", 500);
   }
 });
 
@@ -1048,84 +1472,86 @@ const verifySharavakOtp = asyncHandler(async (req, res) => {
   let { phoneNumber, code } = req.body;
 
   if (!phoneNumber || !code) {
-    return errorResponse(res, 'Phone number and OTP code are required', 400);
+    return errorResponse(res, "Phone number and OTP code are required", 400);
   }
   try {
-    phoneNumber = phoneNumber.replace(/\D/g, '');
+    phoneNumber = phoneNumber.replace(/\D/g, "");
     const dbNumber = phoneNumber.slice(-10);
-    const record = await SharavakOtpVerification.findOne({ phoneNumber: dbNumber });
+    const record = await SharavakOtpVerification.findOne({
+      phoneNumber: dbNumber,
+    });
     if (!record) {
-      return errorResponse(res, 'No OTP sent to this mobile number', 404);
+      return errorResponse(res, "No OTP sent to this mobile number", 404);
     }
     if (record.code !== code) {
-      return errorResponse(res, 'Incorrect OTP', 400);
+      return errorResponse(res, "Incorrect OTP", 400);
     }
     if (new Date() > record.expiresAt) {
-      return errorResponse(res, 'OTP expired', 400);
+      return errorResponse(res, "OTP expired", 400);
     }
     record.isVerified = true;
     await record.save();
-    return successResponse(res, null, 'Mobile number verified successfully');
+    return successResponse(res, null, "Mobile number verified successfully");
   } catch (err) {
-    console.error('Sharavak OTP verification error:', err);
-    return errorResponse(res, 'OTP verification failed', 500);
+    console.error("Sharavak OTP verification error:", err);
+    return errorResponse(res, "OTP verification failed", 500);
   }
 });
 
 const sendEmailVerificationOtp = async (req, res) => {
   const { email, name } = req.body;
-  if (!email) return errorResponse(res, 'Email is required', 400);
+  if (!email) return errorResponse(res, "Email is required", 400);
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
   try {
-    await sendVerificationEmail(email, name || 'User', code);
+    await sendVerificationEmail(email, name || "User", code);
 
     await EmailVerification.findOneAndUpdate(
       { email },
       { code, expiresAt, isVerified: false },
-      { upsert: true }
+      { upsert: true },
     );
-    return successResponse(res, null, 'OTP sent to your email');
+    return successResponse(res, null, "OTP sent to your email");
   } catch (err) {
     console.error(err);
-    return errorResponse(res, 'Failed to send OTP', 500);
+    return errorResponse(res, "Failed to send OTP", 500);
   }
 };
 
 const verifyEmailOtp = async (req, res) => {
   const { email, code } = req.body;
   if (!email || !code) {
-    return errorResponse(res, 'Email and OTP code are required', 400);
+    return errorResponse(res, "Email and OTP code are required", 400);
   }
   try {
     const record = await EmailVerification.findOne({ email });
     if (!record) {
-      return errorResponse(res, 'No OTP sent to this email', 404);
+      return errorResponse(res, "No OTP sent to this email", 404);
     }
     if (record.code !== code) {
-      return errorResponse(res, 'Incorrect OTP', 400);
+      return errorResponse(res, "Incorrect OTP", 400);
     }
     if (new Date() > record.expiresAt) {
-      return errorResponse(res, 'OTP expired', 400);
+      return errorResponse(res, "OTP expired", 400);
     }
     // Mark as verified
     record.isVerified = true;
     await record.save();
-    return successResponse(res, null, 'Email verified successfully');
+    return successResponse(res, null, "Email verified successfully");
   } catch (err) {
     console.error(err);
-    return errorResponse(res, 'OTP verification failed', 500);
+    return errorResponse(res, "OTP verification failed", 500);
   }
 };
 
 const resendEmailVerificationOtp = async (req, res) => {
   const { email, name } = req.body;
-  if (!email) return errorResponse(res, 'Email is required', 400);
+  if (!email) return errorResponse(res, "Email is required", 400);
   try {
     // Check if email exists in verification DB (optional)
     const existingRecord = await EmailVerification.findOne({ email });
     if (!existingRecord) {
-      return errorResponse(res, 'No OTP request found for this email', 404);
+      return errorResponse(res, "No OTP request found for this email", 404);
     }
     // Generate new OTP code
     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -1135,15 +1561,15 @@ const resendEmailVerificationOtp = async (req, res) => {
     await EmailVerification.findOneAndUpdate(
       { email },
       { code: newCode, expiresAt: newExpiresAt, isVerified: false },
-      { upsert: true }
+      { upsert: true },
     );
 
     // Send new OTP email
-    await sendVerificationEmail(email, name || 'User', newCode);
-    return successResponse(res, null, 'OTP resent to your email');
+    await sendVerificationEmail(email, name || "User", newCode);
+    return successResponse(res, null, "OTP resent to your email");
   } catch (err) {
-    console.error('Resend OTP Error:', err);
-    return errorResponse(res, 'Failed to resend OTP', 500);
+    console.error("Resend OTP Error:", err);
+    return errorResponse(res, "Failed to resend OTP", 500);
   }
 };
 
@@ -1152,7 +1578,9 @@ const verifyJainAadhar = async (req, res) => {
     const jainAadhar = req.params.jainAadharNumber.trim();
     const record = await JainAadhar.findOne({ jainAadharNumber: jainAadhar });
     if (!record) {
-      return res.status(404).json({ success: false, message: 'Jain Aadhar not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: "Jain Aadhar not found" });
     }
 
     res.status(200).json({
@@ -1160,30 +1588,40 @@ const verifyJainAadhar = async (req, res) => {
       user: {
         name: record.name,
         userId: record.userId,
-      }
+      },
     });
   } catch (error) {
-    console.error('Jain Aadhar verify error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error("Jain Aadhar verify error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
 // Get application status
 const getApplicationStatus = asyncHandler(async (req, res) => {
   try {
-    const application = await JainAadhar.findOne({ userId: req.user._id })
-      .select('-AadharCard');
+    const application = await JainAadhar.findOne({
+      userId: req.user._id,
+    }).select("-AadharCard");
     if (!application) {
-      return errorResponse(res, 'No Jain Aadhar application found', 404);
+      return errorResponse(res, "No Jain Aadhar application found", 404);
     }
 
-    return successResponse(res, {
-      status: application.status,
-      applicationId: application._id,
-      submittedAt: application.createdAt
-    }, 'Application status retrieved successfully');
+    return successResponse(
+      res,
+      {
+        status: application.status,
+        applicationId: application._id,
+        submittedAt: application.createdAt,
+      },
+      "Application status retrieved successfully",
+    );
   } catch (error) {
-    return errorResponse(res, 'Error fetching application status', 500, error.message);
+    return errorResponse(
+      res,
+      "Error fetching application status",
+      500,
+      error.message,
+    );
   }
 });
 
@@ -1202,18 +1640,23 @@ const getApplicationsReview = asyncHandler(async (req, res) => {
     }
 
     const applications = await JainAadhar.find(filter)
-      .populate('userId', 'firstName lastName fullName email')
-      .sort('-createdAt');
+      .populate("userId", "firstName lastName fullName email")
+      .sort("-createdAt");
 
     return successResponse(
       res,
       applications,
-      'Filtered applications retrieved successfully',
+      "Filtered applications retrieved successfully",
       200,
-      applications.length
+      applications.length,
     );
   } catch (error) {
-    return errorResponse(res, 'Error fetching applications', 500, error.message);
+    return errorResponse(
+      res,
+      "Error fetching applications",
+      500,
+      error.message,
+    );
   }
 });
 
@@ -1234,11 +1677,10 @@ const getCheckShravk = asyncHandler(async (req, res) => {
 
     return successResponse(
       res,
-      record,  // 🔥 pura record bhej rahe hain
+      record, // 🔥 pura record bhej rahe hain
       "Shravak Id valid",
-      200
+      200,
     );
-
   } catch (error) {
     return errorResponse(res, "Error checking Shravak Id", 500, error.message);
   }
@@ -1359,12 +1801,39 @@ const getAllApplications = asyncHandler(async (req, res) => {
 
 const getAllShravakApplications = asyncHandler(async (req, res) => {
   try {
-    const { search, level, sanghId, status, page = 1, limit = 20 } = req.query;
+    const {
+      search,
+      level,
+      sanghId,
+      status,
+      serveAsOfficeBearer,
+      page = 1,
+      limit = 20,
+    } = req.query;
 
     const filter = {};
 
     if (search && search.trim() !== "") {
-      filter.name = { $regex: search.trim(), $options: "i" };
+      // ✅ FIX: escape regex special chars (jaise "(", ")") warna special char pe 500 crash
+      const s = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+      // ✅ FIX: ab search name ke saath location + jainAadharNumber + contact number pe bhi
+      // NOTE: $and use kiya taaki neeche sanghId ka $or na overwrite ho
+      filter.$and = [
+        ...(filter.$and || []),
+        {
+          $or: [
+            { name: { $regex: s, $options: "i" } },
+            { jainAadharNumber: { $regex: s, $options: "i" } },
+            { "location.city": { $regex: s, $options: "i" } },
+            { "location.district": { $regex: s, $options: "i" } },
+            { "location.state": { $regex: s, $options: "i" } },
+            { "location.country": { $regex: s, $options: "i" } },
+            { "location.address": { $regex: s, $options: "i" } },
+            { "contactDetails.number": { $regex: s, $options: "i" } },
+          ],
+        },
+      ];
     }
 
     if (level && level.trim() !== "") {
@@ -1381,6 +1850,11 @@ const getAllShravakApplications = asyncHandler(async (req, res) => {
 
     if (status && status.trim() !== "") {
       filter.status = status.toLowerCase();
+    }
+
+    // ✅ Office-bearer filter (additive) — only applies when param sent
+    if (serveAsOfficeBearer && serveAsOfficeBearer.trim() !== "") {
+      filter.serveAsOfficeBearer = serveAsOfficeBearer.trim();
     }
 
     const parsedPage = Math.max(parseInt(page) || 1, 1);
@@ -1450,208 +1924,262 @@ const generateJainAadharNumber = async () => {
 
 // Get applications for review based on level and reviewer's authority
 const getApplicationsForReview = asyncHandler(async (req, res) => {
-    try {
-        const userId = req.user._id;
-        const reviewerLevel = req.reviewerLevel;
-        const reviewerSanghId = req.reviewerSanghId;
+  try {
+    const userId = req.user._id;
+    const reviewerLevel = req.reviewerLevel;
+    const reviewerSanghId = req.reviewerSanghId;
 
-        // For superadmin - can review all applications routed to superadmin level
-        if (reviewerLevel === 'superadmin') {
-            const applications = await JainAadhar.find({
-                applicationLevel: 'superadmin',
-                status: 'pending'
-            })
-            .populate('userId')
-            .populate('reviewingSanghId', 'name level location')
-            .sort('-createdAt');
-            return successResponse(res, applications, 'Applications retrieved successfully');
-        }
-
-        // For admin with verify permissions - can review all pending applications
-        if (reviewerLevel === 'admin') {
-            const applications = await JainAadhar.find({
-                status: 'pending'
-            })
-            .populate('userId')
-            .populate('reviewingSanghId', 'name level location')
-            .sort('-createdAt');
-
-            return successResponse(res, applications, 'Applications retrieved successfully');
-        }
-         // Normal user - Can only see their own applications
-         if (reviewerLevel === "user") {
-            const applications = await JainAadhar.find({ userId: userId })
-                .populate("userId")
-                .populate("reviewingSanghId", "name level location")
-                .sort("-createdAt");
-
-            return successResponse(res, applications, "User applications retrieved successfully");
-        }
-        // For country president - can review all country-level applications
-        if (reviewerLevel === 'country') {
-            const applications = await JainAadhar.find({
-                applicationLevel: 'superadmin',
-                status: 'pending'
-            })
-            .populate('userId')
-            .populate('reviewingSanghId', 'name level location')
-            .sort('-createdAt');
-            return successResponse(res, applications, 'Applications retrieved successfully');
-        }
-
-        // For state, district or city presidents
-        if (['state', 'district', 'city','area'].includes(reviewerLevel)) {
-            const sangh = await HierarchicalSangh.findById(reviewerSanghId);
-            if (!sangh) {
-                return errorResponse(res, 'Sangh not found', 404);
-            }
-            // Build location query based on president's authority
-            const locationQuery = {
-                status: 'pending',
-                applicationLevel: reviewerLevel
-            };
-            if (reviewerLevel === 'area') {
-                locationQuery['location.area'] = sangh.location.area;
-                locationQuery['location.city'] = sangh.location.city;
-                locationQuery['location.district'] = sangh.location.district;
-                locationQuery['location.state'] = sangh.location.state;
-            } else if (reviewerLevel === 'city') {
-                locationQuery['location.city'] = sangh.location.city;
-                locationQuery['location.district'] = sangh.location.district;
-                locationQuery['location.state'] = sangh.location.state;
-            } else if (reviewerLevel === 'district') {
-                locationQuery['location.district'] = sangh.location.district;
-                locationQuery['location.state'] = sangh.location.state;
-            } else if (reviewerLevel === 'state') {
-                locationQuery['location.state'] = sangh.location.state;
-            }
-
-            const applications = await JainAadhar.find(locationQuery)
-                .populate('userId')
-                .populate('reviewingSanghId', 'name level location')
-                .sort('-createdAt');
-
-            return successResponse(res, applications, 'Applications retrieved successfully');
-        }
-
-        return errorResponse(res, 'Invalid reviewer level', 400);
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
+    // For superadmin - can review all applications routed to superadmin level
+    if (reviewerLevel === "superadmin") {
+      const applications = await JainAadhar.find({
+        applicationLevel: "superadmin",
+        status: "pending",
+      })
+        .populate("userId")
+        .populate("reviewingSanghId", "name level location")
+        .sort("-createdAt");
+      return successResponse(
+        res,
+        applications,
+        "Applications retrieved successfully",
+      );
     }
+
+    // For admin with verify permissions - can review all pending applications
+    if (reviewerLevel === "admin") {
+      const applications = await JainAadhar.find({
+        status: "pending",
+      })
+        .populate("userId")
+        .populate("reviewingSanghId", "name level location")
+        .sort("-createdAt");
+
+      return successResponse(
+        res,
+        applications,
+        "Applications retrieved successfully",
+      );
+    }
+    // Normal user - Can only see their own applications
+    if (reviewerLevel === "user") {
+      const applications = await JainAadhar.find({ userId: userId })
+        .populate("userId")
+        .populate("reviewingSanghId", "name level location")
+        .sort("-createdAt");
+
+      return successResponse(
+        res,
+        applications,
+        "User applications retrieved successfully",
+      );
+    }
+    // For country president - can review all country-level applications
+    if (reviewerLevel === "country") {
+      const applications = await JainAadhar.find({
+        applicationLevel: "superadmin",
+        status: "pending",
+      })
+        .populate("userId")
+        .populate("reviewingSanghId", "name level location")
+        .sort("-createdAt");
+      return successResponse(
+        res,
+        applications,
+        "Applications retrieved successfully",
+      );
+    }
+
+    // For state, district or city presidents
+    if (["state", "district", "city", "area"].includes(reviewerLevel)) {
+      const sangh = await HierarchicalSangh.findById(reviewerSanghId);
+      if (!sangh) {
+        return errorResponse(res, "Sangh not found", 404);
+      }
+      // Build location query based on president's authority
+      const locationQuery = {
+        status: "pending",
+        applicationLevel: reviewerLevel,
+      };
+      if (reviewerLevel === "area") {
+        locationQuery["location.area"] = sangh.location.area;
+        locationQuery["location.city"] = sangh.location.city;
+        locationQuery["location.district"] = sangh.location.district;
+        locationQuery["location.state"] = sangh.location.state;
+      } else if (reviewerLevel === "city") {
+        locationQuery["location.city"] = sangh.location.city;
+        locationQuery["location.district"] = sangh.location.district;
+        locationQuery["location.state"] = sangh.location.state;
+      } else if (reviewerLevel === "district") {
+        locationQuery["location.district"] = sangh.location.district;
+        locationQuery["location.state"] = sangh.location.state;
+      } else if (reviewerLevel === "state") {
+        locationQuery["location.state"] = sangh.location.state;
+      }
+
+      const applications = await JainAadhar.find(locationQuery)
+        .populate("userId")
+        .populate("reviewingSanghId", "name level location")
+        .sort("-createdAt");
+
+      return successResponse(
+        res,
+        applications,
+        "Applications retrieved successfully",
+      );
+    }
+
+    return errorResponse(res, "Invalid reviewer level", 400);
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
 });
 
 // Review application
 const reviewApplication = asyncHandler(async (req, res) => {
   try {
-        // Handle both parameter names (id and applicationId) for compatibility
-        const appId = req.params.applicationId || req.params.id;
-        const { status, remarks } = req.body;
-        const userId = req.user._id;
-        const reviewerLevel = req.reviewerLevel;
-        const reviewerSanghId = req.reviewerSanghId;
+    // Handle both parameter names (id and applicationId) for compatibility
+    const appId = req.params.applicationId || req.params.id;
+    const { status, remarks } = req.body;
+    const userId = req.user._id;
+    const reviewerLevel = req.reviewerLevel;
+    const reviewerSanghId = req.reviewerSanghId;
 
-        const allApplications = await JainAadhar.find({});
-        const application = await JainAadhar.findById(appId);
+    const allApplications = await JainAadhar.find({});
+    const application = await JainAadhar.findById(appId);
     if (!application) {
-      return errorResponse(res, 'Application not found', 404);
+      return errorResponse(res, "Application not found", 404);
     }
     // Prevent re-reviewing applications that are already approved or rejected
-    if (application.status !== 'pending') {
-        return errorResponse(res, `This application has already been ${application.status}. Cannot review again.`, 400);
+    if (application.status !== "pending") {
+      return errorResponse(
+        res,
+        `This application has already been ${application.status}. Cannot review again.`,
+        400,
+      );
     }
     // Verify reviewer's authority
     let hasAuthority = false;
     let reviewerSangh = null;
-        // Superadmin can review any application
-        if (reviewerLevel === 'superadmin') {
-            hasAuthority = true;
-        }
-        // Admin with verify permissions can review any application
-        else if (reviewerLevel === 'admin' && req.user.adminPermissions.includes('verify_jain_aadhar')) {
-            hasAuthority = true;
-        }
-        // Country president can review superadmin level applications
-        else if (reviewerLevel === 'country') {
-            if (application.applicationLevel === 'superadmin') {
-                hasAuthority = true;
-            } else {
-                return errorResponse(res, `This application is not at country level for review`, 403);
-            }
-        }
-        // State president can review state level applications
-        else if (reviewerLevel === 'state') {
-            if (application.applicationLevel !== 'state') {
-                return errorResponse(res, `This application is not at state level for review`, 403);
-            }
-            // Get the reviewer's sangh details
-            reviewerSangh = await HierarchicalSangh.findById(reviewerSanghId);
-            if (!reviewerSangh) {
-                return errorResponse(res, 'Reviewer sangh not found', 404);
-            }
-            // Verify location authority
-            hasAuthority = verifyLocationAuthority(reviewerSangh, application);
-        }
+    // Superadmin can review any application
+    if (reviewerLevel === "superadmin") {
+      hasAuthority = true;
+    }
+    // Admin with verify permissions can review any application
+    else if (
+      reviewerLevel === "admin" &&
+      req.user.adminPermissions.includes("verify_jain_aadhar")
+    ) {
+      hasAuthority = true;
+    }
+    // Country president can review superadmin level applications
+    else if (reviewerLevel === "country") {
+      if (application.applicationLevel === "superadmin") {
+        hasAuthority = true;
+      } else {
+        return errorResponse(
+          res,
+          `This application is not at country level for review`,
+          403,
+        );
+      }
+    }
+    // State president can review state level applications
+    else if (reviewerLevel === "state") {
+      if (application.applicationLevel !== "state") {
+        return errorResponse(
+          res,
+          `This application is not at state level for review`,
+          403,
+        );
+      }
+      // Get the reviewer's sangh details
+      reviewerSangh = await HierarchicalSangh.findById(reviewerSanghId);
+      if (!reviewerSangh) {
+        return errorResponse(res, "Reviewer sangh not found", 404);
+      }
+      // Verify location authority
+      hasAuthority = verifyLocationAuthority(reviewerSangh, application);
+    }
 
-        // District and city presidents can only review applications from their area
-        else if (reviewerLevel === 'district' || reviewerLevel === 'city') {
-            // Ensure application is at the correct level
-            if (application.applicationLevel.toLowerCase() !== reviewerLevel.toLowerCase()){
-                return errorResponse(res, `This application is not at ${reviewerLevel} level for review`, 403);
-            }
-            // Get the reviewer's sangh details
-            reviewerSangh = await HierarchicalSangh.findById(reviewerSanghId);
-            if (!reviewerSangh) {
-                return errorResponse(res, 'Reviewer sangh not found', 404);
-            }
-            // Verify location authority
-            hasAuthority = verifyLocationAuthority(reviewerSangh, application);
-        }
+    // District and city presidents can only review applications from their area
+    else if (reviewerLevel === "district" || reviewerLevel === "city") {
+      // Ensure application is at the correct level
+      if (
+        application.applicationLevel.toLowerCase() !==
+        reviewerLevel.toLowerCase()
+      ) {
+        return errorResponse(
+          res,
+          `This application is not at ${reviewerLevel} level for review`,
+          403,
+        );
+      }
+      // Get the reviewer's sangh details
+      reviewerSangh = await HierarchicalSangh.findById(reviewerSanghId);
+      if (!reviewerSangh) {
+        return errorResponse(res, "Reviewer sangh not found", 404);
+      }
+      // Verify location authority
+      hasAuthority = verifyLocationAuthority(reviewerSangh, application);
+    }
 
-        if (!hasAuthority) {
-            return errorResponse(res, 'Not authorized to review this application', 403);
-        }
+    if (!hasAuthority) {
+      return errorResponse(
+        res,
+        "Not authorized to review this application",
+        403,
+      );
+    }
 
-        // Update application
-        application.status = status;
-        // Add review details to history
-        application.reviewHistory.push({
-            action: status,
-            by: userId,
-            level: reviewerLevel,
-            sanghId: reviewerSanghId,
+    // Update application
+    application.status = status;
+    // Add review details to history
+    application.reviewHistory.push({
+      action: status,
+      by: userId,
+      level: reviewerLevel,
+      sanghId: reviewerSanghId,
       remarks,
-            timestamp: new Date()
-        });
-        // Update reviewedBy information
-        application.reviewedBy = {
-            userId: userId,
-            role: reviewerLevel === 'district' || reviewerLevel === 'city' ? 'president' : reviewerLevel,
-            level: reviewerLevel,
-            sanghId: reviewerSanghId
-        };
+      timestamp: new Date(),
+    });
+    // Update reviewedBy information
+    application.reviewedBy = {
+      userId: userId,
+      role:
+        reviewerLevel === "district" || reviewerLevel === "city"
+          ? "president"
+          : reviewerLevel,
+      level: reviewerLevel,
+      sanghId: reviewerSanghId,
+    };
 
-    if (status === 'approved') {
+    if (status === "approved") {
       const jainAadharNumber = await generateJainAadharNumber();
-        application.jainAadharNumber = jainAadharNumber;
+      application.jainAadharNumber = jainAadharNumber;
 
       const user = await User.findById(application.userId);
 
-      if (!user?.jainAadharNumber && user?.jainAadharStatus !== 'verified') {
-    await User.findByIdAndUpdate(application.userId, {
-      jainAadharStatus: 'verified',
-      jainAadharNumber,
-      city: application.location.city,
-      district: application.location.district,
-      state: application.location.state
-    });
-  }
-        } else if (status === 'rejected') {
+      if (!user?.jainAadharNumber && user?.jainAadharStatus !== "verified") {
+        await User.findByIdAndUpdate(application.userId, {
+          jainAadharStatus: "verified",
+          jainAadharNumber,
+          "location.country": application.location?.country || "India",
+          "location.state": application.location?.state,
+          "location.district": application.location?.district,
+          "location.city": application.location?.city,
+        });
+      }
+    } else if (status === "rejected") {
       await User.findByIdAndUpdate(application.userId, {
-        jainAadharStatus: 'rejected'
+        jainAadharStatus: "rejected",
       });
     }
-        await application.save();
-        return successResponse(res, application, `Application ${status} successfully`);
+    await application.save();
+    return successResponse(
+      res,
+      application,
+      `Application ${status} successfully`,
+    );
   } catch (error) {
     return errorResponse(res, error.message, 500);
   }
@@ -1659,26 +2187,32 @@ const reviewApplication = asyncHandler(async (req, res) => {
 
 // Helper function to verify location authority
 const verifyLocationAuthority = (sangh, application) => {
-   switch (application.applicationLevel.toLowerCase()){
-        case 'area':
-            return sangh.location.area === application.location.area &&
-                   sangh.location.city === application.location.city &&
-                   sangh.location.district === application.location.district &&
-                   sangh.location.state === application.location.state;
-        case 'city':
-            return sangh.location.city === application.location.city &&
-                   sangh.location.district === application.location.district &&
-                   sangh.location.state === application.location.state;
-        case 'district':
-            return sangh.location.district === application.location.district &&
-                   sangh.location.state === application.location.state;
-        case 'state':
-            return sangh.location.state === application.location.state;
-        case 'country':
-            return true;
-        default:
-            return false;
-    }
+  switch (application.applicationLevel.toLowerCase()) {
+    case "area":
+      return (
+        sangh.location.area === application.location.area &&
+        sangh.location.city === application.location.city &&
+        sangh.location.district === application.location.district &&
+        sangh.location.state === application.location.state
+      );
+    case "city":
+      return (
+        sangh.location.city === application.location.city &&
+        sangh.location.district === application.location.district &&
+        sangh.location.state === application.location.state
+      );
+    case "district":
+      return (
+        sangh.location.district === application.location.district &&
+        sangh.location.state === application.location.state
+      );
+    case "state":
+      return sangh.location.state === application.location.state;
+    case "country":
+      return true;
+    default:
+      return false;
+  }
 };
 const reviewBySanghPresident = asyncHandler(async (req, res) => {
   try {
@@ -1688,23 +2222,43 @@ const reviewBySanghPresident = asyncHandler(async (req, res) => {
     const reviewerLevel = level?.toLowerCase();
     const reviewerSanghId = sanghId;
 
-    if (!['city', 'district', 'state', 'country', 'foundation'].includes(reviewerLevel)) {
-  return errorResponse(res, 'Only city/district/state/country/foundation level presidents can review', 403);
-}
+    if (
+      !["city", "district", "state", "country", "foundation"].includes(
+        reviewerLevel,
+      )
+    ) {
+      return errorResponse(
+        res,
+        "Only city/district/state/country/foundation level presidents can review",
+        403,
+      );
+    }
 
     const application = await JainAadhar.findById(applicationId);
-    if (!application) return errorResponse(res, 'Application not found', 404);
+    if (!application) return errorResponse(res, "Application not found", 404);
 
-    if (application.status !== 'pending') {
-      return errorResponse(res, `This application has already been ${application.status}`, 400);
+    if (application.status !== "pending") {
+      return errorResponse(
+        res,
+        `This application has already been ${application.status}`,
+        400,
+      );
     }
 
     if (application.applicationLevel?.toLowerCase() !== reviewerLevel) {
-      return errorResponse(res, `Application is not at ${reviewerLevel} level`, 403);
+      return errorResponse(
+        res,
+        `Application is not at ${reviewerLevel} level`,
+        403,
+      );
     }
 
     if (String(application.reviewingSanghId) !== String(reviewerSanghId)) {
-      return errorResponse(res, 'You are not authorized to review this application', 403);
+      return errorResponse(
+        res,
+        "You are not authorized to review this application",
+        403,
+      );
     }
 
     application.status = status;
@@ -1719,34 +2273,112 @@ const reviewBySanghPresident = asyncHandler(async (req, res) => {
 
     application.reviewedBy = {
       userId,
-      role: 'president',
+      role: "president",
       level: reviewerLevel,
       sanghId: reviewerSanghId,
     };
 
-    if (status === 'approved') {
+    if (status === "approved") {
       const jainAadharNumber = await generateJainAadharNumber();
       application.jainAadharNumber = jainAadharNumber;
 
       await User.findByIdAndUpdate(application.userId, {
-        jainAadharStatus: 'verified',
+        jainAadharStatus: "verified",
         jainAadharNumber,
         city: application.location.city,
         district: application.location.district,
         state: application.location.state,
       });
-    } else if (status === 'rejected') {
+    } else if (status === "rejected") {
       await User.findByIdAndUpdate(application.userId, {
-        jainAadharStatus: 'rejected',
+        jainAadharStatus: "rejected",
       });
     }
 
     await application.save();
-    return successResponse(res, application, `Application ${status} successfully`);
+    return successResponse(
+      res,
+      application,
+      `Application ${status} successfully`,
+    );
   } catch (err) {
     return errorResponse(res, err.message, 500);
   }
 });
+// const reviewByAdmin = asyncHandler(async (req, res) => {
+//   try {
+//     const { applicationId } = req.params;
+//     const { status, remarks, userId } = req.body;
+
+//     const application = await JainAadhar.findById(applicationId);
+//     if (!application) return errorResponse(res, "Application not found", 404);
+
+//     if (application.status === "approved") {
+//       return errorResponse(
+//         res,
+//         "This application has already been approved",
+//         400,
+//       );
+//     }
+
+//     // Allowed reviewers (user IDs)
+//     const allowedReviewers = [
+//       "688378b981449c14306611d7",
+//       "68837378f698f83ab109f019",
+//       "6883812f016032eba93b4a0b",
+//       "6874fa87237fcfa631771cbf",
+//     ];
+
+//     if (!allowedReviewers.includes(req.user._id.toString())) {
+//       return errorResponse(
+//         res,
+//         "Not authorized to review this application",
+//         403,
+//       );
+//     }
+
+//     application.status = status;
+//     application.reviewHistory.push({
+//       action: status,
+//       by: userId,
+//       level: "user",
+//       sanghId: null,
+//       remarks,
+//       timestamp: new Date(),
+//     });
+
+//     application.reviewedBy = {
+//       userId,
+//       role: "user",
+//       level: "user",
+//       sanghId: null,
+//     };
+
+//     if (status === "approved") {
+//       const jainAadharNumber = await generateJainAadharNumber();
+//       application.jainAadharNumber = jainAadharNumber;
+
+//       await User.findByIdAndUpdate(application.userId, {
+//         jainAadharStatus: "verified",
+//         jainAadharNumber,
+//       });
+//     } else if (status === "rejected") {
+//       await User.findByIdAndUpdate(application.userId, {
+//         jainAadharStatus: "rejected",
+//       });
+//     }
+
+//     await application.save();
+//     return successResponse(
+//       res,
+//       application,
+//       `Application ${status} successfully`,
+//     );
+//   } catch (err) {
+//     return errorResponse(res, err.message, 500);
+//   }
+// });
+
 const reviewByAdmin = asyncHandler(async (req, res) => {
   try {
     const { applicationId } = req.params;
@@ -1769,6 +2401,7 @@ const reviewByAdmin = asyncHandler(async (req, res) => {
       "68837378f698f83ab109f019",
       "6883812f016032eba93b4a0b",
       "6874fa87237fcfa631771cbf",
+      "68d52c7234c888afbdd2d355",
     ];
 
     if (!allowedReviewers.includes(req.user._id.toString())) {
@@ -1811,6 +2444,24 @@ const reviewByAdmin = asyncHandler(async (req, res) => {
     }
 
     await application.save();
+
+    // 🔔 Approve hone par applicant ko notification (FCM auto via post-save hook)
+    if (status === "approved") {
+      try {
+        const mongoose = require("mongoose");
+        const Notification = mongoose.model("Notification");
+        await Notification.create({
+          senderId: req.user._id,
+          receiverId: application.userId,
+          type: "jain_aadhar_approved",
+          jainAadharId: application._id,
+          message: "🎉 Your Jain Shravak Card has been approved.",
+        });
+      } catch (e) {
+        console.error("🔔 shravak approval notif error:", e.message);
+      }
+    }
+
     return successResponse(
       res,
       application,
@@ -1826,24 +2477,28 @@ const getApplicationStats = asyncHandler(async (req, res) => {
     const stats = await JainAadhar.aggregate([
       {
         $group: {
-          _id: '$status',
+          _id: "$status",
           count: { $sum: 1 },
-          applications: { $push: '$$ROOT' }
-        }
-      }
+          applications: { $push: "$$ROOT" },
+        },
+      },
     ]);
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayStats = await JainAadhar.countDocuments({
-      createdAt: { $gte: todayStart }
+      createdAt: { $gte: todayStart },
     });
 
-    return successResponse(res, {
-      overall: stats,
-      today: todayStats
-    }, 'Application statistics retrieved successfully');
+    return successResponse(
+      res,
+      {
+        overall: stats,
+        today: todayStats,
+      },
+      "Application statistics retrieved successfully",
+    );
   } catch (error) {
-    return errorResponse(res, 'Error fetching statistics', 500, error.message);
+    return errorResponse(res, "Error fetching statistics", 500, error.message);
   }
 });
 
@@ -1893,138 +2548,170 @@ const addReviewComment = asyncHandler(async (req, res) => {
           reviewComments: {
             comment,
             reviewedBy: req.user._id,
-            reviewedAt: Date.now()
-          }
-        }
+            reviewedAt: Date.now(),
+          },
+        },
       },
-      { new: true }
+      { new: true },
     );
-    return successResponse(res, application, 'Review comment added');
+    return successResponse(res, application, "Review comment added");
   } catch (error) {
-    return errorResponse(res, 'Error adding review comment', 500, error.message);
+    return errorResponse(
+      res,
+      "Error adding review comment",
+      500,
+      error.message,
+    );
   }
 });
 
 // Get applications by level and location
 const getApplicationsByLevel = asyncHandler(async (req, res) => {
-    try {
-        const { level } = req.params;
-        const { city, district, state, status } = req.query;
-        // Get user's Sangh role
-        const userRole = req.user.sanghRoles.find(role =>
-            role.role === 'president' && role.level === level
-        );
-        if (!userRole) {
-            return errorResponse(res, 'Not authorized to view applications at this level', 403);
-        }
-        // Build query based on level and location
-        const query = {
-            applicationLevel: level,
-            status: status || 'pending'
-        };
-
-        // Add location filters based on president's level
-        if (level === 'city') {
-            query['location.city'] = city;
-            query['location.district'] = district;
-            query['location.state'] = state;
-        } else if (level === 'district') {
-            query['location.district'] = district;
-            query['location.state'] = state;
-        } else if (level === 'state') {
-            query['location.state'] = state;
-        }
-        const applications = await JainAadhar.find(query)
-            .populate('userId', 'firstName lastName email phoneNumber')
-            .sort('-createdAt');
-
-        return successResponse(res, applications, 'Applications retrieved successfully');
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
+  try {
+    const { level } = req.params;
+    const { city, district, state, status } = req.query;
+    // Get user's Sangh role
+    const userRole = req.user.sanghRoles.find(
+      (role) => role.role === "president" && role.level === level,
+    );
+    if (!userRole) {
+      return errorResponse(
+        res,
+        "Not authorized to view applications at this level",
+        403,
+      );
     }
+    // Build query based on level and location
+    const query = {
+      applicationLevel: level,
+      status: status || "pending",
+    };
+
+    // Add location filters based on president's level
+    if (level === "city") {
+      query["location.city"] = city;
+      query["location.district"] = district;
+      query["location.state"] = state;
+    } else if (level === "district") {
+      query["location.district"] = district;
+      query["location.state"] = state;
+    } else if (level === "state") {
+      query["location.state"] = state;
+    }
+    const applications = await JainAadhar.find(query)
+      .populate("userId", "firstName lastName email phoneNumber")
+      .sort("-createdAt");
+
+    return successResponse(
+      res,
+      applications,
+      "Applications retrieved successfully",
+    );
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
 });
 
 // Review application at specific level
 const reviewApplicationByLevel = asyncHandler(async (req, res) => {
-    try {
-        const { applicationId } = req.params;
-        const { status, remarks } = req.body;
-        const application = await JainAadhar.findById(applicationId);
-        if (!application) {
-            return errorResponse(res, 'Application not found', 404);
-        }
-        // Prevent re-reviewing applications that are already approved or rejected
-        if (application.status !== 'pending') {
-            return errorResponse(res, `This application has already been ${application.status}. Cannot review again.`, 400);
-        }
-
-        // Verify reviewer's authority
-        const userRole = req.user.sanghRoles.find(role =>
-            role.role === 'president' &&
-            role.level === application.applicationLevel
-        );
-
-        if (!userRole) {
-            return errorResponse(res, 'Not authorized to review this application', 403);
-        }
-
-        // Update application status
-        application.status = status;
-        application.reviewedBy = {
-            userId: req.user._id,
-            role: 'president',
-            level: userRole.level,
-            sanghId: userRole.sanghId
-        };
-
-        // Add to review history
-        application.reviewHistory.push({
-            action: status,
-            by: req.user._id,
-            level: userRole.level,
-            sanghId: userRole.sanghId,
-            remarks
-        });
-
-        // If approved, generate Jain Aadhar number
-        if (status === 'approved') {
-            const jainAadharNumber = await generateJainAadharNumber();
-            // Update user's status and Jain Aadhar number
-            await User.findByIdAndUpdate(application.userId, {
-                jainAadharStatus: 'verified',
-                jainAadharNumber
-            });
-
-            application.jainAadharNumber = jainAadharNumber;
-        }
-
-        await application.save();
-
-        return successResponse(res, application, `Application ${status} successfully`);
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
+  try {
+    const { applicationId } = req.params;
+    const { status, remarks } = req.body;
+    const application = await JainAadhar.findById(applicationId);
+    if (!application) {
+      return errorResponse(res, "Application not found", 404);
     }
+    // Prevent re-reviewing applications that are already approved or rejected
+    if (application.status !== "pending") {
+      return errorResponse(
+        res,
+        `This application has already been ${application.status}. Cannot review again.`,
+        400,
+      );
+    }
+
+    // Verify reviewer's authority
+    const userRole = req.user.sanghRoles.find(
+      (role) =>
+        role.role === "president" &&
+        role.level === application.applicationLevel,
+    );
+
+    if (!userRole) {
+      return errorResponse(
+        res,
+        "Not authorized to review this application",
+        403,
+      );
+    }
+
+    // Update application status
+    application.status = status;
+    application.reviewedBy = {
+      userId: req.user._id,
+      role: "president",
+      level: userRole.level,
+      sanghId: userRole.sanghId,
+    };
+
+    // Add to review history
+    application.reviewHistory.push({
+      action: status,
+      by: req.user._id,
+      level: userRole.level,
+      sanghId: userRole.sanghId,
+      remarks,
+    });
+
+    // If approved, generate Jain Aadhar number
+    if (status === "approved") {
+      const jainAadharNumber = await generateJainAadharNumber();
+      // Update user's status and Jain Aadhar number
+      await User.findByIdAndUpdate(application.userId, {
+        jainAadharStatus: "verified",
+        jainAadharNumber,
+      });
+
+      application.jainAadharNumber = jainAadharNumber;
+    }
+
+    await application.save();
+
+    return successResponse(
+      res,
+      application,
+      `Application ${status} successfully`,
+    );
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
 });
 
 // Get verified members for Sangh
 const getVerifiedMembers = asyncHandler(async (req, res) => {
-    try {
-        const { level, city, district, state } = req.query;
+  try {
+    const { level, city, district, state } = req.query;
 
-        // Build location query
-        const locationQuery = {};
-        if (city) locationQuery.city = city;
-        if (district) locationQuery.district = district;
-        if (state) locationQuery.state = state;
+    // Build location query
+    const locationQuery = {};
+    if (city) locationQuery.city = city;
+    if (district) locationQuery.district = district;
+    if (state) locationQuery.state = state;
 
-        const members = await User.find({
-            jainAadharStatus: 'verified',
-            ...locationQuery
-        }).select('firstName lastName jainAadharNumber email phoneNumber city district state');
+    const members = await User.find({
+      jainAadharStatus: "verified",
+      ...locationQuery,
+    }).select(
+      "firstName lastName jainAadharNumber email phoneNumber city district state",
+    );
 
-        return successResponse(res, members, 'Verified members retrieved successfully');
-    } catch (error) {
-        return errorResponse(res, error.message, 500);
+    return successResponse(
+      res,
+      members,
+      "Verified members retrieved successfully",
+    );
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
   }
 });
 // Edit Jain Aadhar application details
@@ -2032,58 +2719,117 @@ const editJainAadhar = asyncHandler(async (req, res) => {
   try {
     const applicationId = req.params.applicationId;
     console.log("Received Application ID:", applicationId);
-
+ 
     // Check if application exists
     const application = await JainAadhar.findById(applicationId);
     if (!application) {
-      return errorResponse(res, 'Application not found', 404);
+      return errorResponse(res, "Application not found", 404);
     }
-
+ 
     // ✅ Parse JSON fields from FormData
-    if (typeof req.body.contactDetails === 'string') {
+    if (typeof req.body.contactDetails === "string") {
       req.body.contactDetails = JSON.parse(req.body.contactDetails);
     }
-    if (typeof req.body.location === 'string') {
+    if (typeof req.body.location === "string") {
       req.body.location = JSON.parse(req.body.location);
     }
-    if (typeof req.body.conversionDetails === 'string') {
+ 
+    // Location ko main $set se alag rakho.
+    // Mongoose ka sub-schema strict:false sirf create/save par chalta hai --
+    // findByIdAndUpdate ki casting top-level strict dekhti hai aur
+    // country-wise dynamic keys (county, zip_code, province, prefecture...)
+    // chup-chaap gira deti hai. Isliye location ka apna update chahiye,
+    // strict:false ke saath. Poore update par strict:false lagana theek
+    // nahi -- tab body ka koi bhi random field document me likha jaata.
+    const rawLocation = req.body.location;
+    delete req.body.location;
+    if (typeof req.body.conversionDetails === "string") {
       req.body.conversionDetails = JSON.parse(req.body.conversionDetails);
     }
-    if (typeof req.body.marriedStatus === 'string') {
+    if (typeof req.body.marriedStatus === "string") {
       try {
         req.body.marriedStatus = JSON.parse(req.body.marriedStatus);
       } catch (e) {
         // keep it as string "No"
       }
     }
-
+ 
     // ✅ If userProfile file uploaded, convert URL & attach
     if (req.files?.userProfile?.[0]) {
-      const profileUrl = req.files.userProfile[0].location || req.files.userProfile[0].path;
+      const profileUrl =
+        req.files.userProfile[0].location || req.files.userProfile[0].path;
       req.body.userProfile = convertS3UrlToCDN(profileUrl);
     }
-
+ 
     // ✅ Create edit history log
     const editHistory = {
-      action: 'edited',
+      action: "edited",
       by: req.user._id,
       level: req.editingLevel,
       sanghId: req.editingSanghId,
-      remarks: req.body.editRemarks || 'Application details edited',
-      timestamp: new Date()
+      remarks: req.body.editRemarks || "Application details edited",
+      timestamp: new Date(),
     };
-
+ 
     // ✅ Perform the update
     const updatedApplication = await JainAadhar.findByIdAndUpdate(
       applicationId,
       {
         $set: req.body,
-        $push: { reviewHistory: editHistory }
+        $push: { reviewHistory: editHistory },
       },
-      { new: true }
+      { new: true },
     );
-
-    return successResponse(res, updatedApplication, 'Application updated successfully');
+    // Location ka apna update -- strict:false, taaki dynamic field names bachein
+    let finalApplication = updatedApplication;
+ 
+    if (rawLocation && typeof rawLocation === "object") {
+      const processedLocation = processLocation(rawLocation);
+ 
+      const validation = validateLocation(processedLocation);
+      if (!validation.valid) {
+        return errorResponse(res, validation.error, 400);
+      }
+ 
+      finalApplication = await JainAadhar.findByIdAndUpdate(
+        applicationId,
+        { $set: { location: processedLocation } },
+        { new: true, strict: false },
+      );
+    }
+ 
+    // Location ya number badla ho to user ke details bhi sync karo
+    const userUpdate = {};
+ 
+    if (finalApplication?.location) {
+      const userLoc = processUserLocation(
+        finalApplication.location.toObject
+          ? finalApplication.location.toObject()
+          : finalApplication.location,
+      );
+      if (userLoc && Object.keys(userLoc).length > 0) {
+        userUpdate.location = userLoc;
+      }
+    }
+ 
+    const newNumber = finalApplication?.contactDetails?.number;
+    if (newNumber) {
+      userUpdate.phoneNumber = newNumber;
+    }
+ 
+    if (Object.keys(userUpdate).length > 0) {
+      await User.findByIdAndUpdate(
+        finalApplication.userId,
+        { $set: userUpdate },
+        { strict: false },
+      );
+    }
+ 
+    return successResponse(
+      res,
+      finalApplication,
+      "Application updated successfully",
+    );
   } catch (error) {
     return errorResponse(res, error.message, 500);
   }
@@ -2097,7 +2843,7 @@ const checkApplicationDuplicate = asyncHandler(async (req, res) => {
       return errorResponse(
         res,
         "Name, DOB and mobile number are required",
-        400
+        400,
       );
     }
 
@@ -2139,19 +2885,12 @@ const checkApplicationDuplicate = asyncHandler(async (req, res) => {
         matchedFields.push("name");
       }
 
-      if (
-        fatherRegex &&
-        app.fatherName &&
-        fatherRegex.test(app.fatherName)
-      ) {
+      if (fatherRegex && app.fatherName && fatherRegex.test(app.fatherName)) {
         matchedCount++;
         matchedFields.push("fatherName");
       }
 
-      if (
-        app.dob &&
-        new Date(app.dob).toISOString().slice(0, 10) === dob
-      ) {
+      if (app.dob && new Date(app.dob).toISOString().slice(0, 10) === dob) {
         matchedCount++;
         matchedFields.push("dob");
       }
@@ -2162,22 +2901,21 @@ const checkApplicationDuplicate = asyncHandler(async (req, res) => {
       }
 
       // ✅ 4 me se 2 match
-    if (matchedCount >= 2) {
-    return successResponse(
-      res,
-      {
-        application: {
-          jainAadharNumber: app.jainAadharNumber || null,
-          name: app.name || null,
-        },
-        matchedCount,
-        matchedFields,
-      },
-      "Duplicate application found",
-      200
-    );
-  }
-
+      if (matchedCount >= 2) {
+        return successResponse(
+          res,
+          {
+            application: {
+              jainAadharNumber: app.jainAadharNumber || null,
+              name: app.name || null,
+            },
+            matchedCount,
+            matchedFields,
+          },
+          "Duplicate application found",
+          200,
+        );
+      }
     }
 
     return successResponse(res, null, "No duplicate found", 200);
@@ -2186,11 +2924,10 @@ const checkApplicationDuplicate = asyncHandler(async (req, res) => {
       res,
       "Error checking duplicate application",
       500,
-      error.message
+      error.message,
     );
   }
 });
-
 
 module.exports = {
   reviewBySanghPresident,

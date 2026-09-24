@@ -1,6 +1,5 @@
 const mongoose = require("mongoose");
 
-// ── Individual cart line item ──
 const cartItemSchema = new mongoose.Schema(
   {
     productId: {
@@ -11,48 +10,42 @@ const cartItemSchema = new mongoose.Schema(
     vyaparId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "JainVyapar",
+      required: true,
     },
+    // Which option of the product — 500 g vs 5 kg, S vs XL. Null for
+    // products without variants, so old rows keep working untouched.
+    //
+    // ⚠️ The same product in two sizes is two cart lines. Matching on
+    //    productId alone would merge them and charge one price for both.
+    variantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+    // Snapshot of the label, so the cart still reads "5 kg" even if the
+    // seller renames or removes that option later.
+    variantLabel: { type: String, default: "" },
+
     qty: {
       type: Number,
       required: true,
-      default: 1,
       min: 1,
-      max: 99,
+      default: 1,
     },
-    // Price locked at add time — protects user if seller changes price later
-    priceAtAddTime: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-    mrpAtAddTime: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    // Snapshot — preserves display info if product is deleted/modified
-    snapshot: {
-      name: { type: String, default: "" },
-      photo: { type: String, default: "" },
-      category: { type: String, default: "" },
-      unit: { type: String, default: "piece" },
-    },
-    addedAt: {
-      type: Date,
-      default: Date.now,
-    },
+    // Price locked at add-time so a seller price change mid-session
+    // doesn't silently move the cart total under the buyer.
+    priceAtAddTime: { type: Number, required: true },
+    mrpAtAddTime: { type: Number, default: 0 },
   },
-  { _id: true },
+  { _id: true, timestamps: true },
 );
 
-// ── Cart document (one per user) ──
 const cartSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      unique: true, // ✅ one cart per user
+      unique: true,
       index: true,
     },
     items: [cartItemSchema],

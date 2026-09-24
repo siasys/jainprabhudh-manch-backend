@@ -4,6 +4,7 @@ const { getIo } = require("../../websocket/socket");
 const Block = require("../../model/Block User/Block");
 const Story = require("../../model/SocialMediaModels/storyModel");
 const Post = require("../../model/SocialMediaModels/postModel");
+const mongoose = require("mongoose");
 // Notification Send Karna
 exports.sendNotification = async (req, res) => {
   try {
@@ -27,13 +28,11 @@ exports.sendNotification = async (req, res) => {
     const io = getIo();
     io.to(receiverId.toString()).emit("newNotification", notification);
 
-    res
-      .status(201)
-      .json({
-        success: true,
-        message: "Notification sent successfully",
-        notification,
-      });
+    res.status(201).json({
+      success: true,
+      message: "Notification sent successfully",
+      notification,
+    });
   } catch (error) {
     console.error("Error sending notification:", error);
     res
@@ -71,77 +70,120 @@ exports.getNotifications = async (req, res) => {
       return !blockedUsers.includes(senderId);
     });
 
-    // ✅ like/comment/mention ke liye storyId ya postId se data fetch karo
-    notifications = await Promise.all(
-      notifications.map(async (notif) => {
-        // ✅ STORY notification (like, comment, mention) - storyId field use karo
-        if (notif.storyId) {
-          try {
-            const story = await Story.findById(notif.storyId)
-              .select("media")
-              .lean();
+    // ⚡ PERF: pehle har notification ke liye alag DB query chalti thi (N+1).
+    // Ab saari story/post IDs ikattha karke sirf 3 query (parallel) — response bilkul same.
+    const isValidId = (id) => id && mongoose.Types.ObjectId.isValid(String(id));
 
-            if (story) {
-              // ✅ Agar mediaId hai to sirf wahi media bhejo
-              if (notif.mediaId) {
-                const specificMedia = story.media.find(
-                  (m) => m._id.toString() === notif.mediaId.toString(),
-                );
-                notif.storyData = {
-                  _id: story._id,
-                  media: specificMedia ? [specificMedia] : story.media,
-                };
-              } else {
-                notif.storyData = story;
-              }
-            }
-          } catch (e) {
-            console.error("Story fetch error:", e);
-          }
-        }
+    const storyIds = new Set();
+    const mediaPostIds = new Set();
+    const collabPostIds = new Set();
 
-        // ✅ POST notification (like, comment) - postId field use karo
-        else if (notif.postId) {
-          try {
-            const post = await Post.findById(notif.postId)
-              .select("media")
-              .lean();
-            if (post) {
-              notif.postData = post;
-            }
-          } catch (e) {
-            console.error("Post fetch error:", e);
-          }
-        }
+    notifications.forEach((notif) => {
+      if (notif.storyId) {
+        if (isValidId(notif.storyId)) storyIds.add(String(notif.storyId));
+      } else if (notif.postId) {
+        if (isValidId(notif.postId)) mediaPostIds.add(String(notif.postId));
+      }
+      if (notif.type === "collaborator_invite" && notif.postId) {
+        if (isValidId(notif.postId)) collabPostIds.add(String(notif.postId));
+      }
+    });
 
-        // ✅ NEW: Collaborator invite ke liye current user ka status resolve karo
-        // (frontend ko pata chale ki pehle se accept/reject ho chuka hai ya nahi)
-        if (notif.type === "collaborator_invite" && notif.postId) {
-          try {
-            const collabPost = await Post.findById(notif.postId)
-              .select("collaborators")
-              .lean();
-            if (collabPost && Array.isArray(collabPost.collaborators)) {
-              const myEntry = collabPost.collaborators.find(
-                (c) =>
-                  c.user && c.user.toString() === notif.receiverId.toString(),
-              );
-              if (myEntry) {
-                // "pending" | "accepted" | "rejected"
-                notif._collabStatus = myEntry.status;
-              } else {
-                // Post exists but user removed from collab list
-                notif._collabStatus = "removed";
-              }
-            }
-          } catch (e) {
-            console.error("Collab status fetch error:", e);
-          }
-        }
+    const [storyDocs, mediaPostDocs, collabPostDocs] = await Promise.all([
+      storyIds.size
+        ? Story.find({ _id: { $in: [...storyIds] } })
+            .select("media")
+            .lean()
+            .catch((e) => {
+              console.error("Story fetch error:", e);
+              return [];
+            })
+        : [],
+      mediaPostIds.size
+        ? Post.find({ _id: { $in: [...mediaPostIds] } })
+            .select("media")
+            .lean()
+            .catch((e) => {
+              console.error("Post fetch error:", e);
+              return [];
+            })
+        : [],
+      collabPostIds.size
+        ? Post.find({ _id: { $in: [...collabPostIds] } })
+            .select("collaborators")
+            .lean()
+            .catch((e) => {
+              console.error("Collab status fetch error:", e);
+              return [];
+            })
+        : [],
+    ]);
 
-        return notif;
-      }),
+    const storyMap = new Map(storyDocs.map((s) => [String(s._id), s]));
+    const mediaPostMap = new Map(mediaPostDocs.map((p) => [String(p._id), p]));
+    const collabPostMap = new Map(
+      collabPostDocs.map((p) => [String(p._id), p]),
     );
+
+    // ✅ like/comment/mention ke liye storyId ya postId se data (same logic, map se)
+    notifications = notifications.map((notif) => {
+      // ✅ STORY notification (like, comment, mention) - storyId field use karo
+      if (notif.storyId) {
+        try {
+          const story = storyMap.get(String(notif.storyId));
+
+          if (story) {
+            // ✅ Agar mediaId hai to sirf wahi media bhejo
+            if (notif.mediaId) {
+              const specificMedia = story.media.find(
+                (m) => m._id.toString() === notif.mediaId.toString(),
+              );
+              notif.storyData = {
+                _id: story._id,
+                media: specificMedia ? [specificMedia] : story.media,
+              };
+            } else {
+              notif.storyData = story;
+            }
+          }
+        } catch (e) {
+          console.error("Story fetch error:", e);
+        }
+      }
+
+      // ✅ POST notification (like, comment) - postId field use karo
+      else if (notif.postId) {
+        const post = mediaPostMap.get(String(notif.postId));
+        if (post) {
+          notif.postData = post;
+        }
+      }
+
+      // ✅ NEW: Collaborator invite ke liye current user ka status resolve karo
+      // (frontend ko pata chale ki pehle se accept/reject ho chuka hai ya nahi)
+      if (notif.type === "collaborator_invite" && notif.postId) {
+        try {
+          const collabPost = collabPostMap.get(String(notif.postId));
+          if (collabPost && Array.isArray(collabPost.collaborators)) {
+            const myEntry = collabPost.collaborators.find(
+              (c) =>
+                c.user && c.user.toString() === notif.receiverId.toString(),
+            );
+            if (myEntry) {
+              // "pending" | "accepted" | "rejected"
+              notif._collabStatus = myEntry.status;
+            } else {
+              // Post exists but user removed from collab list
+              notif._collabStatus = "removed";
+            }
+          }
+        } catch (e) {
+          console.error("Collab status fetch error:", e);
+        }
+      }
+
+      return notif;
+    });
 
     res.status(200).json({
       success: true,
@@ -172,12 +214,10 @@ exports.markAllNotificationsRead = async (req, res) => {
     });
   } catch (error) {
     console.error("Error marking all notifications as read:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to mark notifications as read",
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to mark notifications as read",
+    });
   }
 };
 // Notification Delete Karna (By Notification ID)

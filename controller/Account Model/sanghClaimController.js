@@ -1,6 +1,6 @@
-const SanghClaim = require('../../model/Account Model/SanghClaim');
-const Sangh = require('../../model/SanghModels/hierarchicalSanghModel');
-const User = require('../../model/UserRegistrationModels/userModel');
+const SanghClaim = require("../../model/Account Model/SanghClaim");
+const Sangh = require("../../model/SanghModels/hierarchicalSanghModel");
+const User = require("../../model/UserRegistrationModels/userModel");
 
 // ✅ 1. CREATE CLAIM (NO DISTRIBUTION)
 exports.createClaim = async (req, res) => {
@@ -14,6 +14,10 @@ exports.createClaim = async (req, res) => {
       receivedPaymentsAmount,
       totalAmount,
       remark,
+      claimType,
+      claimTitle,
+      submittedToSangh,
+      foundationSangh,
     } = req.body;
 
     const userId = req.user.id;
@@ -23,22 +27,23 @@ exports.createClaim = async (req, res) => {
     if (!sangh) {
       return res.status(404).json({
         success: false,
-        message: 'Sangh not found'
+        message: "Sangh not found",
       });
     }
 
     // 🔹 Validate amounts
     if (!totalAmount || totalAmount <= 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid total amount' 
+      return res.status(400).json({
+        success: false,
+        message: "Invalid total amount",
       });
     }
 
     // 🔹 Get unclaimed receivedPayments IDs
-    const unclaimedPayments = sangh.receivedPayments
-      ?.filter(p => p.status === 'unclaimed')
-      .map(p => p._id) || [];
+    const unclaimedPayments =
+      sangh.receivedPayments
+        ?.filter((p) => p.status === "unclaimed")
+        .map((p) => p._id) || [];
 
     // 🔹 Create claim
     const claim = await SanghClaim.create({
@@ -52,9 +57,13 @@ exports.createClaim = async (req, res) => {
       receivedPaymentsAmount: receivedPaymentsAmount || 0,
       totalAmount,
       claimedPaymentIds: unclaimedPayments,
-      remark: remark || '',
-      status: 'submitted',
-      paymentStatus: 'pending',
+      claimType: claimType === "other" ? "other" : "membership",
+      submittedToSangh: submittedToSangh || null,
+      foundationSangh: foundationSangh || null,
+      claimTitle: claimType === "other" ? claimTitle || "" : "",
+      remark: remark || "",
+      status: "submitted",
+      paymentStatus: "pending",
       submittedAt: new Date(),
     });
 
@@ -64,28 +73,27 @@ exports.createClaim = async (req, res) => {
         { _id: sanghId },
         {
           $set: {
-            'receivedPayments.$[elem].status': 'claimed',
-            'receivedPayments.$[elem].claimedAt': new Date(),
-            'receivedPayments.$[elem].claimId': claim._id,
-          }
+            "receivedPayments.$[elem].status": "claimed",
+            "receivedPayments.$[elem].claimedAt": new Date(),
+            "receivedPayments.$[elem].claimId": claim._id,
+          },
         },
         {
-          arrayFilters: [{ 'elem.status': 'unclaimed' }]
-        }
+          arrayFilters: [{ "elem.status": "unclaimed" }],
+        },
       );
     }
 
     res.status(201).json({
       success: true,
-      message: 'Claim submitted successfully',
+      message: "Claim submitted successfully",
       data: claim,
     });
-
   } catch (err) {
-    console.error('❌ Create Claim Error:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: err.message 
+    console.error("❌ Create Claim Error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
     });
   }
 };
@@ -100,8 +108,8 @@ exports.getAllClaims = async (req, res) => {
     if (paymentStatus) query.paymentStatus = paymentStatus;
 
     const claims = await SanghClaim.find(query)
-      .populate('sanghId', 'name level location')
-      .populate('userId', 'fullName phoneNumber')
+      .populate("sanghId", "name level location")
+      .populate("userId", "fullName phoneNumber")
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
@@ -117,12 +125,11 @@ exports.getAllClaims = async (req, res) => {
         pages: Math.ceil(total / limit),
       },
     });
-
   } catch (err) {
-    console.error('❌ Get Claims Error:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: err.message 
+    console.error("❌ Get Claims Error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
     });
   }
 };
@@ -138,20 +145,47 @@ exports.getSanghClaims = async (req, res) => {
     if (paymentStatus) query.paymentStatus = paymentStatus;
 
     const claims = await SanghClaim.find(query)
-      .populate('userId', 'fullName phoneNumber')
-      .populate('adminResponse.reviewedBy', 'name')
+      .populate("userId", "fullName phoneNumber")
+      .populate("adminResponse.reviewedBy", "name")
       .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
       data: claims,
     });
-
   } catch (err) {
-    console.error('❌ Get Sangh Claims Error:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: err.message 
+    console.error("❌ Get Sangh Claims Error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+// ✅ 3b. GET INCOMING CLAIMS (submitted TO this sangh) - additive
+exports.getIncomingClaims = async (req, res) => {
+  try {
+    const { sanghId } = req.params;
+    const { status } = req.query;
+
+    const query = { submittedToSangh: sanghId };
+    if (status) query.status = status;
+
+    const claims = await SanghClaim.find(query)
+      .populate("sanghId", "name level location")
+      .populate("userId", "fullName phoneNumber")
+      .populate("adminResponse.reviewedBy", "name")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      data: claims,
+    });
+  } catch (err) {
+    console.error("❌ Get Incoming Claims Error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
     });
   }
 };
@@ -162,14 +196,17 @@ exports.getClaimById = async (req, res) => {
     const { claimId } = req.params;
 
     const claim = await SanghClaim.findById(claimId)
-      .populate('sanghId', 'name level location members honoraryMembers receivedPayments')
-      .populate('userId', 'name phoneNumber')
-      .populate('adminResponse.reviewedBy', 'name');
+      .populate(
+        "sanghId",
+        "name level location members honoraryMembers receivedPayments",
+      )
+      .populate("userId", "name phoneNumber")
+      .populate("adminResponse.reviewedBy", "name");
 
     if (!claim) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Claim not found' 
+      return res.status(404).json({
+        success: false,
+        message: "Claim not found",
       });
     }
 
@@ -177,12 +214,11 @@ exports.getClaimById = async (req, res) => {
       success: true,
       data: claim,
     });
-
   } catch (err) {
-    console.error('❌ Get Claim Error:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: err.message 
+    console.error("❌ Get Claim Error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
     });
   }
 };
@@ -197,40 +233,39 @@ exports.approveClaim = async (req, res) => {
     const claim = await SanghClaim.findById(claimId);
     if (!claim) {
       return res.status(404).json({
-        success: false, 
-        message: 'Claim not found'
+        success: false,
+        message: "Claim not found",
       });
     }
 
-    if (claim.status !== 'submitted' && claim.status !== 'under_review') {
+    if (claim.status !== "submitted" && claim.status !== "under_review") {
       return res.status(400).json({
         success: false,
-        message: 'Claim cannot be approved in current status'
+        message: "Claim cannot be approved in current status",
       });
     }
 
     // Update claim status
-    claim.status = 'approved';
+    claim.status = "approved";
     claim.approvedAt = new Date();
     claim.adminResponse = {
       reviewedBy: adminId,
       reviewedAt: new Date(),
-      approvalNote: approvalNote || '',
+      approvalNote: approvalNote || "",
     };
 
     await claim.save();
 
     res.status(200).json({
       success: true,
-      message: 'Claim approved successfully',
+      message: "Claim approved successfully",
       data: claim,
     });
-
   } catch (err) {
-    console.error('❌ Approve Claim Error:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: err.message 
+    console.error("❌ Approve Claim Error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
     });
   }
 };
@@ -244,27 +279,27 @@ exports.rejectClaim = async (req, res) => {
 
     const claim = await SanghClaim.findById(claimId);
     if (!claim) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Claim not found' 
+      return res.status(404).json({
+        success: false,
+        message: "Claim not found",
       });
     }
 
-    if (claim.status === 'approved' || claim.status === 'rejected') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Claim already processed' 
+    if (claim.status === "approved" || claim.status === "rejected") {
+      return res.status(400).json({
+        success: false,
+        message: "Claim already processed",
       });
     }
 
     // Update claim status
-    claim.status = 'rejected';
-    claim.paymentStatus = 'failed';
+    claim.status = "rejected";
+    claim.paymentStatus = "failed";
     claim.rejectedAt = new Date();
     claim.adminResponse = {
       reviewedBy: adminId,
       reviewedAt: new Date(),
-      rejectionReason: rejectionReason || 'Not specified',
+      rejectionReason: rejectionReason || "Not specified",
     };
 
     await claim.save();
@@ -276,28 +311,27 @@ exports.rejectClaim = async (req, res) => {
         { _id: claim.sanghId },
         {
           $set: {
-            'receivedPayments.$[elem].status': 'unclaimed',
-            'receivedPayments.$[elem].claimedAt': null,
-            'receivedPayments.$[elem].claimId': null,
-          }
+            "receivedPayments.$[elem].status": "unclaimed",
+            "receivedPayments.$[elem].claimedAt": null,
+            "receivedPayments.$[elem].claimId": null,
+          },
         },
         {
-          arrayFilters: [{ 'elem._id': { $in: claim.claimedPaymentIds } }]
-        }
+          arrayFilters: [{ "elem._id": { $in: claim.claimedPaymentIds } }],
+        },
       );
     }
 
     res.status(200).json({
       success: true,
-      message: 'Claim rejected successfully',
+      message: "Claim rejected successfully",
       data: claim,
     });
-
   } catch (err) {
-    console.error('❌ Reject Claim Error:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: err.message 
+    console.error("❌ Reject Claim Error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
     });
   }
 };
@@ -306,30 +340,25 @@ exports.rejectClaim = async (req, res) => {
 exports.markAsPaid = async (req, res) => {
   try {
     const { claimId } = req.params;
-    const { 
-      transactionId, 
-      paymentMode, 
-      bankReference, 
-      screenshot 
-    } = req.body;
+    const { transactionId, paymentMode, bankReference, screenshot } = req.body;
 
     const claim = await SanghClaim.findById(claimId);
     if (!claim) {
       return res.status(404).json({
         success: false,
-        message: 'Claim not found'
+        message: "Claim not found",
       });
     }
 
-    if (claim.status !== 'approved') {
+    if (claim.status !== "approved") {
       return res.status(400).json({
         success: false,
-        message: 'Claim must be approved first'
+        message: "Claim must be approved first",
       });
     }
 
     // Update payment status
-    claim.paymentStatus = 'paid';
+    claim.paymentStatus = "paid";
     claim.paidAt = new Date();
     claim.paymentDetails = {
       transactionId,
@@ -343,15 +372,14 @@ exports.markAsPaid = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Payment marked as completed',
+      message: "Payment marked as completed",
       data: claim,
     });
-
   } catch (err) {
-    console.error('❌ Mark Paid Error:', err);
+    console.error("❌ Mark Paid Error:", err);
     res.status(500).json({
       success: false,
-      message: err.message
+      message: err.message,
     });
   }
 };
@@ -362,38 +390,37 @@ exports.updateClaimStatus = async (req, res) => {
     const { claimId } = req.params;
     const { status } = req.body;
 
-    const validStatuses = ['submitted', 'under_review', 'approved', 'rejected'];
+    const validStatuses = ["submitted", "under_review", "approved", "rejected"];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid status'
+        message: "Invalid status",
       });
     }
 
     const claim = await SanghClaim.findByIdAndUpdate(
       claimId,
       { status },
-      { new: true }
+      { new: true },
     );
 
     if (!claim) {
       return res.status(404).json({
-        success: false, 
-        message: 'Claim not found'
+        success: false,
+        message: "Claim not found",
       });
     }
 
     res.status(200).json({
       success: true,
-      message: 'Claim status updated',
+      message: "Claim status updated",
       data: claim,
     });
-
   } catch (err) {
-    console.error('❌ Update Status Error:', err);
+    console.error("❌ Update Status Error:", err);
     res.status(500).json({
       success: false,
-      message: err.message
+      message: err.message,
     });
   }
 };
@@ -403,41 +430,35 @@ exports.updatePaymentStatus = async (req, res) => {
     const { claimId } = req.params;
     const { paymentStatus } = req.body;
 
-    const validPaymentStatuses = [
-      'pending',
-      'processing',
-      'paid',
-      'failed',
-    ];
+    const validPaymentStatuses = ["pending", "processing", "paid", "failed"];
 
     if (!validPaymentStatuses.includes(paymentStatus)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid payment status',
+        message: "Invalid payment status",
       });
     }
 
     const claim = await SanghClaim.findByIdAndUpdate(
       claimId,
       { paymentStatus },
-      { new: true }
+      { new: true },
     );
 
     if (!claim) {
       return res.status(404).json({
         success: false,
-        message: 'Claim not found',
+        message: "Claim not found",
       });
     }
 
     res.status(200).json({
       success: true,
-      message: 'Payment status updated successfully',
+      message: "Payment status updated successfully",
       data: claim,
     });
-
   } catch (err) {
-    console.error('❌ Update Payment Status Error:', err);
+    console.error("❌ Update Payment Status Error:", err);
     res.status(500).json({
       success: false,
       message: err.message,
@@ -451,21 +472,21 @@ exports.getClaimStatistics = async (req, res) => {
     const stats = await SanghClaim.aggregate([
       {
         $group: {
-          _id: '$status',
+          _id: "$status",
           count: { $sum: 1 },
-          totalAmount: { $sum: '$totalAmount' },
-        }
-      }
+          totalAmount: { $sum: "$totalAmount" },
+        },
+      },
     ]);
 
     const paymentStats = await SanghClaim.aggregate([
       {
         $group: {
-          _id: '$paymentStatus',
+          _id: "$paymentStatus",
           count: { $sum: 1 },
-          totalAmount: { $sum: '$totalAmount' },
-        }
-      }
+          totalAmount: { $sum: "$totalAmount" },
+        },
+      },
     ]);
 
     res.status(200).json({
@@ -475,12 +496,11 @@ exports.getClaimStatistics = async (req, res) => {
         byPaymentStatus: paymentStats,
       },
     });
-
   } catch (err) {
-    console.error('❌ Get Statistics Error:', err);
+    console.error("❌ Get Statistics Error:", err);
     res.status(500).json({
       success: false,
-      message: err.message
+      message: err.message,
     });
   }
 };

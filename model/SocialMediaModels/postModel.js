@@ -209,6 +209,35 @@ const postSchema = new mongoose.Schema(
             },
           },
         ],
+        // ── Admin moderation fields ──
+        isHidden: {
+          type: Boolean,
+          default: false,
+        },
+        hiddenBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "AdminUser",
+          default: null,
+        },
+        hiddenAt: { type: Date, default: null },
+        hideReason: { type: String, default: "" },
+
+        isDeleted: {
+          type: Boolean,
+          default: false,
+        },
+        deletedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "AdminUser",
+          default: null,
+        },
+        deletedAt: { type: Date, default: null },
+        deleteReason: { type: String, default: "" },
+
+        isPinned: {
+          type: Boolean,
+          default: false,
+        },
       },
     ],
   },

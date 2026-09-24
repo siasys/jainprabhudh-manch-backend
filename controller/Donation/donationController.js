@@ -1,6 +1,16 @@
+const mongoose = require("mongoose");
 const Donation = require("../../model/Donation/donation");
 const { convertS3UrlToCDN } = require("../../utils/s3Utils");
 const Sangh = require("../../model/SanghModels/hierarchicalSanghModel");
+const Counter = require("../../model/Donation/Counter"); // additive: receipt no.
+
+// Financial year helper (April–March) e.g. 2025-26
+const getFinancialYear = (dt = new Date()) => {
+  const y = dt.getFullYear();
+  const m = dt.getMonth(); // 0=Jan ... 3=Apr
+  const start = m >= 3 ? y : y - 1;
+  return `${start}-${String(start + 1).slice(-2)}`;
+};
 
 /**
  * CREATE DONATION
@@ -20,7 +30,32 @@ const createDonation = async (req, res) => {
       razorpayOrderId,
       razorpayPaymentId,
       razorpaySignature,
+      // Tirth (optional) — tirth screen se daan ho tab aata hai
+      tirthId,
+      tirthName,
     } = req.body;
+
+    // ✅ Tirth optional — galat / khaali id ho to null (daan phir bhi hoga)
+    const validTirthId =
+      tirthId && mongoose.Types.ObjectId.isValid(String(tirthId))
+        ? tirthId
+        : null;
+
+    // ✅ Tirth ka daan — Trust ka share ADMIN tay karega.
+    //    Yahan koi percent nahi lagta (pehle 10% default lag raha tha).
+    //    Tab tak: commission 0, poora amount tirth ka payable.
+    let tirthSettlement = {};
+    if (validTirthId) {
+      const total = Math.max(0, Math.round(Number(amount) || 0));
+      tirthSettlement = {
+        beneficiaryTirthId: validTirthId,
+        commissionPercent: 0,
+        commissionAmount: 0,
+        payableAmount: total,
+        commissionSet: false, // admin ne abhi tay nahi kiya
+        settlementStatus: "pending",
+      };
+    }
 
     // 🔒 FETCH FOUNDATION SANGH (ALWAYS FIXED)
     const foundationSangh = await Sangh.findOne({ level: "foundation" });
@@ -43,7 +78,7 @@ const createDonation = async (req, res) => {
       paymentStatus = "success";
       paymentMethod = "razorpay";
       paidAt = new Date();
-     // console.log("✅ Donation via Razorpay:", razorpayPaymentId);
+      // console.log("✅ Donation via Razorpay:", razorpayPaymentId);
     }
 
     // ✅ CASE 2: Manual screenshot upload (QR flow)
@@ -85,7 +120,32 @@ const createDonation = async (req, res) => {
       razorpayPaymentId: razorpayPaymentId || "",
       razorpaySignature: razorpaySignature || "",
       currency: "INR",
+      // ✅ Tirth ka daan ho to (normal daan me null / "")
+      tirthId: validTirthId,
+      tirthName: validTirthId ? String(tirthName || "").trim() : "",
+      // ✅ Tirth settlement ke fields (normal daan me kuch nahi)
+      ...tirthSettlement,
     });
+
+    // ===== RECEIPT NUMBER GENERATION (additive) =====
+    // Only for successful/paid donations
+    if (donation.paymentStatus === "success" && !donation.receiptNumber) {
+      try {
+        const fy = getFinancialYear();
+        const counter = await Counter.findByIdAndUpdate(
+          `donationReceipt_${fy}`,
+          { $inc: { seq: 1 } },
+          { new: true, upsert: true },
+        );
+        donation.receiptNumber = `JPM/${fy}/${String(counter.seq).padStart(5, "0")}`;
+        donation.receiptDate = new Date();
+        donation.financialYear = fy;
+        await donation.save();
+      } catch (e) {
+        console.error("RECEIPT NUMBER GEN ERROR:", e.message);
+        // Donation is already saved; receipt no. can be backfilled later
+      }
+    }
 
     return res.status(201).json({
       success: true,
@@ -106,9 +166,15 @@ const createDonation = async (req, res) => {
  */
 const getAllDonations = async (req, res) => {
   try {
-    const donations = await Donation.find({
-      isGuptDan: { $ne: true }, // ✅ Gupt Dan hide
-    })
+    // ✅ Optional: ?tirthId=... se sirf us tirth ke daan
+    // (bina param ke pehle jaisa — saare daan)
+    const filter = { isGuptDan: { $ne: true } }; // ✅ Gupt Dan hide
+    const { tirthId } = req.query;
+    if (tirthId && mongoose.Types.ObjectId.isValid(String(tirthId))) {
+      filter.tirthId = tirthId;
+    }
+
+    const donations = await Donation.find(filter)
       .populate("userId", "fullName gender phoneNumber profilePicture")
       .populate("sanghId", "name sanghImage")
       .sort({ createdAt: -1 });

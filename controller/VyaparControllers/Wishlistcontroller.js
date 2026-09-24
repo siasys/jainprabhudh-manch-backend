@@ -4,6 +4,14 @@ const Wishlist = require("../../model/VyaparModels/Wishlistmodel");
 const Cart = require("../../model/VyaparModels/Cartmodel");
 const VyaparProduct = require("../../model/VyaparModels/Productmodel");
 
+// photos are stored as [{ url, caption }]. Older rows may hold plain
+// strings, so accept both and always hand back a URL string.
+const photoUrl = (photos) => {
+  const first = Array.isArray(photos) ? photos[0] : null;
+  if (!first) return "";
+  return typeof first === "string" ? first : first.url || "";
+};
+
 // ══════════════════════════════════════════════════════════
 // Populate query for wishlist items
 // ══════════════════════════════════════════════════════════
@@ -36,7 +44,7 @@ const buildWishlistResponse = (wishlist) => {
       isAvailable,
       // Merged view — live if available, else snapshot
       name: p?.name || item.snapshot?.name || "",
-      photo: p?.photos?.[0] || item.snapshot?.photo || "",
+      photo: photoUrl(p?.photos) || item.snapshot?.photo || "",
       category: p?.category || item.snapshot?.category || "",
       price: p?.price ?? item.snapshot?.price ?? 0,
       mrp: p?.mrp ?? item.snapshot?.mrp ?? 0,
@@ -112,7 +120,7 @@ const toggleWishlistItem = asyncHandler(async (req, res) => {
         vyaparId: product.vyaparId,
         snapshot: {
           name: product.name,
-          photo: product.photos?.[0] || "",
+          photo: photoUrl(product.photos),
           category: product.category,
           price: product.price,
           mrp: product.mrp || 0,
@@ -344,7 +352,7 @@ const moveWishlistItemToCart = asyncHandler(async (req, res) => {
         mrpAtAddTime: product.mrp || 0,
         snapshot: {
           name: product.name,
-          photo: product.photos?.[0] || "",
+          photo: photoUrl(product.photos),
           category: product.category,
           unit: product.unit || "piece",
         },

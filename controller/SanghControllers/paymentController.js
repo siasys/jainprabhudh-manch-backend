@@ -10,10 +10,21 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
+// India ke bahar aur international level par har type ki ek hi fee
+const OVERSEAS_FEE = 21000;
+
 // Helper to get amount based on level
-const getAmountByLevel = (level, sanghType, age) => {
+// country optional hai -- na bheja jaaye to purana India wala behaviour
+const getAmountByLevel = (level, sanghType, age, country) => {
   const type = sanghType?.toLowerCase();
   const lvl = level?.toLowerCase();
+
+  // International level ka ek hi sangh hota hai -- usme India aur non-India
+  // dono member ban sakte hain, dono ke liye yahi fee. India ke bahar ke
+  // kisi bhi level par bhi yahi.
+  if (lvl === "international" || (country || "India") !== "India") {
+    return OVERSEAS_FEE;
+  }
 
   if (type === "youth" || type === "women") {
     switch (lvl) {
@@ -63,7 +74,12 @@ const createOrder = asyncHandler(async (req, res) => {
         .json({ success: false, message: "Sangh not found" });
     }
 
-    const amount = getAmountByLevel(sangh.level, sangh.sanghType, age);
+    const amount = getAmountByLevel(
+      sangh.level,
+      sangh.sanghType,
+      age,
+      sangh.location?.country,
+    );
     const receipt = `pay_${memberId.substring(0, 10)}_${Date.now()}`;
 
     const options = {
@@ -100,13 +116,11 @@ const createOrder = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     console.error("Error in createOrder:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to create order",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to create order",
+      error: error.message,
+    });
   }
 });
 
@@ -146,7 +160,12 @@ const verifyPayment = asyncHandler(async (req, res) => {
         .status(404)
         .json({ success: false, message: "Sangh not found" });
     }
-    const amount = getAmountByLevel(sangh.level, sangh.sanghType, age);
+    const amount = getAmountByLevel(
+      sangh.level,
+      sangh.sanghType,
+      age,
+      sangh.location?.country,
+    );
 
     // Step 3: Update Payment record
     const payment = await Payment.findOneAndUpdate(
@@ -193,13 +212,11 @@ const verifyPayment = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     console.error("Payment Verification Error:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Server Error during payment verification",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Server Error during payment verification",
+      error: error.message,
+    });
   }
 });
 
@@ -210,12 +227,10 @@ const verifyPaymentByOrderId = asyncHandler(async (req, res) => {
 
     // ✅ FIX: Added userId to required fields validation
     if (!orderId || !sanghId || !memberId || !userId) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "orderId, sanghId, memberId and userId are required",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "orderId, sanghId, memberId and userId are required",
+      });
     }
 
     const payment = await Payment.findOne({ transactionId: orderId });
@@ -264,12 +279,10 @@ const createOfficeBearerOrder = asyncHandler(async (req, res) => {
   const { sanghId, memberId, role } = req.body;
 
   if (!sanghId || !memberId || !role) {
-    return res
-      .status(400)
-      .json({
-        success: false,
-        message: "sanghId, userId and role are required",
-      });
+    return res.status(400).json({
+      success: false,
+      message: "sanghId, userId and role are required",
+    });
   }
   const userId = memberId;
 

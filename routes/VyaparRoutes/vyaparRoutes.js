@@ -45,6 +45,7 @@ router.get("/city/:citySanghId", getCityVyapars);
 router.get("/", getAllVyapars);
 router.get("/generate-card/verify/business/:businessCode", verifyBusiness);
 router.get("/generate-card/business/:id", generateBusinessCard);
+
 // Protected routes - require user authentication
 router.use(authMiddleware);
 

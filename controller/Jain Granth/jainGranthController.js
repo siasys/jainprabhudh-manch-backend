@@ -49,7 +49,9 @@ exports.uploadGranth = async (req, res) => {
 
 exports.getAllGranths = async (req, res) => {
   try {
-    const granths = await JainGranth.find()
+    // ✅ Bhajan (contentType: "audio") ko Swadhyay list se alag rakho.
+    // $ne missing field ko bhi match karta hai → purane records safe.
+    const granths = await JainGranth.find({ contentType: { $ne: "audio" } })
       .sort({ createdAt: -1 })
       .populate("userId", "fullName profilePicture");
 
@@ -131,6 +133,96 @@ exports.deleteGranth = async (req, res) => {
     await JainGranth.findByIdAndDelete(id);
 
     res.status(200).json({ message: "Granth deleted successfully!" });
+  } catch (error) {
+    res.status(500).json({ error: "Server error", details: error.message });
+  }
+};
+
+// ══════════ BHAJAN (AUDIO) ─ sab additive, upar ka kuch nahi badla ══════════
+
+// ✅ Bhajan upload ─ audio + cover image
+exports.uploadBhajan = async (req, res) => {
+  try {
+    const files = req.files;
+    if (!files || !files.jainBhajan || !files.jainBhajanImage) {
+      return res
+        .status(400)
+        .json({ error: "Both Bhajan audio and cover image are required!" });
+    }
+
+    const {
+      userId,
+      jainShravakId,
+      title,
+      description,
+      panth,
+      mulJain,
+      author,
+      publisher,
+      singer,
+      bhajanCategory,
+      language,
+      duration,
+    } = req.body;
+
+    if (!title) {
+      return res.status(400).json({ error: "Title is required!" });
+    }
+
+    const audioUrl = convertS3UrlToCDN(files.jainBhajan[0].location);
+    const coverUrl = convertS3UrlToCDN(files.jainBhajanImage[0].location);
+
+    const newBhajan = new JainGranth({
+      userId,
+      title,
+      jainShravakId,
+      description,
+      panth,
+      mulJain,
+      author,
+      publisher,
+      singer,
+      bhajanCategory,
+      language,
+      duration: Number(duration) || 0,
+      contentType: "audio", // ← yahi Bhajan ko Granth se alag karta hai
+      fileUrl: audioUrl,
+      imageUrl: coverUrl,
+    });
+
+    await newBhajan.save();
+    res
+      .status(201)
+      .json({ message: "Bhajan uploaded successfully!", bhajan: newBhajan });
+  } catch (error) {
+    res.status(500).json({ error: "Server error", details: error.message });
+  }
+};
+
+// ✅ Sirf bhajan list
+exports.getAllBhajans = async (req, res) => {
+  try {
+    const bhajans = await JainGranth.find({ contentType: "audio" })
+      .sort({ createdAt: -1 })
+      .populate("userId", "fullName profilePicture");
+
+    res.status(200).json(bhajans);
+  } catch (error) {
+    res.status(500).json({ error: "Server error", details: error.message });
+  }
+};
+
+// ✅ Play count ─ har play pe increment (views/viewedBy ko touch nahi karta)
+exports.incrementPlay = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const bhajan = await JainGranth.findByIdAndUpdate(
+      id,
+      { $inc: { plays: 1 } },
+      { new: true },
+    );
+    if (!bhajan) return res.status(404).json({ error: "Bhajan not found!" });
+    res.status(200).json({ plays: bhajan.plays });
   } catch (error) {
     res.status(500).json({ error: "Server error", details: error.message });
   }

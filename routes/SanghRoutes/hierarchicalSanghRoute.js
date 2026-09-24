@@ -4,41 +4,48 @@ const { authMiddleware, isSuperAdmin } = require('../../middlewares/authMiddlewa
 const { validateSanghAccess, canCreateLowerLevelSangh, validateLocationHierarchy, checkSanghCreationPermission } = require('../../middlewares/sanghAuthMiddleware');
 const { isOfficeBearer, canManageAreaSangh, canManageSpecializedSangh, canCreateSpecializedSangh } = require('../../middlewares/sanghPermissions');
 const {
-    createHierarchicalSangh,
-    getHierarchy,
-    getSanghsByLevelAndLocation,
-    getChildSanghs,
-    updateHierarchicalSangh,
-    addSanghMember,
-    removeSanghMember,
-    updateMemberDetails,
-    getSanghMembers,
-    addMultipleSanghMembers,
-    getAllSangh,
-    checkOfficeBearerTerms,
-    createSpecializedSangh,
-    getSpecializedSanghs,
-    updateSpecializedSangh,
-    getAllSanghs,
-    generateMemberCard,
-    generateMembersCard,
-    getUserByJainAadhar,
-    updateSanghById,
-    unfollowSangh,
-    followSangh,
-    switchToSanghToken,
-    updateSanghDetails,
-    updatePanchMembers,
-    updateMemberStatus,
-    deleteSanghTeamMember,
-    addHonoraryMember,
-    createAdminSangh
-} = require('../../controller/SanghControllers/hierarchicalSanghController');
+  createHierarchicalSangh,
+  getHierarchy,
+  getSanghsByLevelAndLocation,
+  getChildSanghs,
+  updateHierarchicalSangh,
+  addSanghMember,
+  removeSanghMember,
+  updateMemberDetails,
+  getSanghMembers,
+  addMultipleSanghMembers,
+  getAllSangh,
+  checkOfficeBearerTerms,
+  createSpecializedSangh,
+  getSpecializedSanghs,
+  updateSpecializedSangh,
+  getAllSanghs,
+  generateMemberCard,
+  generateMembersCard,
+  getUserByJainAadhar,
+  getClaimTargetSanghs,
+  updateSanghById,
+  unfollowSangh,
+  followSangh,
+  switchToSanghToken,
+  updateSanghDetails,
+  updatePanchMembers,
+  updateMemberStatus,
+  deleteSanghTeamMember,
+  addHonoraryMember,
+  createAdminSangh,
+  getSanghsList,
+  generateLetterhead,
+  generateAppointmentLetter,
+} = require("../../controller/SanghControllers/hierarchicalSanghController");
 
 const upload = require('../../middlewares/upload');
 
 router.get('/generate-member-card/:userId', generateMemberCard);
 router.get('/generate-card/:userId', generateMembersCard);
+router.get("/generate-letterhead/:userId", generateLetterhead);
+router.get("/generate-appointment-letter/:userId", generateAppointmentLetter);
+
 // Protect all routes
 router.use(authMiddleware);
 router.post('/switch-sangh-token', authMiddleware, switchToSanghToken);
@@ -61,7 +68,7 @@ router.post('/:sanghId/unfollow', unfollowSangh);
     router.get('/sangh/all', getAllSangh);
   // Get all Sangh
     router.get('/all', getAllSanghs);
-
+   router.get('/list', getSanghsList);
 // Get Sangh hierarchy
 router.get('/hierarchy/:id', getHierarchy
     //validateSanghAccess,
@@ -71,6 +78,8 @@ router.get('/hierarchy/:id', getHierarchy
 router.get('/search',
     getSanghsByLevelAndLocation
 );
+router.get("/:sanghId/claim-target-sanghs", getClaimTargetSanghs);
+
 router.get('/user/by-jain-aadhar/:jainAadharNumber', getUserByJainAadhar);
 
 // Get child Sanghs

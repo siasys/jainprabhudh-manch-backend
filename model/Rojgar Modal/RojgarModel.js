@@ -22,9 +22,6 @@ const rojgarSchema = new mongoose.Schema(
     jobDescription: {
       type: String,
     },
-    jobType:{
-      type: String,
-    },
     education: {
       type: String,
     },
@@ -67,17 +64,69 @@ const rojgarSchema = new mongoose.Schema(
         },
       },
     ],
-      expireDate: {
+    // NEW: applied tracking
+    appliedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    appliedCount: {
+      type: Number,
+      default: 0,
+    },
+    expireDate: {
       type: Date,
       default: () => {
         const now = new Date();
         now.setDate(now.getDate() + 30);
         return now;
       },
-       index: { expires: 0 },
+      index: { expires: 0 },
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
+
+// NEW: naya job post hote hi job seekers (recruitees) ko notification bhejo.
+// createJob controller ko touch kiye bina — sirf naye doc par (update par nahi).
+rojgarSchema.pre("save", function (next) {
+  this._wasNew = this.isNew;
+  next();
+});
+
+rojgarSchema.post("save", async function (doc) {
+  try {
+    if (!doc || !doc._wasNew) return; // sirf naye job par
+    const Notification = require("../SocialMediaModels/notificationModel");
+    const RojgarRecruitee = require("./RojgarRecruiteeModel");
+
+    const recruitees = await RojgarRecruitee.find({
+      jobType: "recruitee",
+    }).select("user");
+
+    const posterId = doc.user ? doc.user.toString() : "";
+    const seen = new Set();
+
+    for (const r of recruitees) {
+      if (!r.user) continue;
+      const uid = r.user.toString();
+      if (uid === posterId) continue; // apne aap ko nahi
+      if (seen.has(uid)) continue;
+      seen.add(uid);
+      try {
+        await Notification.create({
+          senderId: doc.user,
+          receiverId: r.user,
+          type: "job_posted",
+          jobId: doc._id,
+          message: `New job posted${doc.jobName ? ": " + doc.jobName : ""}`,
+        });
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error("job_posted notify hook error:", e.message);
+  }
+});
 
 module.exports = mongoose.model("Rojgar", rojgarSchema);

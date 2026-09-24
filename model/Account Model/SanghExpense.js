@@ -1,16 +1,28 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const expenseSchema = new mongoose.Schema(
   {
     sanghId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'HierarchicalSangh',
+      ref: "HierarchicalSangh",
       required: true,
+    },
+
+    // 🔹 Expense target sanghs (additive)
+    submittedToSangh: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "HierarchicalSangh",
+      default: null,
+    },
+    foundationSangh: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "HierarchicalSangh",
+      default: null,
     },
 
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
     },
     expensesId: {
       type: String,
@@ -37,52 +49,63 @@ const expenseSchema = new mongoose.Schema(
 
     projectName: {
       type: String,
-      default: '',
+      default: "",
     },
 
     meetingLocation: {
       type: String,
-      default: '',
+      default: "",
     },
 
     meetingPurpose: {
       type: String,
-      default: '',
+      default: "",
     },
 
     otherCategory: {
       type: String,
-      default: '',
+      default: "",
     },
 
     paymentType: {
       type: String,
-      enum: ['cash', 'upi', 'bank', 'cheque'],
+      enum: ["cash", "upi", "bank", "cheque"],
     },
 
     uploadBill: {
       type: String, // CDN URL
-      default: '',
+      default: "",
     },
 
     invoiceNumber: {
       type: String,
-      default: '',
+      default: "",
     },
 
     additionalNote: {
       type: String,
-      default: '',
+      default: "",
     },
 
     // ✅ NEW STATUS FIELD
     status: {
       type: String,
-      enum: ['pending', 'inreview', 'approved'],
-      default: 'pending',
+      enum: ["pending", "inreview", "approved", "rejected"],
+      default: "pending",
+    },
+
+    // 🔹 Approve/Reject response (additive)
+    adminResponse: {
+      reviewedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      reviewedAt: Date,
+      approvalNote: String,
+      rejectionReason: String,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-module.exports = mongoose.model('Expense', expenseSchema);
+module.exports = mongoose.model("Expense", expenseSchema);

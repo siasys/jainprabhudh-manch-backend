@@ -1,17 +1,21 @@
 // controllers/messageController.js
-const { Message, encrypt, decrypt } = require('../../model/SocialMediaModels/messageModel');
-const User = require('../../model/UserRegistrationModels/userModel');
-const Conversation = require('../../model/SocialMediaModels/conversationModel');
-const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel');
-const Post = require('../../model/SocialMediaModels/postModel');
-const mongoose = require('mongoose');
-const {getIo, getUserStatus}  = require('../../websocket/socket');
-const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
-const { successResponse, errorResponse } = require('../../utils/apiResponse');
-const { getOrSetCache,invalidateCache } = require('../../utils/cache');
-const { convertS3UrlToCDN } = require('../../utils/s3Utils');
-const expressAsyncHandler = require('express-async-handler');
-const { containsBadWords } = require('../../utils/filterBadWords');
+const {
+  Message,
+  encrypt,
+  decrypt,
+} = require("../../model/SocialMediaModels/messageModel");
+const User = require("../../model/UserRegistrationModels/userModel");
+const Conversation = require("../../model/SocialMediaModels/conversationModel");
+const HierarchicalSangh = require("../../model/SanghModels/hierarchicalSanghModel");
+const Post = require("../../model/SocialMediaModels/postModel");
+const mongoose = require("mongoose");
+const { getIo, getUserStatus } = require("../../websocket/socket");
+const { s3Client, DeleteObjectCommand } = require("../../config/s3Config");
+const { successResponse, errorResponse } = require("../../utils/apiResponse");
+const { getOrSetCache, invalidateCache } = require("../../utils/cache");
+const { convertS3UrlToCDN } = require("../../utils/s3Utils");
+const expressAsyncHandler = require("express-async-handler");
+const { containsBadWords } = require("../../utils/filterBadWords");
 const { sendPushToUsers } = require("../../config/firebaseAdmin");
 
 exports.sharePost = async (req, res) => {
@@ -25,7 +29,9 @@ exports.sharePost = async (req, res) => {
       return res.status(400).json({ message: "postId is required" });
     }
     if (!sender || !receiver) {
-      return res.status(400).json({ message: "sender and receiver are required" });
+      return res
+        .status(400)
+        .json({ message: "sender and receiver are required" });
     }
 
     // ✅ Authorization check
@@ -58,7 +64,11 @@ exports.sharePost = async (req, res) => {
     // ✅ Prepare attachments (based on postType)
     const attachments = [];
 
-    if (post.postType === "media" && Array.isArray(post.media) && post.media.length > 0) {
+    if (
+      post.postType === "media" &&
+      Array.isArray(post.media) &&
+      post.media.length > 0
+    ) {
       // Image / Video posts
       post.media.forEach((m) => {
         if (m.url) {
@@ -112,12 +122,12 @@ exports.sharePost = async (req, res) => {
     });
   } catch (error) {
     console.error("Error sharing post:", error);
-    return res.status(500).json({ success: false, message: "Error sharing post" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Error sharing post" });
   }
 };
 
-
-// Create a new message
 exports.createMessage = async (req, res) => {
   try {
     const sender = req.body.sender.trim();
@@ -141,14 +151,36 @@ exports.createMessage = async (req, res) => {
           "Your message contains inappropriate or unsafe words. Please modify it.",
       });
     }
-    //  2. Validate sender authorization
+    // ⚡ Sender aur receiver dono ek saath fetch (pehle ek ke baad ek hote the)
+    const [senderDoc, receiverDoc] = await Promise.all([
+      senderType === "sangh"
+        ? HierarchicalSangh.findById(sender)
+            .select("name sanghName sanghImage officeBearers")
+            .lean()
+        : User.findById(sender)
+            .select("firstName lastName profilePicture blockedUsers")
+            .lean(),
+      receiverType === "sangh"
+        ? HierarchicalSangh.findById(receiver).select("_id").lean()
+        : User.findById(receiver).select("_id blockedUsers").lean(),
+    ]);
+
+    let senderInfo = {};
+    const messageData = {
+      sender,
+      receiver,
+      senderType,
+      message: message,
+      attachments: [],
+      createdAt: new Date(),
+    };
+
     if (senderType === "sangh") {
-      const sangh = await HierarchicalSangh.findById(sender);
-      if (!sangh) {
+      if (!senderDoc) {
         return res.status(404).json({ message: "Sangh not found" });
       }
-      const isOfficeBearer = sangh.officeBearers.some(
-        (ob) => ob.userId.toString() === req.user._id.toString(),
+      const isOfficeBearer = (senderDoc.officeBearers || []).some(
+        (ob) => ob.userId?.toString() === req.user._id.toString(),
       );
       if (!isOfficeBearer) {
         return res.status(403).json({
@@ -156,6 +188,13 @@ exports.createMessage = async (req, res) => {
           message: "User not authorized to send on behalf of Sangh",
         });
       }
+      messageData.sanghId = senderDoc._id;
+      senderInfo = {
+        _id: senderDoc._id,
+        fullName: senderDoc.name || senderDoc.sanghName,
+        profilePicture: senderDoc.sanghImage || null,
+        type: "sangh",
+      };
     } else {
       if (sender !== req.user._id.toString()) {
         return res.status(403).json({
@@ -163,163 +202,115 @@ exports.createMessage = async (req, res) => {
           message: "Sender ID must match authenticated user",
         });
       }
+      if (!senderDoc) {
+        return errorResponse(res, "Sender user not found", 404);
+      }
+      senderInfo = {
+        _id: senderDoc._id,
+        fullName: `${senderDoc.firstName} ${senderDoc.lastName}`,
+        profilePicture: senderDoc.profilePicture,
+        type: "user",
+      };
     }
 
-    // 3. Fetch receiver (can be user or sangh)
-    let receiverUser = null;
-    let receiverSangh = null;
-    if (receiverType === "sangh") {
-      receiverSangh = await HierarchicalSangh.findById(receiver);
-      if (!receiverSangh) {
-        return errorResponse(res, "Receiver Sangh not found", 400);
-      }
-    } else {
-      receiverUser = await User.findById(receiver);
-      if (!receiverUser) {
-        return errorResponse(res, "Receiver User not found", 400);
-      }
+    if (!receiverDoc) {
+      return errorResponse(
+        res,
+        receiverType === "sangh"
+          ? "Receiver Sangh not found"
+          : "Receiver User not found",
+        400,
+      );
     }
-    if (receiverUser?.blockedUsers?.includes(sender)) {
+
+    // Receiver ne sender ko block kiya hai?
+    if (
+      receiverType !== "sangh" &&
+      (receiverDoc.blockedUsers || []).some((id) => id.toString() === sender)
+    ) {
       return res.status(403).json({
         success: false,
         message: "You are blocked by this user. Message cannot be sent.",
       });
     }
-    //  Create/get conversation
-    const conversationCacheKey = `conversation:${sender}:${receiver}`;
-    let conversation = await getOrSetCache(
-      conversationCacheKey,
-      async () => {
-        return await Conversation.findOne({
-          participants: { $all: [sender, receiver] },
-        });
-      },
-      300,
-    );
-    if (!conversation) {
-      conversation = new Conversation({
-        participants: [sender, receiver],
-      });
-      await conversation.save();
-    }
-    let attachments = [];
+
+    // Sender ne receiver ko block kiya hai?
+    const isBlocked =
+      senderType !== "sangh" &&
+      (senderDoc.blockedUsers || []).some((id) => id.toString() === receiver);
 
     if (req.file) {
-      attachments.push({
+      messageData.attachments.push({
         type: "image",
         url: convertS3UrlToCDN(req.file.location),
         name: req.file.originalname,
         size: req.file.size,
       });
     } else if (req.body.imageUrl) {
-      attachments.push({
+      messageData.attachments.push({
         type: "image",
         url: req.body.imageUrl,
         name: "forwarded_image.jpg",
         size: 0,
       });
     }
-    // 📦 5. Prepare message data
-    const messageData = {
-      sender,
-      receiver,
-      senderType,
-      message: message,
-      attachments,
-      createdAt: new Date(),
-    };
-    if (replyToId) messageData.replyTo = replyToId; // ✅ additive
+    const attachments = messageData.attachments;
+    if (replyToId) messageData.replyTo = replyToId;
 
-    let senderInfo = {};
-
-    if (senderType === "sangh") {
-      const sangh = await HierarchicalSangh.findById(sender);
-      if (!sangh) {
-        return errorResponse(res, "Sender Sangh not found", 404);
-      }
-
-      messageData.sanghId = sangh._id;
-
-      senderInfo = {
-        _id: sangh._id,
-        fullName: sangh.name || sangh.sanghName,
-        profilePicture: sangh.sanghImage || null,
-        type: "sangh",
-      };
-    } else {
-      const senderUser = await User.findById(sender);
-      if (!senderUser) {
-        return errorResponse(res, "Sender user not found", 404);
-      }
-
-      senderInfo = {
-        _id: senderUser._id,
-        fullName: `${senderUser.firstName} ${senderUser.lastName}`,
-        profilePicture: senderUser.profilePicture,
-        type: "user",
-      };
-    }
-
-    // ✅ 6. Save message
+    // ⚡ Message save + reply preview + conversation update — teeno ek saath
     const newMessage = new Message(messageData);
-    await newMessage.save();
+    const upsertConversation = async () => {
+      const existing = await Conversation.findOneAndUpdate(
+        { participants: { $all: [sender, receiver] } },
+        { $set: { lastMessage: newMessage._id } },
+        { new: true, projection: { _id: 1 } },
+      ).lean();
+      if (existing) return existing;
+      return Conversation.create({
+        participants: [sender, receiver],
+        lastMessage: newMessage._id,
+      });
+    };
 
-    // ✅ reply preview (quote) banao — text decrypt karke
-    let replyPreview = null;
-    if (newMessage.replyTo) {
-      try {
-        const rt = await Message.findById(newMessage.replyTo)
-          .select("message sender attachments")
-          .populate("sender", "firstName lastName fullName");
-        if (rt) {
-          replyPreview = {
-            _id: rt._id,
-            message: rt.message,
-            sender: rt.sender,
-            attachments: rt.attachments || [],
-          };
+    const [, rt, conversation] = await Promise.all([
+      newMessage.save(),
+      replyToId
+        ? Message.findById(replyToId)
+            .select("message sender attachments")
+            .populate("sender", "firstName lastName fullName")
+            .lean()
+            .catch(() => null)
+        : Promise.resolve(null),
+      upsertConversation().catch((e) => {
+        console.error("Conversation update failed:", e.message);
+        return { _id: "" };
+      }),
+    ]);
+
+    const replyPreview = rt
+      ? {
+          _id: rt._id,
+          message: rt.message,
+          sender: rt.sender,
+          attachments: rt.attachments || [],
         }
-      } catch (e) {}
-    }
+      : null;
 
-    // Block check before emit
-    const latestBlockMessage = await Message.findOne({
-      $or: [
-        { sender: sender, receiver: receiver },
-        { sender: receiver, receiver: sender },
-      ],
-    }).sort({ createdAt: -1 });
-
-    const isBlocked =
-      (latestBlockMessage?.sender?.toString() === sender &&
-        latestBlockMessage?.isBlockedBySender) ||
-      (latestBlockMessage?.receiver?.toString() === sender &&
-        latestBlockMessage?.isBlockedByReceiver);
-
-    // 🔁 7. Update conversation
-    conversation.messages.push(newMessage._id);
-    conversation.lastMessage = newMessage._id;
-    await conversation.save();
-
-    // 🚫 Invalidate cache
-    await invalidateCache(`conversation:${sender}:${receiver}`);
-    await invalidateCache(`conversation:${receiver}:${sender}`);
-
-    // 🔊 8. Emit socket message
+    // 🔊 Emit socket message
     const decryptedMessage = newMessage.decryptedMessage;
     const io = getIo();
     const responsePayload = {
       ...newMessage.toObject(),
       message: decryptedMessage,
     };
-    if (replyPreview) responsePayload.replyTo = replyPreview; // ✅ quote bhejo
+    if (replyPreview) responsePayload.replyTo = replyPreview;
 
     if (!isBlocked) {
       io.to(receiver.toString()).emit("newMessage", {
         message: responsePayload,
         sender: senderInfo,
       });
-      // 🔔 Push notification (background/app-killed me bhi dikhe)
+      // 🔔 Push notification
       const pushBody =
         decryptedMessage && decryptedMessage.trim()
           ? decryptedMessage
@@ -337,7 +328,7 @@ exports.createMessage = async (req, res) => {
         },
       });
     }
-    // 9. Success response
+
     return successResponse(
       res,
       responsePayload,
@@ -368,48 +359,52 @@ exports.clearAllMessagesBetweenUsers = async (req, res) => {
     const receiverId = req.params.receiverId;
     const { type } = req.body; // 'me' or 'everyone'
 
-    if (!receiverId || !['me', 'everyone'].includes(type)) {
-      return res.status(400).json({ message: 'receiverId and valid type (me/everyone) required' });
+    if (!receiverId || !["me", "everyone"].includes(type)) {
+      return res
+        .status(400)
+        .json({ message: "receiverId and valid type (me/everyone) required" });
     }
 
     const thirtyDaysFromNow = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    if (type === 'me') {
+    if (type === "me") {
       // ✅ Mark as deleted only for this user and set future deleteAt
       await Message.updateMany(
         {
           $or: [
             { sender: userId, receiver: receiverId },
-            { sender: receiverId, receiver: userId }
+            { sender: receiverId, receiver: userId },
           ],
-          deletedBy: { $ne: userId }
+          deletedBy: { $ne: userId },
         },
         {
           $addToSet: { deletedBy: userId },
-          $set: { deleteAt: thirtyDaysFromNow }
-        }
+          $set: { deleteAt: thirtyDaysFromNow },
+        },
       );
-    } else if (type === 'everyone') {
+    } else if (type === "everyone") {
       // ✅ Fetch messages
       const messages = await Message.find({
         $or: [
           { sender: userId, receiver: receiverId },
-          { sender: receiverId, receiver: userId }
-        ]
+          { sender: receiverId, receiver: userId },
+        ],
       });
 
       // ✅ Delete S3 attachments (but not delete messages from DB)
       for (const msg of messages) {
         for (const att of msg.attachments || []) {
-          if (att.url?.includes('.com/')) {
-            const key = att.url.split('.com/')[1];
+          if (att.url?.includes(".com/")) {
+            const key = att.url.split(".com/")[1];
             try {
-              await s3Client.send(new DeleteObjectCommand({
-                Bucket: process.env.AWS_BUCKET_NAME,
-                Key: key
-              }));
+              await s3Client.send(
+                new DeleteObjectCommand({
+                  Bucket: process.env.AWS_BUCKET_NAME,
+                  Key: key,
+                }),
+              );
             } catch (err) {
-              console.warn('S3 delete error:', key, err.message);
+              console.warn("S3 delete error:", key, err.message);
             }
           }
         }
@@ -418,28 +413,27 @@ exports.clearAllMessagesBetweenUsers = async (req, res) => {
       // ✅ Mark as deleted for both users + set future deleteAt
       await Message.updateMany(
         {
-          _id: { $in: messages.map(m => m._id) }
+          _id: { $in: messages.map((m) => m._id) },
         },
         {
           $addToSet: { deletedBy: { $each: [userId, receiverId] } },
-          $set: { deleteAt: thirtyDaysFromNow }
-        }
+          $set: { deleteAt: thirtyDaysFromNow },
+        },
       );
 
       // Notify receiver via socket
       const io = getIo();
-      io.to(receiverId.toString()).emit('allMessagesCleared', { senderId: userId });
+      io.to(receiverId.toString()).emit("allMessagesCleared", {
+        senderId: userId,
+      });
     }
 
-    return res.status(200).json({ message: 'Messages cleared successfully' });
-
+    return res.status(200).json({ message: "Messages cleared successfully" });
   } catch (err) {
-    console.error('Clear message error:', err);
-    return res.status(500).json({ message: 'Internal server error' });
+    console.error("Clear message error:", err);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
-
-
 
 // PATCH /messages/block-unblock
 exports.blockUnblockUser = async (req, res) => {
@@ -447,15 +441,20 @@ exports.blockUnblockUser = async (req, res) => {
     const userId = req.user._id; // logged in user
     const { targetUserId, action } = req.body;
 
-    if (!targetUserId || !['block', 'unblock'].includes(action)) {
-      return res.status(400).json({ message: 'targetUserId and valid action (block/unblock) are required.' });
+    if (!targetUserId || !["block", "unblock"].includes(action)) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "targetUserId and valid action (block/unblock) are required.",
+        });
     }
 
     const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     // Block logic
-    if (action === 'block') {
+    if (action === "block") {
       // Add targetUserId to blockedUsers
       if (!user.blockedUsers.includes(targetUserId)) {
         user.blockedUsers.push(targetUserId);
@@ -465,35 +464,34 @@ exports.blockUnblockUser = async (req, res) => {
       // Update message flags
       await Message.updateMany(
         { sender: userId, receiver: targetUserId },
-        { $set: { isBlockedBySender: true } }
+        { $set: { isBlockedBySender: true } },
       );
       await Message.updateMany(
         { sender: targetUserId, receiver: userId },
-        { $set: { isBlockedByReceiver: true } }
+        { $set: { isBlockedByReceiver: true } },
       );
-
-    } else if (action === 'unblock') {
+    } else if (action === "unblock") {
       // Remove targetUserId from blockedUsers
       user.blockedUsers = user.blockedUsers.filter(
-        id => id.toString() !== targetUserId.toString()
+        (id) => id.toString() !== targetUserId.toString(),
       );
       await user.save();
 
       // Reset flags
       await Message.updateMany(
         { sender: userId, receiver: targetUserId },
-        { $set: { isBlockedBySender: false } }
+        { $set: { isBlockedBySender: false } },
       );
       await Message.updateMany(
         { sender: targetUserId, receiver: userId },
-        { $set: { isBlockedByReceiver: false } }
+        { $set: { isBlockedByReceiver: false } },
       );
     }
 
     return res.status(200).json({ message: `${action} successful.` });
   } catch (error) {
-    console.error('Block/Unblock error:', error);
-    return res.status(500).json({ message: 'Internal server error' });
+    console.error("Block/Unblock error:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 // GET /messages/block-status/:userId/:targetUserId
@@ -503,13 +501,15 @@ exports.getBlockStatus = async (req, res) => {
     const { userId, targetUserId } = req.params;
 
     if (!userId || !targetUserId) {
-      return res.status(400).json({ message: 'Both userId and targetUserId are required' });
+      return res
+        .status(400)
+        .json({ message: "Both userId and targetUserId are required" });
     }
 
     // Fetch user to check blockedUsers array
-    const user = await User.findById(userId).select('blockedUsers');
+    const user = await User.findById(userId).select("blockedUsers");
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: "User not found" });
     }
 
     // Check if user has blocked the targetUser
@@ -519,13 +519,15 @@ exports.getBlockStatus = async (req, res) => {
     const lastMessage = await Message.findOne({
       $or: [
         { sender: userId, receiver: targetUserId },
-        { sender: targetUserId, receiver: userId }
-      ]
+        { sender: targetUserId, receiver: userId },
+      ],
     }).sort({ createdAt: -1 });
 
     const isBlockedByMessage =
-      (lastMessage?.sender?.toString() === userId && lastMessage?.isBlockedBySender) ||
-      (lastMessage?.receiver?.toString() === userId && lastMessage?.isBlockedByReceiver);
+      (lastMessage?.sender?.toString() === userId &&
+        lastMessage?.isBlockedBySender) ||
+      (lastMessage?.receiver?.toString() === userId &&
+        lastMessage?.isBlockedByReceiver);
 
     // Final result
     const isBlocked = isBlockedByList || isBlockedByMessage;
@@ -533,10 +535,9 @@ exports.getBlockStatus = async (req, res) => {
     return res.status(200).json({ isBlocked });
   } catch (err) {
     console.error("❌ Error checking block status:", err);
-    return res.status(500).json({ message: 'Internal server error' });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
-
 
 // Get messages between sender and receiver
 // exports.getMessages = async (req, res) => {
@@ -547,7 +548,7 @@ exports.getBlockStatus = async (req, res) => {
 //       return errorResponse(res, 'Sender and receiver are required', 400);
 //     }
 
-//     const cacheKey = cursor 
+//     const cacheKey = cursor
 //       ? `messages:${sender}:${receiver}:cursor:${cursor}:limit:${limit}`
 //       : `messages:${sender}:${receiver}:recent:limit:${limit}`;
 
@@ -580,8 +581,8 @@ exports.getBlockStatus = async (req, res) => {
 //       }
 
 //       // Get the oldest timestamp for next cursor
-//       const nextCursor = messages.length > 0 
-//         ? messages[messages.length - 1].createdAt.toISOString() 
+//       const nextCursor = messages.length > 0
+//         ? messages[messages.length - 1].createdAt.toISOString()
 //         : null;
 
 //       return {
@@ -596,7 +597,7 @@ exports.getBlockStatus = async (req, res) => {
 //     // Emit read receipt
 //     const io = getIo();
 //     io.to(receiver.toString()).emit('messagesRead', { sender, receiver });
-  
+
 //     const senderStatus = getUserStatus(sender);
 //     const receiverStatus = getUserStatus(receiver);
 
@@ -620,7 +621,7 @@ exports.getBlockStatus = async (req, res) => {
 //       return errorResponse(res, 'Sender and receiver are required', 400);
 //     }
 
-//     const cacheKey = cursor 
+//     const cacheKey = cursor
 //       ? `messages:${sender}:${receiver}:cursor:${cursor}:limit:${limit}`
 //       : `messages:${sender}:${receiver}:recent:limit:${limit}`;
 
@@ -653,8 +654,8 @@ exports.getBlockStatus = async (req, res) => {
 //       }
 
 //       // Get the oldest timestamp for next cursor
-//       const nextCursor = messages.length > 0 
-//         ? messages[messages.length - 1].createdAt.toISOString() 
+//       const nextCursor = messages.length > 0
+//         ? messages[messages.length - 1].createdAt.toISOString()
 //         : null;
 
 //       return {
@@ -669,7 +670,7 @@ exports.getBlockStatus = async (req, res) => {
 //     // Emit read receipt
 //     const io = getIo();
 //     io.to(receiver.toString()).emit('messagesRead', { sender, receiver });
-  
+
 //     const senderStatus = getUserStatus(sender);
 //     const receiverStatus = getUserStatus(receiver);
 
@@ -686,7 +687,7 @@ exports.getBlockStatus = async (req, res) => {
 // };
 
 // new get mesage
- 
+
 // new get mesage
 // new get message (optimized: optional limit + lean)
 exports.getMessages = async (req, res) => {
@@ -694,7 +695,9 @@ exports.getMessages = async (req, res) => {
     const { sender, receiver, limit, before } = req.query;
 
     if (!sender || !receiver) {
-      return res.status(400).json({ message: 'Sender and receiver are required' });
+      return res
+        .status(400)
+        .json({ message: "Sender and receiver are required" });
     }
 
     const query = {
@@ -714,12 +717,12 @@ exports.getMessages = async (req, res) => {
 
     let q = Message.find(query)
       .sort({ createdAt: -1 }) // newest first (latest messages pehle)
-      .populate('sender', 'firstName lastName fullName profilePicture')
-      .populate('receiver', 'firstName lastName fullName profilePicture')
+      .populate("sender", "firstName lastName fullName profilePicture")
+      .populate("receiver", "firstName lastName fullName profilePicture")
       .populate({
-        path: 'replyTo',
-        select: 'message sender attachments',
-        populate: { path: 'sender', select: 'firstName lastName fullName' },
+        path: "replyTo",
+        select: "message sender attachments",
+        populate: { path: "sender", select: "firstName lastName fullName" },
       })
       .lean(); // ⚡ lean = plain objects, bahut tez (no mongoose hydration/toObject)
 
@@ -728,14 +731,14 @@ exports.getMessages = async (req, res) => {
     const messages = await q;
 
     // Mark messages as read (same as before)
-    await Message.updateMany(
+    Message.updateMany(
       { sender: receiver, receiver: sender, isRead: false },
-      { isRead: true, status: 'read' }
-    );
+      { isRead: true, status: "read" },
+    ).catch((e) => console.error("mark read failed:", e.message));
 
     // CDN + reply decrypt (lean objects -> .toObject() ki zaroorat nahi)
-    const updatedMessages = messages.map(msg => {
-      const updatedAttachments = (msg.attachments || []).map(att => ({
+    const updatedMessages = messages.map((msg) => {
+      const updatedAttachments = (msg.attachments || []).map((att) => ({
         ...att,
         url: convertS3UrlToCDN(att.url),
       }));
@@ -744,8 +747,8 @@ exports.getMessages = async (req, res) => {
 
       if (
         obj.replyTo &&
-        typeof obj.replyTo.message === 'string' &&
-        obj.replyTo.message.includes(':')
+        typeof obj.replyTo.message === "string" &&
+        obj.replyTo.message.includes(":")
       ) {
         obj.replyTo.message = decrypt(obj.replyTo.message);
       }
@@ -755,7 +758,7 @@ exports.getMessages = async (req, res) => {
 
     // Emit read receipt
     const io = getIo();
-    io.to(receiver.toString()).emit('messagesRead', { sender, receiver });
+    io.to(receiver.toString()).emit("messagesRead", { sender, receiver });
 
     // Online status
     const senderStatus = getUserStatus(sender);
@@ -763,16 +766,21 @@ exports.getMessages = async (req, res) => {
 
     // messages abhi newest-first hain — purana response bhi newest-first tha,
     // is liye reverse ki zaroorat NAHI (frontend pehle jaisa hi chalega)
-    return successResponse(res, {
-      messages: updatedMessages,
-      participants: {
-        [sender]: senderStatus,
-        [receiver]: receiverStatus,
+    return successResponse(
+      res,
+      {
+        messages: updatedMessages,
+        participants: {
+          [sender]: senderStatus,
+          [receiver]: receiverStatus,
+        },
+        hasMore: pageSize ? messages.length === pageSize : false,
       },
-      hasMore: pageSize ? messages.length === pageSize : false,
-    }, 'Messages retrieved successfully', 200);
+      "Messages retrieved successfully",
+      200,
+    );
   } catch (error) {
-    return errorResponse(res, 'Error retrieving messages', 500, error);
+    return errorResponse(res, "Error retrieving messages", 500, error);
   }
 };
 // Get all messages for a user
@@ -794,7 +802,8 @@ exports.getAllMessages = async (req, res) => {
             "receiver",
             "firstName lastName profilePicture accountType businessName sadhuName tirthName",
           )
-          .sort({ createdAt: -1 });
+          .sort({ createdAt: -1 })
+          .lean();
       },
       60,
     );
@@ -820,70 +829,87 @@ exports.getAllMessages = async (req, res) => {
 exports.getConversation = async (req, res) => {
   try {
     const userId = req.params.userId;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return errorResponse(res, "Invalid user ID", 400);
+    }
+    const uid = new mongoose.Types.ObjectId(userId);
+    const now = new Date();
 
-    const messages = await Message.find({
-      $and: [
-        {
-          $or: [{ sender: userId }, { receiver: userId }]
+    const rows = await Message.aggregate([
+      {
+        $match: {
+          $and: [
+            { $or: [{ sender: uid }, { receiver: uid }] },
+            { deletedBy: { $ne: uid } },
+            { $or: [{ deleteAt: null }, { deleteAt: { $gt: now } }] },
+          ],
         },
-        { deletedBy: { $ne: userId } },
-        {
-          $or: [
-            { deleteAt: null },
-            { deleteAt: { $gt: new Date() } }
-          ]
-        }
-      ]
-    })
-      .sort({ createdAt: -1 })
-      .populate('sender', 'fullName profilePicture accountType businessName sadhuName tirthName')
-      .populate('receiver', 'fullName profilePicture accountType businessName sadhuName tirthName');
+      },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: { $cond: [{ $eq: ["$sender", uid] }, "$receiver", "$sender"] },
+          last: { $first: "$$ROOT" },
+          unreadCount: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ["$receiver", uid] },
+                    { $eq: ["$isRead", false] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+      { $sort: { "last.createdAt": -1 } },
+      {
+        $project: {
+          unreadCount: 1,
+          "last._id": 1,
+          "last.sender": 1,
+          "last.receiver": 1,
+          "last.message": 1,
+          "last.createdAt": 1,
+        },
+      },
+    ]).allowDiskUse(true);
 
-    const conversationMap = new Map();
+    // Saare users ek hi query me
+    const userIds = new Set();
+    rows.forEach((r) => {
+      userIds.add(r.last.sender.toString());
+      userIds.add(r.last.receiver.toString());
+    });
+    const users = await User.find({ _id: { $in: [...userIds] } })
+      .select(
+        "fullName profilePicture accountType businessName sadhuName tirthName",
+      )
+      .lean();
+    const userMap = new Map(users.map((u) => [u._id.toString(), u]));
 
-    messages.forEach((msg) => {
-      const sender = msg.sender?._id?.toString();
-      const receiver = msg.receiver?._id?.toString();
-
-      if (!sender || !receiver) return;
-
-      const otherUserId = sender === userId ? receiver : sender;
-
-        if (!conversationMap.has(otherUserId)) {
-    const isMessageExpired = msg.deleteAt && new Date(msg.deleteAt) <= new Date();
-    if (!isMessageExpired) {
-      conversationMap.set(otherUserId, {
-        lastMessage: msg,
-        unreadCount: 0
+    const recentChats = [];
+    for (const r of rows) {
+      const senderUser = userMap.get(r.last.sender.toString());
+      const receiverUser = userMap.get(r.last.receiver.toString());
+      if (!senderUser || !receiverUser) continue;
+      recentChats.push({
+        _id: r.last._id,
+        sender: senderUser,
+        receiver: receiverUser,
+        message: decrypt(r.last.message || ""),
+        createdAt: r.last.createdAt,
+        unreadCount: r.unreadCount,
       });
     }
-  }
-      if (
-        msg.receiver._id.toString() === userId &&
-        msg.sender._id.toString() === otherUserId &&
-        msg.isRead === false
-      ) {
-        const entry = conversationMap.get(otherUserId);
-        entry.unreadCount += 1;
-      }
-    });
 
-    const recentChats = Array.from(conversationMap.entries()).map(
-      ([otherUserId, { lastMessage, unreadCount }]) => {
-        return {
-          _id: lastMessage._id,
-          sender: lastMessage.sender,
-          receiver: lastMessage.receiver,
-          message: lastMessage.message,
-          createdAt: lastMessage.createdAt,
-          unreadCount
-        };
-      }
-    );
-
-    return successResponse(res, recentChats, 'Recent chats fetched', 200);
+    return successResponse(res, recentChats, "Recent chats fetched", 200);
   } catch (err) {
-    return errorResponse(res, 'Failed to fetch recent chats', 500, err);
+    return errorResponse(res, "Failed to fetch recent chats", 500, err);
   }
 };
 
@@ -891,25 +917,29 @@ exports.getConversations = async (req, res) => {
   try {
     const userId = req.params.userId;
     const cacheKey = `conversations:${userId}`;
-    
-    const conversations = await getOrSetCache(cacheKey, async () => {
-      return await Conversation.find({
-        participants: userId
-      })
-      .populate('participants', 'fullName profilePicture')
-      .populate({
-        path: 'lastMessage',
-        select: 'text createdAt sender' // or other required fields
-      })
-      .sort({ updatedAt: -1 });
-    }, 60); // Cache for 1 minute
+
+    const conversations = await getOrSetCache(
+      cacheKey,
+      async () => {
+        return await Conversation.find({
+          participants: userId,
+        })
+          .populate("participants", "fullName profilePicture")
+          .populate({
+            path: "lastMessage",
+            select: "text createdAt sender", // or other required fields
+          })
+          .sort({ updatedAt: -1 });
+      },
+      60,
+    ); // Cache for 1 minute
     if (!conversations || conversations.length === 0) {
-      return errorResponse(res, 'No conversations found', 404);
+      return errorResponse(res, "No conversations found", 404);
     }
-    
-    return successResponse(res, conversations, 'Conversations retrieved', 200);
+
+    return successResponse(res, conversations, "Conversations retrieved", 200);
   } catch (error) {
-    return errorResponse(res, 'Error fetching conversations', 500, error);
+    return errorResponse(res, "Error fetching conversations", 500, error);
   }
 };
 // Get messages by ID (either sender or receiver)
@@ -918,14 +948,14 @@ exports.getMessageById = async (req, res) => {
     const { messageId } = req.params;
     // Find message by ID
     const message = await Message.findById(messageId)
-      .populate('sender', 'firstName lastName profilePicture')
-      .populate('receiver', 'firstName lastName profilePicture');
+      .populate("sender", "firstName lastName profilePicture")
+      .populate("receiver", "firstName lastName profilePicture");
     if (!message) {
-      return res.status(404).json({ message: 'Message not found' });
+      return res.status(404).json({ message: "Message not found" });
     }
     res.status(200).json({ message });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching message', error });
+    res.status(500).json({ message: "Error fetching message", error });
   }
 };
 
@@ -943,22 +973,22 @@ exports.deleteMessageById = async (req, res) => {
     }
 
     if (!messageIds.length) {
-      return res.status(400).json({ message: 'messageIds or id required' });
+      return res.status(400).json({ message: "messageIds or id required" });
     }
 
     const messages = await Message.find({ _id: { $in: messageIds } });
 
     if (!messages.length) {
-      return res.status(404).json({ message: 'Messages not found' });
+      return res.status(404).json({ message: "Messages not found" });
     }
 
     const deletableMessages = messages.filter(
-      msg => msg.sender.toString() === userId.toString()
+      (msg) => msg.sender.toString() === userId.toString(),
     );
 
     if (!deletableMessages.length) {
       return res.status(403).json({
-        message: 'You can only delete your own messages'
+        message: "You can only delete your own messages",
       });
     }
 
@@ -966,18 +996,18 @@ exports.deleteMessageById = async (req, res) => {
     for (const message of deletableMessages) {
       if (message.attachments?.length) {
         for (const attachment of message.attachments) {
-          if (attachment.url?.includes('.com/')) {
-            const key = attachment.url.split('.com/')[1];
+          if (attachment.url?.includes(".com/")) {
+            const key = attachment.url.split(".com/")[1];
             if (key) {
               try {
                 await s3Client.send(
                   new DeleteObjectCommand({
                     Bucket: process.env.AWS_BUCKET_NAME,
-                    Key: key
-                  })
+                    Key: key,
+                  }),
                 );
               } catch (err) {
-                console.warn('S3 delete failed:', key);
+                console.warn("S3 delete failed:", key);
               }
             }
           }
@@ -986,23 +1016,23 @@ exports.deleteMessageById = async (req, res) => {
     }
 
     await Message.deleteMany({
-      _id: { $in: deletableMessages.map(m => m._id) }
+      _id: { $in: deletableMessages.map((m) => m._id) },
     });
 
     const io = getIo();
-    deletableMessages.forEach(msg => {
-      io.to(msg.receiver.toString()).emit('messageDeleted', {
-        messageId: msg._id
+    deletableMessages.forEach((msg) => {
+      io.to(msg.receiver.toString()).emit("messageDeleted", {
+        messageId: msg._id,
       });
     });
 
     res.status(200).json({
-      message: 'Message(s) deleted successfully',
-      deletedCount: deletableMessages.length
+      message: "Message(s) deleted successfully",
+      deletedCount: deletableMessages.length,
     });
   } catch (error) {
-    console.error('Delete message error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error("Delete message error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -1019,13 +1049,13 @@ exports.deleteMessageOnlyForMe = async (req, res) => {
     }
 
     if (!messageIds.length) {
-      return res.status(400).json({ message: 'messageIds or id required' });
+      return res.status(400).json({ message: "messageIds or id required" });
     }
 
     const messages = await Message.find({ _id: { $in: messageIds } });
 
     if (!messages.length) {
-      return res.status(404).json({ message: 'Messages not found' });
+      return res.status(404).json({ message: "Messages not found" });
     }
 
     let updatedCount = 0;
@@ -1041,12 +1071,12 @@ exports.deleteMessageOnlyForMe = async (req, res) => {
     }
 
     res.status(200).json({
-      message: 'Message(s) deleted for current user',
-      updatedCount
+      message: "Message(s) deleted for current user",
+      updatedCount,
     });
   } catch (error) {
-    console.error('Delete for me error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error("Delete for me error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 // Update messages by senderId
@@ -1057,18 +1087,24 @@ exports.updateMessageById = async (req, res) => {
     const userId = req.user._id;
     const newImage = req.file?.location;
     if (!newMessage) {
-      return res.status(400).json({ message: 'New message content is required' });
+      return res
+        .status(400)
+        .json({ message: "New message content is required" });
     }
     const message = await Message.findById(messageId);
     if (!message) {
-      return res.status(404).json({ message: 'Message not found' });
+      return res.status(404).json({ message: "Message not found" });
     }
     if (message.sender.toString() !== userId.toString()) {
-      return res.status(403).json({ message: 'Unauthorized: You can only update your own messages' });
+      return res
+        .status(403)
+        .json({
+          message: "Unauthorized: You can only update your own messages",
+        });
     }
     // Pehle existing message ko decrypt
     let decryptedOldMessage = decrypt(message.message);
-    // Agar naye message me koi change hai to update 
+    // Agar naye message me koi change hai to update
     if (newMessage && newMessage !== decryptedOldMessage) {
       message.message = encrypt(newMessage);
     }
@@ -1077,32 +1113,36 @@ exports.updateMessageById = async (req, res) => {
       if (message.attachments.length > 0) {
         for (const attachment of message.attachments) {
           if (attachment.url) {
-            const key = attachment.url.split('.com/')[1]; // 🔹 Extracting S3 Key
-            await s3Client.send(new DeleteObjectCommand({
-              Bucket: process.env.AWS_BUCKET_NAME,
-              Key: key
-            }));
+            const key = attachment.url.split(".com/")[1]; // 🔹 Extracting S3 Key
+            await s3Client.send(
+              new DeleteObjectCommand({
+                Bucket: process.env.AWS_BUCKET_NAME,
+                Key: key,
+              }),
+            );
           }
         }
       }
       // Update attachments with new image
-      message.attachments = [{
-        type: "image",
-        url: newImage,
-        name: req.file.originalname,
-        size: req.file.size,
-      }];
+      message.attachments = [
+        {
+          type: "image",
+          url: newImage,
+          name: req.file.originalname,
+          size: req.file.size,
+        },
+      ];
     }
     // Save updated message
     await message.save();
     // Response me decrypted message bhejna hai taaki UI me text dikhe
     res.status(200).json({
-      message: 'Message updated successfully', 
-      data: { ...message.toObject(), message: decrypt(message.message) } 
+      message: "Message updated successfully",
+      data: { ...message.toObject(), message: decrypt(message.message) },
     });
   } catch (error) {
-    console.error('Error updating message:', error);
-    res.status(500).json({ message: 'Error updating message', error });
+    console.error("Error updating message:", error);
+    res.status(500).json({ message: "Error updating message", error });
   }
 };
 
@@ -1112,13 +1152,13 @@ exports.getUnreadMessagesCount = async (req, res) => {
     const { userId } = req.params;
 
     const count = await Message.countDocuments({
-      'receiver._id': new mongoose.Types.ObjectId(userId),
-      isRead: false
+      receiver: new mongoose.Types.ObjectId(userId),
+      isRead: false,
     });
 
     res.status(200).json({ unreadCount: count });
   } catch (error) {
-    res.status(500).json({ message: 'Error getting unread count', error });
+    res.status(500).json({ message: "Error getting unread count", error });
   }
 };
 
@@ -1128,7 +1168,7 @@ exports.sendImageMessage = async (req, res) => {
   try {
     const { sender, receiver } = req.body;
     if (!req.file) {
-      return res.status(400).json({ message: 'No image file provided' });
+      return res.status(400).json({ message: "No image file provided" });
     }
     // ✅ reply (optional)
     const replyToId =
@@ -1138,31 +1178,33 @@ exports.sendImageMessage = async (req, res) => {
     const senderUser = await User.findById(sender);
     const receiverUser = await User.findById(receiver);
     if (!senderUser || !receiverUser) {
-      return res.status(400).json({ message: 'Sender or receiver not found' });
+      return res.status(400).json({ message: "Sender or receiver not found" });
     }
-     const cdnUrl = convertS3UrlToCDN(req.file.location);
+    const cdnUrl = convertS3UrlToCDN(req.file.location);
     const newMessage = new Message({
       sender,
       receiver,
-      message: 'Image',
-      attachments: [{
-        type: 'image',
-        url: cdnUrl,
-        name: req.file.originalname,
-        size: req.file.size
-      }],
-      ...(replyToId && {replyTo: replyToId}), // ✅ additive
+      message: "Image",
+      attachments: [
+        {
+          type: "image",
+          url: cdnUrl,
+          name: req.file.originalname,
+          size: req.file.size,
+        },
+      ],
+      ...(replyToId && { replyTo: replyToId }), // ✅ additive
       createdAt: new Date(),
     });
     await newMessage.save();
- 
+
     // ✅ reply preview
     let imgReplyPreview = null;
     if (newMessage.replyTo) {
       try {
         const rt = await Message.findById(newMessage.replyTo)
-          .select('message sender attachments')
-          .populate('sender', 'firstName lastName fullName');
+          .select("message sender attachments")
+          .populate("sender", "firstName lastName fullName");
         if (rt) {
           imgReplyPreview = {
             _id: rt._id,
@@ -1177,24 +1219,24 @@ exports.sendImageMessage = async (req, res) => {
     const io = getIo();
     const imgPayload = newMessage.toObject();
     if (imgReplyPreview) imgPayload.replyTo = imgReplyPreview;
- 
-    io.to(receiver.toString()).emit('newMessage', {
+
+    io.to(receiver.toString()).emit("newMessage", {
       message: imgPayload,
       sender: {
         _id: senderUser._id,
         fullName: senderUser.fullName,
-        profilePicture: senderUser.profilePicture
-      }
+        profilePicture: senderUser.profilePicture,
+      },
     });
     res.status(201).json({
-      message: 'Image sent successfully',
-      data: imgPayload
+      message: "Image sent successfully",
+      data: imgPayload,
     });
   } catch (error) {
-    console.error('Error sending image:', error);
+    console.error("Error sending image:", error);
     res.status(500).json({
-      message: 'Error sending image',
-      error: error.message
+      message: "Error sending image",
+      error: error.message,
     });
   }
 };
@@ -1206,9 +1248,11 @@ exports.broadcastMessage = async (req, res) => {
     const userList = Array.isArray(users) ? users : [];
 
     const messages = userList
-      .filter(u => (typeof u === 'string' ? u !== senderId : u._id !== senderId))
-      .map(user => {
-        const receiverId = typeof user === 'string' ? user : user._id;
+      .filter((u) =>
+        typeof u === "string" ? u !== senderId : u._id !== senderId,
+      )
+      .map((user) => {
+        const receiverId = typeof user === "string" ? user : user._id;
         return {
           sender: senderId,
           receiver: receiverId,
@@ -1220,9 +1264,11 @@ exports.broadcastMessage = async (req, res) => {
 
     await Message.insertMany(messages);
 
-    res.status(200).json({ success: true, message: 'Broadcasted to all users' });
+    res
+      .status(200)
+      .json({ success: true, message: "Broadcasted to all users" });
   } catch (error) {
-    console.error('Broadcast Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to broadcast' });
+    console.error("Broadcast Error:", error);
+    res.status(500).json({ success: false, message: "Failed to broadcast" });
   }
 };

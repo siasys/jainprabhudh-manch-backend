@@ -1,41 +1,44 @@
 
 const express = require('express');
 const {
-    registerUser,
-    getAllUsers,
-    getUserById,
-    updateUserById,
-    loginUser,
-    updatePrivacy,
-    uploadProfilePicture,
-    skipProfilePicture,
-    logoutUser,
-    searchUsers,
-    verifyEmail,
-    resendVerificationCode,
-    requestPasswordReset,
-    resetPassword,
-    sendVerificationCode,
-    getAllCities,
-    sendChangeEmailOtp,
-    verifyChangeEmail,
-    changePassword,
-    getCitiesByState,
-    getUserByJainAadharNumber,
-    verifyEmails,
-    verifyOtp,
-    verifyResetPassword,
-    requestPasswordResetMobile,
-    sendChangePhoneOtp,
-    verifyChangePhone,
-    verifyRegisterOtp,
-    verifyOtpMobileEmail,
-    sendOtp,
-    registerFinalUser,
-    resendOtp,
-    getUserActivityByType,
-    getCitiesByMultipleStates
-} = require('../../controller/UserRegistrationControllers/userController');
+  registerUser,
+  getAllUsers,
+  getUserById,
+  updateUserById,
+  loginUser,
+  updatePrivacy,
+  uploadProfilePicture,
+  skipProfilePicture,
+  logoutUser,
+  searchUsers,
+  verifyEmail,
+  resendVerificationCode,
+  requestPasswordReset,
+  resetPassword,
+  sendVerificationCode,
+  getAllCities,
+  sendChangeEmailOtp,
+  verifyChangeEmail,
+  changePassword,
+  getCitiesByState,
+  getUserByJainAadharNumber,
+  verifyEmails,
+  verifyOtp,
+  verifyResetPassword,
+  requestPasswordResetMobile,
+  sendChangePhoneOtp,
+  verifyChangePhone,
+  verifyRegisterOtp,
+  verifyOtpMobileEmail,
+  sendOtp,
+  registerFinalUser,
+  resendOtp,
+  getUserActivityByType,
+  getCitiesByMultipleStates,
+  trackScreenTime,
+  getWeeklyScreenTime,
+  getScreenTimeSummary,
+} = require("../../controller/UserRegistrationControllers/userController");
 const { authMiddleware, checkAccess, authenticate } = require('../../middlewares/authMiddlewares');
 const upload = require('../../middlewares/upload');
 const { check, param, body } = require('express-validator');
@@ -110,6 +113,9 @@ router.post('/verify-change-email', verifyChangeEmail);
 router.get('/search', searchUsers);
 router.get('/', getAllUsers);
 router.get("/:id/activity/:type", getUserActivityByType);
+router.post("/screentime/track", trackScreenTime);
+router.get("/:id/screentime/weekly", getWeeklyScreenTime);
+router.get("/:id/screentime/summary", getScreenTimeSummary);
 router.get('/by-jain-aadhar/:number', getUserByJainAadharNumber);
 
 router.post('/change-password', changePassword);
@@ -129,8 +135,8 @@ router.put('/:id',
     { name: 'profilePicture', maxCount: 1 },
     { name: 'coverPicture', maxCount: 1 }
   ]),
-  upload.compressFiles,  // ✅ ADD THIS - compress karne ke liye
-  upload.uploadToS3,     // ✅ ADD THIS - S3 mein upload karne ke liye
+  upload.compressFiles,
+  upload.uploadToS3,
   updateUserById
 );
 router.get('/:id', getUserById);

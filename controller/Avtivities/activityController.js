@@ -1,9 +1,9 @@
 const Activity = require("../../model/Activity/Activity");
 const HierarchicalSangh = require("../../model/SanghModels/sanghModel");
 const User = require("../../model/UserRegistrationModels/userModel");
-const { convertS3UrlToCDN } = require('../../utils/s3Utils');
+const { convertS3UrlToCDN } = require("../../utils/s3Utils");
 
-// 🟢 Create new activity
+// Create new activity
 exports.createActivity = async (req, res) => {
   try {
     const {
@@ -58,10 +58,10 @@ exports.createActivity = async (req, res) => {
                   },
                 },
               },
-              { new: true }
+              { new: true },
             );
           }
-        })
+        }),
       );
     }
 
@@ -81,7 +81,6 @@ exports.createActivity = async (req, res) => {
   }
 };
 
-
 // Get all activities (optionally filter by Sangh)
 exports.getAllActivities = async (req, res) => {
   try {
@@ -93,7 +92,7 @@ exports.getAllActivities = async (req, res) => {
       .populate("createdBy", "fullName phoneNumber")
       .populate("sanghId", "name level")
       .populate("organizedBy", "name level")
-       .populate("sponsors")
+      .populate("sponsors")
       .populate("judges", "fullName phoneNumber");
 
     res.status(200).json({
@@ -133,7 +132,7 @@ exports.getActivityById = async (req, res) => {
       if (!userId) return null;
 
       const participant = activityObj.participants.find(
-        (p) => p.userId && p.userId._id.toString() === userId.toString()
+        (p) => p.userId && p.userId._id.toString() === userId.toString(),
       );
 
       if (!participant || !participant.userId) return null;
@@ -153,7 +152,7 @@ exports.getActivityById = async (req, res) => {
         ? {
             ...activityObj.winners.firstWinner,
             userId: populateWinnerFromParticipant(
-              activityObj.winners.firstWinner.userId
+              activityObj.winners.firstWinner.userId,
             ),
           }
         : null,
@@ -161,7 +160,7 @@ exports.getActivityById = async (req, res) => {
         ? {
             ...activityObj.winners.secondWinner,
             userId: populateWinnerFromParticipant(
-              activityObj.winners.secondWinner.userId
+              activityObj.winners.secondWinner.userId,
             ),
           }
         : null,
@@ -169,7 +168,7 @@ exports.getActivityById = async (req, res) => {
         ? {
             ...activityObj.winners.thirdWinner,
             userId: populateWinnerFromParticipant(
-              activityObj.winners.thirdWinner.userId
+              activityObj.winners.thirdWinner.userId,
             ),
           }
         : null,
@@ -205,7 +204,9 @@ exports.participateInActivity = async (req, res) => {
     // ✅ Check if activity exists
     const activity = await Activity.findById(activityId);
     if (!activity) {
-      return res.status(404).json({ success: false, message: "Activity not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Activity not found" });
     }
 
     // ✅ Handle uploaded files (image/pdf)
@@ -217,7 +218,7 @@ exports.participateInActivity = async (req, res) => {
 
     // ✅ Check if user already participated
     const existingParticipant = activity.participants.find(
-      (p) => p.userId.toString() === userId.toString()
+      (p) => p.userId.toString() === userId.toString(),
     );
 
     if (existingParticipant) {
@@ -231,7 +232,8 @@ exports.participateInActivity = async (req, res) => {
 
       // 🔹 Update participant details if provided
       existingParticipant.fullName = fullName || existingParticipant.fullName;
-      existingParticipant.phoneNumber = phoneNumber || existingParticipant.phoneNumber;
+      existingParticipant.phoneNumber =
+        phoneNumber || existingParticipant.phoneNumber;
       existingParticipant.state = state || existingParticipant.state;
       existingParticipant.district = district || existingParticipant.district;
       existingParticipant.city = city || existingParticipant.city;
@@ -248,11 +250,10 @@ exports.participateInActivity = async (req, res) => {
       };
       activity.participants.push(newParticipant);
     }
-      if (Array.isArray(activity.winners)) {
-        activity.winners = {};
-      }
-        await activity.save({ validateBeforeSave: false });
-
+    if (Array.isArray(activity.winners)) {
+      activity.winners = {};
+    }
+    await activity.save({ validateBeforeSave: false });
 
     res.status(200).json({
       success: true,
@@ -279,45 +280,73 @@ exports.submitJudgeMarks = async (req, res) => {
 
     // ✅ Validate input
     if (!participantId || marks === undefined) {
-      return res.status(400).json({ success: false, message: "participantId and marks are required" });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "participantId and marks are required",
+        });
     }
 
     // ✅ Fetch activity
     const activity = await Activity.findById(activityId);
     if (!activity) {
-      return res.status(404).json({ success: false, message: "Activity not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Activity not found" });
     }
 
     // ✅ Check if this user is a judge in this activity
-    const judgeInfo = activity.judges.find(j => j.userId.toString() === userId.toString());
+    const judgeInfo = activity.judges.find(
+      (j) => j.userId.toString() === userId.toString(),
+    );
     if (!judgeInfo) {
-      return res.status(403).json({ success: false, message: "You are not authorized to give marks for this activity" });
+      return res
+        .status(403)
+        .json({
+          success: false,
+          message: "You are not authorized to give marks for this activity",
+        });
     }
 
     const judgeLabel = judgeInfo.judgeLabel.toLowerCase(); // "judge1" | "judge2" | "judge3"
 
     // ✅ Find the participant
-    const participant = activity.participants.find(p => p._id.toString() === participantId.toString());
+    const participant = activity.participants.find(
+      (p) => p._id.toString() === participantId.toString(),
+    );
     if (!participant) {
-      return res.status(404).json({ success: false, message: "Participant not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Participant not found" });
     }
 
     // ✅ Initialize activityMarks if not present
     if (!participant.activityMarks) {
-      participant.activityMarks = { judge1: 0, judge2: 0, judge3: 0, finalMarks: 0 };
+      participant.activityMarks = {
+        judge1: 0,
+        judge2: 0,
+        judge3: 0,
+        finalMarks: 0,
+      };
     }
 
     // ✅ Update marks only for current judge
     if (["judge1", "judge2", "judge3"].includes(judgeLabel)) {
       participant.activityMarks[judgeLabel] = marks;
     } else {
-      return res.status(400).json({ success: false, message: "Invalid judge role" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid judge role" });
     }
 
     // ✅ Optionally calculate finalMarks (average)
     const { judge1, judge2, judge3 } = participant.activityMarks;
-    const scores = [judge1, judge2, judge3].filter(n => n > 0);
-    const finalMarks = scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2) : 0;
+    const scores = [judge1, judge2, judge3].filter((n) => n > 0);
+    const finalMarks =
+      scores.length > 0
+        ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2)
+        : 0;
     participant.activityMarks.finalMarks = finalMarks;
 
     // ✅ Save activity
@@ -326,9 +355,8 @@ exports.submitJudgeMarks = async (req, res) => {
     res.status(200).json({
       success: true,
       message: `${judgeLabel} marks updated successfully.`,
-      participantMarks: participant.activityMarks
+      participantMarks: participant.activityMarks,
     });
-
   } catch (error) {
     console.error("❌ submitJudgeMarks Error:", error);
     res.status(500).json({
@@ -348,12 +376,14 @@ exports.updateActivityMarks = async (req, res) => {
     // 🔹 Find activity
     const activity = await Activity.findById(activityId);
     if (!activity) {
-      return res.status(404).json({ success: false, message: "Activity not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Activity not found" });
     }
 
     // 🔹 Find judge label (judge1/judge2/judge3)
     const judge = activity.judges.find(
-      (j) => j.userId.toString() === judgeUserId.toString()
+      (j) => j.userId.toString() === judgeUserId.toString(),
     );
     if (!judge) {
       return res.status(403).json({
@@ -413,7 +443,7 @@ exports.calculateWinners = async (req, res) => {
     if (!activity) {
       return res.status(404).json({
         success: false,
-        message: "Activity not found"
+        message: "Activity not found",
       });
     }
 
@@ -422,7 +452,7 @@ exports.calculateWinners = async (req, res) => {
       if (winner && winner.userId) {
         return {
           userId: winner.userId,
-          marks: winner.marks || 0
+          marks: winner.marks || 0,
         };
       }
       return { userId: null, marks: 0 };
@@ -433,23 +463,23 @@ exports.calculateWinners = async (req, res) => {
 
     // ✅ Build COMPLETE new winners object
     const completeWinners = {
-      firstWinner: firstWinner 
-        ? safeWinner(firstWinner) 
-        : (existing.firstWinner && existing.firstWinner.userId 
-            ? existing.firstWinner 
-            : { userId: null, marks: 0 }),
-      
-      secondWinner: secondWinner 
-        ? safeWinner(secondWinner) 
-        : (existing.secondWinner && existing.secondWinner.userId 
-            ? existing.secondWinner 
-            : { userId: null, marks: 0 }),
-      
-      thirdWinner: thirdWinner 
-        ? safeWinner(thirdWinner) 
-        : (existing.thirdWinner && existing.thirdWinner.userId 
-            ? existing.thirdWinner 
-            : { userId: null, marks: 0 })
+      firstWinner: firstWinner
+        ? safeWinner(firstWinner)
+        : existing.firstWinner && existing.firstWinner.userId
+          ? existing.firstWinner
+          : { userId: null, marks: 0 },
+
+      secondWinner: secondWinner
+        ? safeWinner(secondWinner)
+        : existing.secondWinner && existing.secondWinner.userId
+          ? existing.secondWinner
+          : { userId: null, marks: 0 },
+
+      thirdWinner: thirdWinner
+        ? safeWinner(thirdWinner)
+        : existing.thirdWinner && existing.thirdWinner.userId
+          ? existing.thirdWinner
+          : { userId: null, marks: 0 },
     };
 
     // console.log("✅ Complete winners object:", JSON.stringify(completeWinners, null, 2));
@@ -457,7 +487,7 @@ exports.calculateWinners = async (req, res) => {
     // ✅ Use $set to replace entire winners object
     await Activity.updateOne(
       { _id: activityId },
-      { $set: { winners: completeWinners } }
+      { $set: { winners: completeWinners } },
     );
 
     // ✅ Fetch updated activity
@@ -522,10 +552,10 @@ exports.deleteActivity = async (req, res) => {
                   activityJudge: { activityId: activity._id },
                 },
               },
-              { new: true }
+              { new: true },
             );
           }
-        })
+        }),
       );
     }
 
@@ -540,6 +570,112 @@ exports.deleteActivity = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Delete Activity Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    });
+  }
+};
+
+// ✅ NEW: Update activity (only creator can edit) — additive, existing logic untouched
+exports.updateActivity = async (req, res) => {
+  try {
+    const { activityId } = req.params;
+    const userId = req.user._id;
+
+    if (!activityId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Activity ID is required" });
+    }
+
+    const activity = await Activity.findById(activityId);
+    if (!activity) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Activity not found" });
+    }
+
+    // ✅ Only the creator can edit
+    if (activity.createdBy.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized: Only the creator can edit this activity",
+      });
+    }
+
+    const {
+      activityName,
+      shortDescription,
+      rules,
+      category,
+      deadline,
+      sponsors,
+      judges,
+      priceDistribution,
+    } = req.body;
+
+    // ✅ Update only provided fields (rest stay as-is)
+    if (activityName !== undefined) activity.activityName = activityName;
+    if (shortDescription !== undefined)
+      activity.shortDescription = shortDescription;
+    if (rules !== undefined) activity.rules = rules;
+    if (category !== undefined) activity.category = category;
+    if (deadline !== undefined) activity.deadline = deadline;
+    if (Array.isArray(sponsors)) activity.sponsors = sponsors;
+    if (priceDistribution !== undefined)
+      activity.priceDistribution = priceDistribution;
+
+    // ✅ Judges: if provided, re-sync each judge User.activityJudge record
+    if (Array.isArray(judges)) {
+      // remove old judge references
+      if (Array.isArray(activity.judges) && activity.judges.length > 0) {
+        await Promise.all(
+          activity.judges.map(async (judgeObj) => {
+            if (judgeObj?.userId) {
+              await User.findByIdAndUpdate(
+                judgeObj.userId,
+                { $pull: { activityJudge: { activityId: activity._id } } },
+                { new: true },
+              );
+            }
+          }),
+        );
+      }
+
+      activity.judges = judges;
+
+      // add new judge references
+      await Promise.all(
+        judges.map(async (judgeObj) => {
+          if (judgeObj?.userId) {
+            await User.findByIdAndUpdate(
+              judgeObj.userId,
+              {
+                $addToSet: {
+                  activityJudge: {
+                    activityId: activity._id,
+                    role: judgeObj.judgeLabel || "judge",
+                  },
+                },
+              },
+              { new: true },
+            );
+          }
+        }),
+      );
+    }
+
+    await activity.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Activity updated successfully",
+      activity,
+    });
+  } catch (error) {
+    console.error("\xe2\x9d\x8c Update Activity Error:", error);
     res.status(500).json({
       success: false,
       message: "Server Error",
