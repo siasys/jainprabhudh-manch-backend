@@ -8,7 +8,7 @@ const JainVyapar = require("../../model/VyaparModels/vyaparModel");
 const {
   notifySellersNewOrders,
   notifyBuyerStatusChange,
-} = require("../../utils/orderNotify");
+} = require("../../utils/Ordernotify");
 
 // ── Shipping rules — these match the constants in Cart.jsx ──
 const FREE_SHIP_THRESHOLD = 299;
