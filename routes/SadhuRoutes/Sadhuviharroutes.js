@@ -8,7 +8,7 @@ const {
   updateSadhuVihar,
   setCurrentVihar,
   deleteSadhuVihar,
-} = require("../../controller/SadhuControllers/sadhuViharController");
+} = require("../../controller/SadhuControllers/Sadhuviharcontroller");
 
 const { authMiddleware } = require("../../middlewares/authMiddlewares");
 
