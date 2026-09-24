@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const TirthBooking = require("../../model/TirthModels/Tirthbookingmodel");
-const TirthRoom = require("../../model/TirthModels/tirthRoomModel");
+const TirthRoom = require("../../model/TirthModels/Tirthroommodel");
 const Tirth = require("../../model/TirthModels/tirthModel");
 const { successResponse, errorResponse } = require("../../utils/apiResponse");
 const { isUserTirthManager } = require("../../middlewares/tirthBookingAccess");
@@ -10,7 +10,7 @@ const {
   todayUTC,
   diffNights,
   getRoomsOccupancy,
-} = require("./tirthRoomController");
+} = require("./Tirthroomcontroller");
 
 /* ------------------------------------------------------------------
    OPTIONAL: notification bhejne ki koshish (fail ho to booking ruke na)
@@ -425,7 +425,7 @@ const updateBookingStatus = async (req, res) => {
       try {
         const {
           createBookingIncomeEntry,
-        } = require("./tirthAccountingController");
+        } = require("./Tirthaccountingcontroller");
         await createBookingIncomeEntry(booking, req.user._id);
       } catch (e) {
         console.log("ℹ️ auto accounting entry skipped:", e.message);

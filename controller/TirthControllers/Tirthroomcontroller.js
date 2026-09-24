@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
-const TirthRoom = require("../../model/TirthModels/tirthRoomModel");
-const TirthBooking = require("../../model/TirthModels/tirthBookingModel");
+const TirthRoom = require("../../model/TirthModels/Tirthroommodel");
+const TirthBooking = require("../../model/TirthModels/Tirthbookingmodel");
 const Tirth = require("../../model/TirthModels/tirthModel");
 const { successResponse, errorResponse } = require("../../utils/apiResponse");
 const { isUserTirthManager } = require("../../middlewares/tirthBookingAccess");

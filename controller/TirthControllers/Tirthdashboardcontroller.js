@@ -1,13 +1,13 @@
 const mongoose = require("mongoose");
-const TirthBooking = require("../../model/TirthModels/tirthBookingModel");
-const TirthRoom = require("../../model/TirthModels/tirthRoomModel");
-const TirthAccounting = require("../../model/TirthModels/tirthAccountingModel");
+const TirthBooking = require("../../model/TirthModels/Tirthbookingmodel");
+const TirthRoom = require("../../model/TirthModels/Tirthroommodel");
+const TirthAccounting = require("../../model/TirthModels/Tirthaccountingmodel");
 const { successResponse, errorResponse } = require("../../utils/apiResponse");
 const {
   todayUTC,
   addDaysUTC,
   getRoomsOccupancy,
-} = require("./tirthRoomController");
+} = require("./Tirthroomcontroller");
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 

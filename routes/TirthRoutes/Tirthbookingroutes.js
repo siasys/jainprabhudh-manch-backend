@@ -10,7 +10,7 @@ const {
   updateRoom,
   deleteRoom,
   updatePropertyInfo,
-} = require("../../controller/TirthControllers/tirthRoomController");
+} = require("../../controller/TirthControllers/Tirthroomcontroller");
 
 const {
   createBooking,
@@ -19,18 +19,18 @@ const {
   getBookingDetails,
   getTirthBookings,
   updateBookingStatus,
-} = require("../../controller/TirthControllers/tirthBookingController");
+} = require("../../controller/TirthControllers/Tirthbookingcontroller");
 
 const {
   getAccounting,
   addAccountingEntry,
   updateAccountingEntry,
   deleteAccountingEntry,
-} = require("../../controller/TirthControllers/tirthAccountingController");
+} = require("../../controller/TirthControllers/Tirthaccountingcontroller");
 
 const {
   getTirthOverview,
-} = require("../../controller/TirthControllers/tirthDashboardController");
+} = require("../../controller/TirthControllers/Tirthdashboardcontroller");
 
 const {
   getEmployees,
@@ -86,7 +86,7 @@ const {
 
 const {
   getTirthDashboard,
-} = require("../../controller/TirthControllers/tirthDashboardV2Controller");
+} = require("../../controller/TirthControllers/Tirthdashboardcontroller");
 
 const {
   recordSalaryExpense,

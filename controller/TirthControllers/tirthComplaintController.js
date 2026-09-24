@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const TirthComplaint = require("../../model/TirthModels/tirthComplaintModel");
-const TirthBooking = require("../../model/TirthModels/tirthBookingModel");
+const TirthBooking = require("../../model/TirthModels/Tirthbookingmodel");
 const Tirth = require("../../model/TirthModels/tirthModel");
 const User = require("../../model/UserRegistrationModels/userModel");
 const { successResponse, errorResponse } = require("../../utils/apiResponse");
