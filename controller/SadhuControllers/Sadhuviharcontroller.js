@@ -1,4 +1,4 @@
-const SadhuVihar = require("../../model/SadhuModels/sadhuViharModel");
+const SadhuVihar = require("../../model/SadhuModels/Sadhuviharmodel");
 const Sadhu = require("../../model/SadhuModels/sadhuModel");
 const { successResponse, errorResponse } = require("../../utils/apiResponse");
 
