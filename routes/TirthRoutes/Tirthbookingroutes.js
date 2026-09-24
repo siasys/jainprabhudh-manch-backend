@@ -86,7 +86,7 @@ const {
 
 const {
   getTirthDashboard,
-} = require("../../controller/TirthControllers/Tirthdashboardcontroller");
+} = require("../../controller/TirthControllers/tirthDashboardV2Controller");
 
 const {
   recordSalaryExpense,
