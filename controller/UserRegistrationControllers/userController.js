@@ -1653,7 +1653,16 @@ const getAllUsers = asyncHandler(async (req, res) => {
     accountType,
     page = 1,
     limit = 20,
+    forSearch,
   } = req.query;
+
+  // ✅ NEW (opt-in): mobile search screen ke liye.
+  // Ye endpoint admin panel ke liye bana tha, isliye wo un users ko PEHLE
+  // bhejta hai jinka Jain Aadhar nahi bana (_statusOrder sort, neeche).
+  // Search me ye ulta chahiye. forSearch=true par normal createdAt order
+  // milega aur limit ka cap bhi bada. Admin panel ye param bhejta hi nahi,
+  // isliye uske liye behaviour bilkul purana rehta hai.
+  const isSearchMode = forSearch === "true" || forSearch === true;
 
   const currentUserId = req.user._id.toString();
   let query = {};
@@ -1695,7 +1704,9 @@ const getAllUsers = asyncHandler(async (req, res) => {
 
   query._id = { $nin: [...blockedUserIds, currentUserId] };
 
-  const maxLimit = accountType ? 10000 : 100;
+  // ✅ NEW: search mode me 100 ka cap bahut chhota padta tha (frontend
+  // limit=1000 bhejta hai par 100 par kat jata tha).
+  const maxLimit = accountType ? 10000 : isSearchMode ? 2000 : 100;
   const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), maxLimit);
 
   const parsedPage = Math.max(parseInt(page) || 1, 1);
@@ -1741,7 +1752,13 @@ const getAllUsers = asyncHandler(async (req, res) => {
           },
         },
       },
-      { $sort: { _statusOrder: 1, createdAt: -1 } }, // pehle status, phir latest
+      // ✅ NEW: search mode -> sirf createdAt (naye pehle).
+      // Admin mode -> bilkul purana: pehle status, phir latest.
+      {
+        $sort: isSearchMode
+          ? { createdAt: -1 }
+          : { _statusOrder: 1, createdAt: -1 },
+      },
       { $skip: skip },
       { $limit: parsedLimit },
       { $project: { password: 0, __v: 0, _statusOrder: 0 } }, // helper field hide
