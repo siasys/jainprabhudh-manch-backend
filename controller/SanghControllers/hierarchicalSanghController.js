@@ -1812,26 +1812,31 @@ const addSanghMember = asyncHandler(async (req, res) => {
   try {
     const sanghId = req.params.sanghId;
     const MAX_BULK_MEMBERS = 50;
- 
+
     const sangh = await HierarchicalSangh.findById(sanghId);
     if (!sangh) return errorResponse(res, "Sangh not found", 404);
- 
+
+    // 🔴 International sangh ki fixed membership fee -- amount 0 ki jagah 21000 store hoga
+    const INTERNATIONAL_MEMBER_AMOUNT = 21000;
+    const forcedMemberAmount =
+      sangh.level === "international" ? INTERNATIONAL_MEMBER_AMOUNT : null;
+
     const isBulk = req.body.members && Array.isArray(req.body.members);
- 
+
     if (isBulk) {
       const { members } = req.body;
       if (members.length === 0)
         return errorResponse(res, "Members array cannot be empty", 400);
- 
+
       if (members.length > MAX_BULK_MEMBERS)
         return errorResponse(
           res,
           `Cannot add more than ${MAX_BULK_MEMBERS} members at once`,
           400,
         );
- 
+
       const results = { success: [], failed: [] };
- 
+
       for (const member of members) {
         if (!member.jainAadharNumber) {
           results.failed.push({
@@ -1840,11 +1845,11 @@ const addSanghMember = asyncHandler(async (req, res) => {
           });
           continue;
         }
- 
+
         try {
-          // ✅ CHANGED: helper se lookup
+          // helper se lookup
           const user = await findJainAadharUser(member.jainAadharNumber);
- 
+
           if (!user) {
             results.failed.push({
               jainAadharNumber: member.jainAadharNumber,
@@ -1852,7 +1857,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             });
             continue;
           }
- 
+
           const location = user?.jainAadharApplication?.location || {};
           const contact = user?.jainAadharApplication?.contactDetails || {};
           const rawImage =
@@ -1871,17 +1876,16 @@ const addSanghMember = asyncHandler(async (req, res) => {
           const userImage = rawImage ? convertS3UrlToCDN(rawImage) : "";
           const paymentStatus = member.paymentStatus || "pending";
           const isPaid = paymentStatus === "paid";
- 
+
           const membershipStartDate = new Date();
           const membershipEndDate = new Date(
             Date.now() + 365 * 24 * 60 * 60 * 1000,
           );
- 
-          // Duplicate guard -- yahi userId is sangh me pehle se member hai?
+
           const alreadyMember = sangh.members.some(
             (m) => m?.userId?.toString() === user._id.toString(),
           );
- 
+
           if (alreadyMember) {
             results.failed.push({
               jainAadharNumber: member.jainAadharNumber,
@@ -1889,7 +1893,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             });
             continue;
           }
- 
+
           const paymentDate = isPaid ? new Date() : null;
           const newMember = {
             userId: user._id,
@@ -1900,13 +1904,12 @@ const addSanghMember = asyncHandler(async (req, res) => {
             postMember: member.postMember || "",
             userImage,
             memberScreenshot,
-            amount: member.amount || 0,
+            amount: forcedMemberAmount ?? (member.amount || 0),
             paymentStatus,
             paymentDate,
             membershipStartDate,
             membershipEndDate,
             status: isPaid ? "active" : "inactive",
-            // Country-aware address (India ka natija bilkul pehle jaisa)
             address: toMemberAddress(location),
             addedBy: req.user._id,
             addedAt: new Date(),
@@ -1919,15 +1922,13 @@ const addSanghMember = asyncHandler(async (req, res) => {
                 }
               : undefined,
           };
- 
+
           sangh.members.push(newMember);
           results.success.push({
             jainAadharNumber: member.jainAadharNumber,
             name: newMember.name,
           });
- 
-          // STEP 1: Add MEMBER role first (Index 0)
-          // Isi sangh ka member role dobara na jude
+
           await User.updateOne(
             {
               _id: user._id,
@@ -1947,8 +1948,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
               },
             },
           );
- 
-          // STEP 2: Add HONORARY MEMBER role if applicable (Index 1)
+
           if (
             (member.isHonorary === "true" || member.isHonorary === true) &&
             member.localSangh?.sanghId
@@ -1956,7 +1956,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             const localSangh = await HierarchicalSangh.findById(
               member.localSangh.sanghId,
             );
- 
+
             if (localSangh) {
               const honoraryMember = {
                 userId: user._id,
@@ -1970,8 +1970,6 @@ const addSanghMember = asyncHandler(async (req, res) => {
                 userImage: newMember.userImage,
                 memberScreenshot: newMember.memberScreenshot,
                 amount: member.amount || 0,
-                // ✅ FIXED: yahan `finalPaymentStatus` tha jo bulk scope me
-                // define hi nahi hota — ReferenceError aata tha
                 paymentStatus,
                 paymentDate: isPaid ? new Date() : null,
                 membershipStartDate,
@@ -1982,21 +1980,20 @@ const addSanghMember = asyncHandler(async (req, res) => {
                 addedBy: req.user._id,
                 addedAt: new Date(),
               };
- 
+
               if (!localSangh.honoraryMembers) {
                 localSangh.honoraryMembers = [];
               }
- 
+
               const exists = localSangh.honoraryMembers.some(
                 (h) => h.jainAadharNumber === member.jainAadharNumber,
               );
- 
+
               if (!exists) {
                 localSangh.honoraryMembers.push(honoraryMember);
                 await localSangh.save();
               }
- 
-              // Add honoraryMember role AFTER member role
+
               await User.findByIdAndUpdate(user._id, {
                 $push: {
                   sanghRoles: {
@@ -2017,9 +2014,9 @@ const addSanghMember = asyncHandler(async (req, res) => {
           });
         }
       }
- 
+
       if (results.success.length > 0) await sangh.save();
- 
+
       return successResponse(
         res,
         {
@@ -2034,7 +2031,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
         `Added ${results.success.length} members, ${results.failed.length} failed`,
       );
     }
- 
+
     // ======= SINGLE MEMBER ADDITION =======
     const {
       jainAadharNumber,
@@ -2045,8 +2042,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
       amount,
       isHonorary,
     } = req.body;
- 
-    // ✅ Parse localSangh if needed
+
     if (req.body.localSangh && typeof req.body.localSangh === "string") {
       try {
         req.body.localSangh = JSON.parse(req.body.localSangh);
@@ -2055,34 +2051,31 @@ const addSanghMember = asyncHandler(async (req, res) => {
         req.body.localSangh = undefined;
       }
     }
- 
+
     if (!jainAadharNumber)
       return errorResponse(res, "Jain Aadhar number is required", 400);
- 
-    // ✅ CHANGED: helper se lookup
+
     const user = await findJainAadharUser(jainAadharNumber);
- 
+
     if (!user)
       return errorResponse(
         res,
         "Invalid or unverified Jain Aadhar number",
         400,
       );
- 
-    // Duplicate guard -- double submit se do baar member ban jaata tha.
-    // Yahi userId is sangh me pehle se hai to aage badhna hi nahi hai.
+
     const alreadyMember = sangh.members.some(
       (m) => m?.userId?.toString() === user._id.toString(),
     );
- 
+
     if (alreadyMember) {
       return errorResponse(res, "Already a member of this Sangh", 400);
     }
- 
+
     const location = user?.jainAadharApplication?.location || {};
     const contact = user?.jainAadharApplication?.contactDetails || {};
     const manualImage = req.file?.location || req.file?.path;
- 
+
     const rawImage =
       manualImage ||
       user?.jainAadharApplication?.userProfile ||
@@ -2093,7 +2086,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
       req.files?.memberScreenshot?.[0]?.location ||
       req.files?.memberScreenshot?.[0]?.path ||
       "";
- 
+
     const memberScreenshot = rawScreenshot
       ? convertS3UrlToCDN(rawScreenshot)
       : "";
@@ -2101,7 +2094,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
     const isPaid = finalPaymentStatus === "paid";
     const membershipStartDate = new Date();
     const membershipEndDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
- 
+
     const newMember = {
       userId: user._id,
       name: user?.jainAadharApplication?.name || "Unknown",
@@ -2113,8 +2106,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
       sanghType: sanghType || "main",
       userImage,
       memberScreenshot,
-      amount: amount || 0,
-      // Country-aware address (India ka natija bilkul pehle jaisa)
+      amount: forcedMemberAmount ?? (amount || 0),
       address: toMemberAddress(location),
       paymentStatus: finalPaymentStatus,
       paymentDate: isPaid ? new Date() : null,
@@ -2133,12 +2125,10 @@ const addSanghMember = asyncHandler(async (req, res) => {
       addedBy: req.user._id,
       addedAt: new Date(),
     };
- 
+
     sangh.members.push(newMember);
     await sangh.save();
- 
-    // STEP 1: UPDATE USER SANGH ROLES - MEMBER ROLE FIRST (Index 0)
-    // Isi sangh ka member role dobara na jude
+
     await User.updateOne(
       {
         _id: user._id,
@@ -2158,8 +2148,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
         },
       },
     );
- 
-    // ✅ STEP 2: HONORARY MEMBER ROLE ADDITION (Index 1) - Only if isHonorary is true
+
     if (
       (isHonorary === "true" || isHonorary === true) &&
       req.body.localSangh?.sanghId
@@ -2167,7 +2156,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
       const localSangh = await HierarchicalSangh.findById(
         req.body.localSangh.sanghId,
       );
- 
+
       if (localSangh) {
         const honoraryMember = {
           userId: user._id,
@@ -2191,22 +2180,20 @@ const addSanghMember = asyncHandler(async (req, res) => {
           addedBy: req.user._id,
           addedAt: new Date(),
         };
- 
+
         if (!localSangh.honoraryMembers) {
           localSangh.honoraryMembers = [];
         }
- 
-        // prevent duplicate
+
         const exists = localSangh.honoraryMembers.some(
           (h) => h.jainAadharNumber === jainAadharNumber,
         );
- 
+
         if (!exists) {
           localSangh.honoraryMembers.push(honoraryMember);
           await localSangh.save();
         }
- 
-        // ✅ Add honoraryMember role AFTER member role (ensures proper order)
+
         await User.findByIdAndUpdate(user._id, {
           $push: {
             sanghRoles: {
@@ -2220,22 +2207,18 @@ const addSanghMember = asyncHandler(async (req, res) => {
         });
       }
     }
- 
-    // =================================================
-    // ✅ PAYMENT DISTRIBUTION (ONLY IF PAID)
-    // =================================================
+
     if (isPaid && !newMember.paymentDistributed) {
       await distributeMemberPayment({
         member: newMember,
         user,
         sourceSangh: sangh,
       });
- 
-      // flag update
+
       newMember.paymentDistributed = true;
       await sangh.save();
     }
- 
+
     return successResponse(
       res,
       {
