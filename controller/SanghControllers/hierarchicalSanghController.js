@@ -1059,26 +1059,28 @@ const updateSanghDetails = async (req, res) => {
 };
 
 /** 🔹 Helper function: Assign role to User */
+/** 🔹 Helper function: Assign role to User (purana role hataye bina, naya add karta hai) */
 const assignRoleToUser = async (userId, sanghId, role, level, sanghType) => {
-  const user = await User.findById(userId);
-  if (user) {
-    const roleIndex = user.sanghRoles.findIndex(
-      (r) => r.sanghId?.toString() === sanghId,
-    );
-
-    if (roleIndex !== -1) {
-      user.sanghRoles[roleIndex].role = role;
-    } else {
-      user.sanghRoles.push({
-        sanghId,
-        role,
-        level,
-        sanghType: sanghType || "main",
-      });
-    }
-
-    await user.save();
-  }
+  // Naya role tabhi push karo jab isi sangh me YAHI role pehle se na ho.
+  // Purane roles (member, honoraryMember, doosre sangh ke roles) waise ke waise rehte hain.
+  await User.updateOne(
+    {
+      _id: userId,
+      sanghRoles: {
+        $not: { $elemMatch: { sanghId: sanghId, role: role } },
+      },
+    },
+    {
+      $push: {
+        sanghRoles: {
+          sanghId,
+          role,
+          level,
+          sanghType: sanghType || "main",
+        },
+      },
+    },
+  );
 };
 const deleteSanghTeamMember = async (req, res) => {
   try {
