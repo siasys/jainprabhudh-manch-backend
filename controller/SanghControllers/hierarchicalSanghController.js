@@ -1058,18 +1058,21 @@ const updateSanghDetails = async (req, res) => {
   }
 };
 
-/** 🔹 Helper function: Assign role to User */
-/** 🔹 Helper function: Assign role to User (purana role hataye bina, naya add karta hai) */
+/** 🔹 Helper function: Assign role to User
+ *  Same sangh me hamesha EK hi role rahega -> member se president banaya to
+ *  usi entry ki jagah president aa jayega (alag se doosri entry nahi banegi).
+ *  Doosre sanghon ke roles (country/city waale) bilkul chhute nahi.
+ */
 const assignRoleToUser = async (userId, sanghId, role, level, sanghType) => {
-  // Naya role tabhi push karo jab isi sangh me YAHI role pehle se na ho.
-  // Purane roles (member, honoraryMember, doosre sangh ke roles) waise ke waise rehte hain.
+  // 1) Is sangh ke sabhi purane role(s) hata do (member + koi duplicate bhi).
   await User.updateOne(
-    {
-      _id: userId,
-      sanghRoles: {
-        $not: { $elemMatch: { sanghId: sanghId, role: role } },
-      },
-    },
+    { _id: userId },
+    { $pull: { sanghRoles: { sanghId: sanghId } } },
+  );
+
+  // 2) Ab is sangh ka naya role add karo -> is sangh me sirf yahi ek role.
+  await User.updateOne(
+    { _id: userId },
     {
       $push: {
         sanghRoles: {
