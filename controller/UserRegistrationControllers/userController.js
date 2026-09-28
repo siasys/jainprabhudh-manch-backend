@@ -506,6 +506,7 @@ const registerFinalUser = asyncHandler(async (req, res) => {
 // });
 
 // Register woith mobile new modal
+// Register woith mobile new modal
 const sendOtp = asyncHandler(async (req, res) => {
   const { phoneNumber, email, country = "India" } = req.body; // ✅ NEW: Country parameter add किया
 
@@ -514,28 +515,44 @@ const sendOtp = asyncHandler(async (req, res) => {
   }
 
   // ✅ ───────── NEW BLOCK START ─────────
-  // Signup screen (MobileNumber.jsx) `checkExisting: true` bhejti hai.
-  // Login / resend / add-another-account ye flag nahi bhejte, isliye
-  // unke liye behaviour bilkul pehle jaisa hi rahega.
+  // Signup screen `checkExisting: true` bhejti hai. Login / resend /
+  // add-another-account ye flag nahi bhejte, isliye unka behaviour pehle jaisa.
+  //
+  //   accountType "user"  → ek number/email par SIRF EK personal account.
+  //   business/sadhu/tirth → usi type ka account pehle se ho tabhi rok.
+  //
+  // Yani ek vyakti apne personal (user) account wale number se apna vyapar,
+  // sadhu ya tirth account bana sakta hai — par doosra "user" account nahi.
   if (req.body?.checkExisting === true) {
-    // DUPLICATE KA NIYAM accountType PAR TIKA HAI — registerFinalUser neeche
-    // theek yahi niyam lagata hai, aur dono ka ek jaisa hona zaroori hai.
-    // Warna user yahan ruk jata hai jabki account banne me koi rukawat nahi
-    // thi — wahi ho raha tha, kyunki yeh check accountType dekhta hi nahi tha.
-    //
-    //   accountType "user"  → ek number/email par SIRF EK personal account.
-    //   business/sadhu/tirth → usi type ka account pehle se ho tabhi rok.
-    //
-    // Yani ek vyakti apne personal account wale number se apna vyapar, sadhu
-    // ya tirth account bana sakta hai — aksar wahi vyakti dono chalata hai.
     const accountType = String(req.body?.accountType || "user").trim();
 
+    // "user" ke liye legacy accounts (jinme accountType set hi nahi / null hai)
+    // ko bhi "user" maano — warna un par duplicate user account ban jata hai.
+    // business/sadhu/tirth ke liye exact type match.
+    const accountTypeMatch =
+      accountType === "user" ? { $in: ["user", null] } : accountType;
+
     const orQuery = [];
+
     if (phoneNumber) {
-      orQuery.push({ phoneNumber: String(phoneNumber).trim(), accountType });
+      // ⚠️ Number DB me kisi bhi format me ho sakta hai (+91XXXXXXXXXX ya 10-digit),
+      // aur frontend sirf 10-digit bhejta hai. Isliye sirf ANK nikaal ke, optional
+      // country-code ke saath, END-match karo — warna format mismatch se duplicate
+      // chhut jata tha aur doosra user account ban jata tha.
+      const digits = String(phoneNumber).replace(/\D/g, "");
+      if (digits.length >= 6) {
+        orQuery.push({
+          phoneNumber: new RegExp("^\\+?\\d{0,3}" + digits + "$"),
+          accountType: accountTypeMatch,
+        });
+      }
     }
+
     if (email) {
-      orQuery.push({ email: String(email).trim().toLowerCase(), accountType });
+      orQuery.push({
+        email: String(email).trim().toLowerCase(),
+        accountType: accountTypeMatch,
+      });
     }
 
     if (orQuery.length > 0) {
@@ -560,11 +577,6 @@ const sendOtp = asyncHandler(async (req, res) => {
 
   // 📱 Phone number case
   if (phoneNumber) {
-    // const existingUser = await User.findOne({ phoneNumber: String(phoneNumber) });
-    // if (existingUser) {
-    //   return errorResponse(res, "User with this phone number already exists", 400);
-    // }
-
     await MobileOtpVerification.deleteMany({ phoneNumber, isVerified: false });
 
     const verificationCode = generateVerificationCode();
@@ -618,11 +630,6 @@ const sendOtp = asyncHandler(async (req, res) => {
 
   // 📧 Email case
   if (email) {
-    // const existingUser = await User.findOne({ email: email.toLowerCase() });
-    // if (existingUser) {
-    //   return errorResponse(res, "User with this email already exists", 400);
-    // }
-
     await EmailVerification.deleteMany({ email, isVerified: false });
 
     const verificationCode = generateVerificationCode();
@@ -647,7 +654,6 @@ const sendOtp = asyncHandler(async (req, res) => {
     }
   }
 });
-// Resend OTP (for phone or email)
 // Resend OTP (for phone or email)
 const resendOtp = asyncHandler(async (req, res) => {
   const { phoneNumber, email, country = "India" } = req.body; // ✅ Add country parameter
