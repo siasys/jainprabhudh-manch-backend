@@ -442,12 +442,9 @@ exports.blockUnblockUser = async (req, res) => {
     const { targetUserId, action } = req.body;
 
     if (!targetUserId || !["block", "unblock"].includes(action)) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "targetUserId and valid action (block/unblock) are required.",
-        });
+      return res.status(400).json({
+        message: "targetUserId and valid action (block/unblock) are required.",
+      });
     }
 
     const user = await User.findById(userId);
@@ -1096,11 +1093,9 @@ exports.updateMessageById = async (req, res) => {
       return res.status(404).json({ message: "Message not found" });
     }
     if (message.sender.toString() !== userId.toString()) {
-      return res
-        .status(403)
-        .json({
-          message: "Unauthorized: You can only update your own messages",
-        });
+      return res.status(403).json({
+        message: "Unauthorized: You can only update your own messages",
+      });
     }
     // Pehle existing message ko decrypt
     let decryptedOldMessage = decrypt(message.message);
@@ -1270,5 +1265,70 @@ exports.broadcastMessage = async (req, res) => {
   } catch (error) {
     console.error("Broadcast Error:", error);
     res.status(500).json({ success: false, message: "Failed to broadcast" });
+  }
+};
+
+// ✅ NEW: POST /messages/mark-read
+// Frontend (Message.jsx) ye endpoint pehle se call kar raha tha, par route aur
+// handler dono missing the -> har call 404 hoti thi aur isRead kabhi true nahi
+// hota tha, isliye Home ka unread badge kam nahi ho raha tha.
+// Body: { senderId, receiverId }
+//   senderId   = jisne message bheja (saamne wala)
+//   receiverId = current user (jo padh raha hai)
+exports.markMessagesRead = async (req, res) => {
+  try {
+    const { senderId, receiverId } = req.body;
+
+    if (!senderId || !receiverId) {
+      return res
+        .status(400)
+        .json({ message: "senderId and receiverId are required" });
+    }
+
+    if (
+      !mongoose.Types.ObjectId.isValid(senderId) ||
+      !mongoose.Types.ObjectId.isValid(receiverId)
+    ) {
+      return res
+        .status(400)
+        .json({ message: "Invalid senderId or receiverId" });
+    }
+
+    const result = await Message.updateMany(
+      { sender: senderId, receiver: receiverId, isRead: false },
+      { isRead: true, status: "read" },
+    );
+
+    // ⚠️ ZAROORI: getAllMessages `messages:${userId}` key ko 60s cache karta hai.
+    // Ise clear kiye bina badge 60 second tak purana count dikhata rahega.
+    await invalidateCache(`messages:${receiverId}`);
+    await invalidateCache(`messages:${senderId}`);
+
+    // Socket: bhejne wale ko read-receipt, padhne wale ko badge refresh ka signal
+    try {
+      const io = getIo();
+      io.to(senderId.toString()).emit("messagesRead", {
+        sender: senderId,
+        receiver: receiverId,
+      });
+      io.to(receiverId.toString()).emit("unreadMessageCountUpdate", {
+        from: senderId,
+      });
+    } catch (e) {
+      // socket fail ho to bhi response break na ho
+    }
+
+    return res.status(200).json({
+      message: "Messages marked as read",
+      modifiedCount: result?.modifiedCount || 0,
+    });
+  } catch (error) {
+    console.error("markMessagesRead error:", error);
+    return res
+      .status(500)
+      .json({
+        message: "Error marking messages as read",
+        error: error.message,
+      });
   }
 };

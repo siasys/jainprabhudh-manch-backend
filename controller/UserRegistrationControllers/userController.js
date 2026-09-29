@@ -656,7 +656,7 @@ const sendOtp = asyncHandler(async (req, res) => {
 });
 // Resend OTP (for phone or email)
 const resendOtp = asyncHandler(async (req, res) => {
-  const { phoneNumber, email, country = "India" } = req.body; // ✅ Add country parameter
+  const { phoneNumber, email, country = "India" } = req.body;
 
   if (!phoneNumber && !email) {
     return errorResponse(res, "Phone number or email is required", 400);

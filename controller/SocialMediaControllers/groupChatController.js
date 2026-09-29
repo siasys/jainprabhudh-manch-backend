@@ -1,15 +1,18 @@
-const {GroupChat, decrypt} = require('../../model/SocialMediaModels/groupChatModel');
-const mongoose = require('mongoose');
-const path = require('path');
-const { getIo } = require('../../websocket/socket');
-const { s3Client, DeleteObjectCommand } = require('../../config/s3Config');
-const { successResponse, errorResponse } = require('../../utils/apiResponse');
-const JainAadhar = require('../../model/UserRegistrationModels/jainAadharModel')
-const { convertS3UrlToCDN } = require('../../utils/s3Utils');
-const HierarchicalSangh = require('../../model/SanghModels/hierarchicalSanghModel')
-const User = require('../../model/UserRegistrationModels/userModel');
-const fuzzysort = require('fuzzysort');
-const { containsBadWords } = require('../../utils/filterBadWords');
+const {
+  GroupChat,
+  decrypt,
+} = require("../../model/SocialMediaModels/groupChatModel");
+const mongoose = require("mongoose");
+const path = require("path");
+const { getIo } = require("../../websocket/socket");
+const { s3Client, DeleteObjectCommand } = require("../../config/s3Config");
+const { successResponse, errorResponse } = require("../../utils/apiResponse");
+const JainAadhar = require("../../model/UserRegistrationModels/jainAadharModel");
+const { convertS3UrlToCDN } = require("../../utils/s3Utils");
+const HierarchicalSangh = require("../../model/SanghModels/hierarchicalSanghModel");
+const User = require("../../model/UserRegistrationModels/userModel");
+const fuzzysort = require("fuzzysort");
+const { containsBadWords } = require("../../utils/filterBadWords");
 const { sendPushToUsers } = require("../../config/firebaseAdmin");
 // 1. Create Group Chat
 exports.createGroupChat = async (req, res) => {
@@ -25,8 +28,14 @@ exports.createGroupChat = async (req, res) => {
     }
     if (!groupName) groupName = "New Group";
 
-    if (!groupMembers || !Array.isArray(groupMembers) || groupMembers.length === 0) {
-      return res.status(400).json({ message: "At least one group member is required." });
+    if (
+      !groupMembers ||
+      !Array.isArray(groupMembers) ||
+      groupMembers.length === 0
+    ) {
+      return res
+        .status(400)
+        .json({ message: "At least one group member is required." });
     }
 
     // Ensure creator is included in group members
@@ -36,13 +45,13 @@ exports.createGroupChat = async (req, res) => {
 
     const newGroup = new GroupChat({
       groupName,
-      groupMembers: groupMembers.map(memberId => ({
+      groupMembers: groupMembers.map((memberId) => ({
         user: memberId,
-        role: memberId === creator ? 'admin' : 'member'
+        role: memberId === creator ? "admin" : "member",
       })),
       groupImage, // This can now be undefined if frontend doesn't send an image
       creator,
-      admins: [creator]
+      admins: [creator],
     });
 
     await newGroup.save();
@@ -53,23 +62,25 @@ exports.createGroupChat = async (req, res) => {
       groupName: newGroup.groupName,
       groupImage: newGroup.groupImage,
       creator: newGroup.creator,
-      createdAt: newGroup.createdAt
+      createdAt: newGroup.createdAt,
     };
 
     // Notify all group members via Socket.io
     const io = getIo();
     if (io) {
-      console.log(`Notifying ${groupMembers.length} members about new group ${newGroup._id}`);
-      groupMembers.forEach(memberId => {
-        io.to(memberId.toString()).emit('newGroup', groupForSocket);
+      console.log(
+        `Notifying ${groupMembers.length} members about new group ${newGroup._id}`,
+      );
+      groupMembers.forEach((memberId) => {
+        io.to(memberId.toString()).emit("newGroup", groupForSocket);
         console.log(`Emitted newGroup event to user ${memberId}`);
-        io.to(memberId.toString()).emit('addedToGroup', {
+        io.to(memberId.toString()).emit("addedToGroup", {
           groupId: newGroup._id,
-          groupName: newGroup.groupName
+          groupName: newGroup.groupName,
         });
       });
     } else {
-      console.error('Socket.io instance not available');
+      console.error("Socket.io instance not available");
     }
 
     return successResponse(res, newGroup, "Group created successfully", 201);
@@ -104,7 +115,7 @@ exports.createOrFindCityGroup = async (req, res) => {
     // ✅ Check existing group by normalized name
     const allGroups = await GroupChat.find({ isCityGroup: true });
     const existingGroup = allGroups.find(
-      (g) => normalizeCity(g.normalizedCity || "") === normalizedCity
+      (g) => normalizeCity(g.normalizedCity || "") === normalizedCity,
     );
 
     if (existingGroup) {
@@ -244,9 +255,18 @@ exports.getGroupDetails = async (req, res) => {
     }
 
     const group = await GroupChat.findById(groupId)
-      .populate('creator', 'fullName profilePicture accountType businessName sadhuName tirthName')
-      .populate('admins', 'fullName profilePicture accountType businessName sadhuName tirthName')
-      .populate('groupMembers.user', 'fullName profilePicture accountType businessName sadhuName tirthName');
+      .populate(
+        "creator",
+        "fullName profilePicture accountType businessName sadhuName tirthName",
+      )
+      .populate(
+        "admins",
+        "fullName profilePicture accountType businessName sadhuName tirthName",
+      )
+      .populate(
+        "groupMembers.user",
+        "fullName profilePicture accountType businessName sadhuName tirthName",
+      );
 
     if (!group) {
       return res.status(404).json({ message: "Group not found." });
@@ -271,7 +291,9 @@ exports.createOrFindGotraGroup = async (req, res) => {
     // Creator ka Gotra Jain Aadhar se fetch karein
     const creatorData = await JainAadhar.findOne({ userId: creator });
     if (!creatorData || !creatorData.gotra) {
-      return res.status(400).json({ message: "Gotra not found for the creator" });
+      return res
+        .status(400)
+        .json({ message: "Gotra not found for the creator" });
     }
 
     const gotra = creatorData.gotra.trim();
@@ -300,7 +322,11 @@ exports.createOrFindGotraGroup = async (req, res) => {
     if (existingGroup) {
       // Update existing group members if not already in
       groupMembers.forEach((memberId) => {
-        if (!existingGroup.groupMembers.some((m) => m.user.toString() === memberId)) {
+        if (
+          !existingGroup.groupMembers.some(
+            (m) => m.user.toString() === memberId,
+          )
+        ) {
           existingGroup.groupMembers.push({ user: memberId, role: "member" });
         }
       });
@@ -371,17 +397,27 @@ exports.createOrFindHierarchicalSanghGroup = async (req, res) => {
     const creator = sangh.createdBy;
 
     // ✅ Collect unique userIds from officeBearers and members
-    const officeBearerUserIds = sangh.officeBearers.map(ob => ob.userId?.toString());
-    const memberUserIds = sangh.members.map(m => m.userId?.toString());
-    const groupMembers = Array.from(new Set([...officeBearerUserIds, ...memberUserIds]));
+    const officeBearerUserIds = sangh.officeBearers.map((ob) =>
+      ob.userId?.toString(),
+    );
+    const memberUserIds = sangh.members.map((m) => m.userId?.toString());
+    const groupMembers = Array.from(
+      new Set([...officeBearerUserIds, ...memberUserIds]),
+    );
 
     // ✅ Check if group already exists
-    let existingGroup = await GroupChat.findOne({ groupName: new RegExp(`^${groupName}$`, 'i') });
+    let existingGroup = await GroupChat.findOne({
+      groupName: new RegExp(`^${groupName}$`, "i"),
+    });
 
     if (existingGroup) {
       // Add missing members
-      groupMembers.forEach(memberId => {
-        if (!existingGroup.groupMembers.some(m => m.user.toString() === memberId)) {
+      groupMembers.forEach((memberId) => {
+        if (
+          !existingGroup.groupMembers.some(
+            (m) => m.user.toString() === memberId,
+          )
+        ) {
           existingGroup.groupMembers.push({ user: memberId, role: "member" });
         }
       });
@@ -392,14 +428,14 @@ exports.createOrFindHierarchicalSanghGroup = async (req, res) => {
       existingGroup = new GroupChat({
         groupName, // Sangh name
         groupImage, // Sangh image
-        groupMembers: groupMembers.map(memberId => ({
+        groupMembers: groupMembers.map((memberId) => ({
           user: memberId,
-          role: memberId === creator.toString() ? "admin" : "member"
+          role: memberId === creator.toString() ? "admin" : "member",
         })),
         isSanghGroup: true,
         creator,
         sanghId,
-        admins: [creator]
+        admins: [creator],
       });
       await existingGroup.save();
     }
@@ -407,17 +443,17 @@ exports.createOrFindHierarchicalSanghGroup = async (req, res) => {
     // ✅ Emit via Socket.io
     const io = getIo();
     if (io) {
-      groupMembers.forEach(memberId => {
+      groupMembers.forEach((memberId) => {
         io.to(memberId).emit("newGroup", {
           _id: existingGroup._id,
           groupName: existingGroup.groupName,
           groupImage: existingGroup.groupImage,
           creator: existingGroup.creator,
-          createdAt: existingGroup.createdAt
+          createdAt: existingGroup.createdAt,
         });
         io.to(memberId).emit("addedToGroup", {
           groupId: existingGroup._id,
-          groupName: existingGroup.groupName
+          groupName: existingGroup.groupName,
         });
       });
     }
@@ -425,15 +461,13 @@ exports.createOrFindHierarchicalSanghGroup = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: "Sangh group created or updated successfully",
-      group: existingGroup
+      group: existingGroup,
     });
-
   } catch (error) {
     console.error("Error in createOrFindHierarchicalSanghGroup:", error);
     res.status(500).json({ message: error.message });
   }
 };
-
 
 // ✅ Get All Groups (User + Sangh Account Compatible)
 exports.getAllGroups = async (req, res) => {
@@ -534,17 +568,19 @@ exports.getAllGroups = async (req, res) => {
   }
 };
 
-
 // Fetch All Gotra Groups
 exports.getUserGotraGroups = async (req, res) => {
   try {
     const userId = req.user._id;
-    const gotraGroups = await GroupChat.find({ 
-      isGotraGroup: true, 
-      "groupMembers.user": userId
+    const gotraGroups = await GroupChat.find({
+      isGotraGroup: true,
+      "groupMembers.user": userId,
     })
-    .populate("groupMembers.user", "firstName lastName fullName profilePicture")
-    .populate("creator", "firstName lastName fullName profilePicture");
+      .populate(
+        "groupMembers.user",
+        "firstName lastName fullName profilePicture",
+      )
+      .populate("creator", "firstName lastName fullName profilePicture");
     res.status(200).json({ success: true, gotraGroups });
   } catch (error) {
     console.error("Error fetching user Gotra Groups:", error);
@@ -556,8 +592,11 @@ exports.getUserGotraGroups = async (req, res) => {
 exports.getAllGroupChats = async (req, res) => {
   try {
     const groups = await GroupChat.find()
-    .populate('groupMembers.user', 'firstName lastName fullName profilePicture')    
-    .populate('creator', 'firstName lastName fullName profilePicture');
+      .populate(
+        "groupMembers.user",
+        "firstName lastName fullName profilePicture",
+      )
+      .populate("creator", "firstName lastName fullName profilePicture");
     res.status(200).json(groups);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -795,19 +834,25 @@ exports.deleteGroupChat = async (req, res) => {
     }
 
     // Check if user is creator or admin
-    const isAdmin = group.admins.map(id => id.toString()).includes(userId.toString());
+    const isAdmin = group.admins
+      .map((id) => id.toString())
+      .includes(userId.toString());
     const isCreator = group.creator.toString() === userId.toString();
 
     if (!isAdmin && !isCreator) {
-      return errorResponse(res, 403, "Only creator or admins can delete the group.");
+      return errorResponse(
+        res,
+        403,
+        "Only creator or admins can delete the group.",
+      );
     }
 
     // Delete image from S3 if exists
     if (group.groupImage) {
-      const imageKey = group.groupImage.split('/').pop(); // Assuming file name is at the end of the URL
+      const imageKey = group.groupImage.split("/").pop(); // Assuming file name is at the end of the URL
       const deleteCommand = new DeleteObjectCommand({
         Bucket: process.env.AWS_BUCKET_NAME,
-        Key: `uploads/${imageKey}`
+        Key: `uploads/${imageKey}`,
       });
 
       await s3Client.send(deleteCommand);
@@ -820,10 +865,10 @@ exports.deleteGroupChat = async (req, res) => {
     // Notify members via socket
     const io = getIo();
     if (io) {
-      group.groupMembers.forEach(member => {
-        io.to(member.user.toString()).emit('groupDeleted', {
+      group.groupMembers.forEach((member) => {
+        io.to(member.user.toString()).emit("groupDeleted", {
           groupId,
-          message: `Group "${group.groupName}" has been deleted.`
+          message: `Group "${group.groupName}" has been deleted.`,
         });
       });
     }
@@ -844,71 +889,104 @@ exports.getGroupMessages = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const group = await GroupChat.findById(groupId)
-      .populate('sanghId')
+      .populate("sanghId")
       .populate({
-        path: 'groupMessages.sender',
-        select: 'firstName lastName fullName profilePicture'
+        path: "groupMessages.sender",
+        select: "firstName lastName fullName profilePicture",
       })
       .populate({
-        path: 'groupMessages.readBy.user',
-        select: 'firstName lastName fullName profilePicture'
+        path: "groupMessages.readBy.user",
+        select: "firstName lastName fullName profilePicture",
       })
-      .slice('groupMessages', [skip, parseInt(limit)]);
+      .slice("groupMessages", [skip, parseInt(limit)]);
 
     if (!group) {
       return errorResponse(res, "Group not found", 404);
     }
 
     const isMember = group.groupMembers.some(
-      member => member.user.toString() === userId.toString()
+      (member) => member.user.toString() === userId.toString(),
     );
 
     if (!isMember) {
       return errorResponse(res, "Not authorized to view messages", 403);
     }
 
-   // ✅ Decrypt & update readBy
-const decryptedMessages = await Promise.all(
-  group.groupMessages
-    .filter(msg => {
-      if (!msg.deletedFor) return true;
-      return !msg.deletedFor.map(id => id.toString()).includes(userId.toString());
-    })
-    .map(async (msg) => {
-      const plain = msg.toObject({ getters: true });
+    // ✅ Decrypt & update readBy
+    const decryptedMessages = await Promise.all(
+      group.groupMessages
+        .filter((msg) => {
+          if (!msg.deletedFor) return true;
+          return !msg.deletedFor
+            .map((id) => id.toString())
+            .includes(userId.toString());
+        })
+        .map(async (msg) => {
+          const plain = msg.toObject({ getters: true });
 
-      // ✅ Check if already read
-      const alreadyRead = msg.readBy.some(r => r.user.toString() === userId.toString());
+          // ✅ Check if already read
+          const alreadyRead = msg.readBy.some(
+            (r) => r.user.toString() === userId.toString(),
+          );
 
-      if (!alreadyRead) {
-        msg.readBy.push({ user: userId, readAt: new Date() });
-      }
+          if (!alreadyRead) {
+            msg.readBy.push({ user: userId, readAt: new Date() });
+          }
 
-      // ✅ Convert attachments to CDN url
-      if (plain.attachments && plain.attachments.length > 0) {
-        plain.attachments = plain.attachments.map(att => ({
-          ...att,
-          url: convertS3UrlToCDN(att.url)
-        }));
-      }
+          // ✅ Convert attachments to CDN url
+          if (plain.attachments && plain.attachments.length > 0) {
+            plain.attachments = plain.attachments.map((att) => ({
+              ...att,
+              url: convertS3UrlToCDN(att.url),
+            }));
+          }
 
-      return plain;
-    })
-);
+          return plain;
+        }),
+    );
 
-await group.save();
+    await group.save();
 
-return successResponse(res, {
-  messages: decryptedMessages,
-  pagination: {
-    page: parseInt(page),
-    limit: parseInt(limit),
-    total: group.groupMessages.length
-  }
-}, "", 200);
+    // ✅ FIX: upar wala readBy push sirf SLICE kiye hue messages par lagta hai
+    // (page 1 = sabse purane 20). Isliye 20+ messages wale group me naye messages
+    // kabhi read mark nahi hote the aur Home ka unread badge atka reh jata tha.
+    // Ye atomic update us user ke liye group ke SAARE unread messages ko ek saath
+    // read mark kar deta hai -- pagination par depend kiye bina.
+    try {
+      await GroupChat.updateOne(
+        { _id: groupId },
+        {
+          $push: {
+            "groupMessages.$[unreadMsg].readBy": {
+              user: userId,
+              readAt: new Date(),
+            },
+          },
+        },
+        {
+          arrayFilters: [{ "unreadMsg.readBy.user": { $ne: userId } }],
+        },
+      );
+    } catch (markErr) {
+      // mark-read fail ho to bhi messages ka response break na ho
+      console.error("group markAllRead failed:", markErr.message);
+    }
 
+    return successResponse(
+      res,
+      {
+        messages: decryptedMessages,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: group.groupMessages.length,
+        },
+      },
+      "",
+      200,
+    );
   } catch (error) {
-    console.error('Get group messages error:', error);
+    console.error("Get group messages error:", error);
     return errorResponse(res, error.message, 500);
   }
 };
@@ -919,9 +997,9 @@ exports.clearAllGroupMessagesForMe = async (req, res) => {
     const userId = req.user?._id || req.userId;
 
     const group = await GroupChat.findById(groupId);
-    if (!group) return res.status(404).json({ message: 'Group not found' });
+    if (!group) return res.status(404).json({ message: "Group not found" });
 
-    group.groupMessages.forEach(msg => {
+    group.groupMessages.forEach((msg) => {
       if (!msg.deletedFor) msg.deletedFor = [];
       if (!msg.deletedFor.includes(userId.toString())) {
         msg.deletedFor.push(userId.toString());
@@ -929,10 +1007,12 @@ exports.clearAllGroupMessagesForMe = async (req, res) => {
     });
 
     await group.save();
-    return res.status(200).json({ message: 'All group messages cleared for this user.' });
+    return res
+      .status(200)
+      .json({ message: "All group messages cleared for this user." });
   } catch (err) {
-    console.error('Clear all messages error:', err);
-    res.status(500).json({ message: 'Server error' });
+    console.error("Clear all messages error:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -945,65 +1025,74 @@ exports.deleteGroupMessage = async (req, res) => {
       return res.status(401).json({ message: "User not found" });
     }
     const group = await GroupChat.findById(groupId);
-    if (!group) return res.status(404).json({ message: 'Group not found' });
-   // Find the message
-   const messageIndex = group.groupMessages.findIndex(
-    msg => msg._id.toString() === messageId
-  );
-  if (messageIndex === -1) {
-    return errorResponse(res, "Message not found", 404);
-  }
-  const message = group.groupMessages[messageIndex];
+    if (!group) return res.status(404).json({ message: "Group not found" });
+    // Find the message
+    const messageIndex = group.groupMessages.findIndex(
+      (msg) => msg._id.toString() === messageId,
+    );
+    if (messageIndex === -1) {
+      return errorResponse(res, "Message not found", 404);
+    }
+    const message = group.groupMessages[messageIndex];
     // Check if user is admin or message sender
     const isAdmin = group.admins.includes(userId);
     const isSender = message.sender.toString() === userId.toString();
     if (!isAdmin && !isSender) {
-      return res.status(403).json({ message: "Not authorized to delete this message" });
+      return res
+        .status(403)
+        .json({ message: "Not authorized to delete this message" });
     }
-  // Delete attachments if any
-  if (message.attachments && message.attachments.length > 0) {
-    for (const attachment of message.attachments) {
-      if (attachment.url) {
-        try {
-          // Extract key using URL parsing for more reliability
-          const url = new URL(attachment.url);
-          const key = url.pathname.startsWith('/') ? url.pathname.substring(1) : url.pathname;
-          console.log(`Attempting to delete attachment from S3: ${key}`);
-          if (!key) {
-            console.error('Failed to extract S3 key from URL:', attachment.url);
-            continue;
+    // Delete attachments if any
+    if (message.attachments && message.attachments.length > 0) {
+      for (const attachment of message.attachments) {
+        if (attachment.url) {
+          try {
+            // Extract key using URL parsing for more reliability
+            const url = new URL(attachment.url);
+            const key = url.pathname.startsWith("/")
+              ? url.pathname.substring(1)
+              : url.pathname;
+            console.log(`Attempting to delete attachment from S3: ${key}`);
+            if (!key) {
+              console.error(
+                "Failed to extract S3 key from URL:",
+                attachment.url,
+              );
+              continue;
+            }
+            await s3Client.send(
+              new DeleteObjectCommand({
+                Bucket: process.env.AWS_BUCKET_NAME,
+                Key: key,
+              }),
+            );
+            console.log(`Successfully deleted attachment from S3: ${key}`);
+          } catch (error) {
+            console.error("Error deleting attachment:", error.message);
+            console.error("Attachment URL:", attachment.url);
           }
-        await s3Client.send(new DeleteObjectCommand({
-          Bucket: process.env.AWS_BUCKET_NAME,
-          Key: key
-        }));
-        console.log(`Successfully deleted attachment from S3: ${key}`);
-        } catch (error) {
-          console.error('Error deleting attachment:', error.message);
-          console.error('Attachment URL:', attachment.url);
         }
       }
     }
+    // Remove the message
+    group.groupMessages.pull({ _id: messageId });
+    await group.save();
+    // Notify group members about message deletion
+    const io = getIo();
+    group.groupMembers.forEach((member) => {
+      io.to(member.user.toString()).emit("groupMessageDeleted", {
+        groupId,
+        messageId,
+      });
+    });
+    return successResponse(res, "", "Message deleted successfully", 200);
+  } catch (error) {
+    console.error("Delete group message error:", error);
+    return errorResponse(res, error.message, 500);
   }
-     // Remove the message
-     group.groupMessages.pull({ _id: messageId });
-     await group.save();
-     // Notify group members about message deletion
-     const io = getIo();
-     group.groupMembers.forEach(member => {
-       io.to(member.user.toString()).emit('groupMessageDeleted', {
-         groupId,
-         messageId
-       });
-     });
-     return successResponse(res, "", "Message deleted successfully", 200);
-    } catch (error) {
-      console.error('Delete group message error:', error);
-      return errorResponse(res, error.message, 500);
-    }
-  };
+};
 
-  exports.deleteGroupMessageOnlyForMe = async (req, res) => {
+exports.deleteGroupMessageOnlyForMe = async (req, res) => {
   try {
     const { groupId, messageId } = req.params;
     const userId = req.user?._id || req.userId;
@@ -1037,7 +1126,9 @@ exports.deleteGroupMessage = async (req, res) => {
     return res.status(200).json({ message: "Message deleted for you only" });
   } catch (error) {
     console.error("Error in deleteGroupMessageOnlyForMe:", error.message);
-    return res.status(500).json({ message: "Internal server error", error: error.message });
+    return res
+      .status(500)
+      .json({ message: "Internal server error", error: error.message });
   }
 };
 
@@ -1048,7 +1139,7 @@ exports.updateGroupMessage = async (req, res) => {
     const { message } = req.body;
     const userId = req.user._id;
 
-    if (!message || message.trim() === '') {
+    if (!message || message.trim() === "") {
       return res.status(400).json({ message: "Message content is required" });
     }
 
@@ -1057,35 +1148,42 @@ exports.updateGroupMessage = async (req, res) => {
       {
         _id: groupId,
         "groupMessages._id": messageId,
-        "groupMessages.sender": userId
+        "groupMessages.sender": userId,
       },
       {
         $set: {
           "groupMessages.$.message": message,
-          "groupMessages.$.edited": true
-        }
+          "groupMessages.$.edited": true,
+        },
       },
-      { new: true }
+      { new: true },
     );
 
     if (!group) {
-      return res.status(404).json({ message: "Message not found or unauthorized" });
+      return res
+        .status(404)
+        .json({ message: "Message not found or unauthorized" });
     }
 
     // Emit update via socket
     const io = getIo();
-    io.to(groupId).emit('messageEdited', {
+    io.to(groupId).emit("messageEdited", {
       messageId,
-      updatedMessage: message
+      updatedMessage: message,
     });
 
-    res.status(200).json({ message: "Message updated successfully", groupId, messageId, updatedMessage: message });
-
+    res
+      .status(200)
+      .json({
+        message: "Message updated successfully",
+        groupId,
+        messageId,
+        updatedMessage: message,
+      });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
-
 
 // Update Group Details (Name, Image, Members)
 exports.updateGroupDetails = async (req, res) => {
@@ -1114,14 +1212,16 @@ exports.updateGroupDetails = async (req, res) => {
     if (req.file) {
       // Delete Old Image from AWS S3
       if (group.groupImage) {
-        const oldKey = group.groupImage.split('.com/')[1]; // Extract key from URL
+        const oldKey = group.groupImage.split(".com/")[1]; // Extract key from URL
         try {
-          await s3Client.send(new DeleteObjectCommand({
-            Bucket: process.env.AWS_BUCKET_NAME,
-            Key: oldKey
-          }));
+          await s3Client.send(
+            new DeleteObjectCommand({
+              Bucket: process.env.AWS_BUCKET_NAME,
+              Key: oldKey,
+            }),
+          );
         } catch (deleteError) {
-          console.error('Error deleting old icon:', deleteError);
+          console.error("Error deleting old icon:", deleteError);
           // Continue with update even if delete fails
         }
       }
@@ -1131,15 +1231,17 @@ exports.updateGroupDetails = async (req, res) => {
     await group.save();
     // Notify group members about the update
     const io = getIo();
-    group.groupMembers.forEach(member => {
-      io.to(member.user.toString()).emit('groupUpdated', {
+    group.groupMembers.forEach((member) => {
+      io.to(member.user.toString()).emit("groupUpdated", {
         groupId,
         groupName: group.groupName,
         groupImage: group.groupImage,
       });
     });
     console.log("Group updated successfully:", group);
-    res.status(200).json({ message: "Group details updated successfully", group });
+    res
+      .status(200)
+      .json({ message: "Group details updated successfully", group });
   } catch (error) {
     console.error("Error updating group details:", error);
     res.status(500).json({ error: error.message });
@@ -1149,31 +1251,31 @@ exports.updateGroupDetails = async (req, res) => {
 // Add typing indicator for groups
 exports.handleGroupTyping = async (socket, groupId) => {
   try {
-    const group = await GroupChat.findById(groupId).select('groupMembers');
+    const group = await GroupChat.findById(groupId).select("groupMembers");
     if (!group) return;
 
     // ✅ typer ka naam (light query) — taaki frontend ko members ki zaroorat na pade
-    let typerName = '';
+    let typerName = "";
     try {
       const u = await User.findById(socket.userId).select(
-        'firstName lastName fullName accountType businessName sadhuName tirthName',
+        "firstName lastName fullName accountType businessName sadhuName tirthName",
       );
       if (u) {
         typerName =
-          u.accountType === 'business'
+          u.accountType === "business"
             ? u.businessName || u.fullName
-            : u.accountType === 'sadhu'
-            ? u.sadhuName || u.fullName
-            : u.accountType === 'tirth'
-            ? u.tirthName || u.fullName
-            : u.fullName ||
-              [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
+            : u.accountType === "sadhu"
+              ? u.sadhuName || u.fullName
+              : u.accountType === "tirth"
+                ? u.tirthName || u.fullName
+                : u.fullName ||
+                  [u.firstName, u.lastName].filter(Boolean).join(" ").trim();
       }
     } catch (e) {}
 
-    group.groupMembers.forEach(member => {
+    group.groupMembers.forEach((member) => {
       if (member.user.toString() !== socket.userId.toString()) {
-        socket.to(member.user.toString()).emit('userTypingInGroup', {
+        socket.to(member.user.toString()).emit("userTypingInGroup", {
           userId: socket.userId,
           groupId,
           name: typerName,
@@ -1181,7 +1283,7 @@ exports.handleGroupTyping = async (socket, groupId) => {
       }
     });
   } catch (error) {
-    console.error('Error handling group typing:', error);
+    console.error("Error handling group typing:", error);
   }
 };
 
@@ -1196,7 +1298,7 @@ exports.leaveGroup = async (req, res) => {
     }
     // Check f user is in group
     const isMember = group.groupMembers.some(
-      member => member.user.toString() === userId.toString()
+      (member) => member.user.toString() === userId.toString(),
     );
 
     if (!isMember) {
@@ -1207,23 +1309,23 @@ exports.leaveGroup = async (req, res) => {
     const isAdmin = group.admins.includes(userId);
     if (isAdmin) {
       // If there are other admins, allow leaving
-      const otherAdmins = group.admins.filter(adminId => 
-        adminId.toString() !== userId.toString()
+      const otherAdmins = group.admins.filter(
+        (adminId) => adminId.toString() !== userId.toString(),
       );
 
       if (otherAdmins.length === 0) {
         // If no other admins, make the longest-standing member an admin
         const oldestMember = group.groupMembers
-          .filter(member => member.user.toString() !== userId.toString())
+          .filter((member) => member.user.toString() !== userId.toString())
           .sort((a, b) => a.joinedAt - b.joinedAt)[0];
 
         if (oldestMember) {
           group.admins.push(oldestMember.user);
           const memberIndex = group.groupMembers.findIndex(
-            m => m.user.toString() === oldestMember.user.toString()
+            (m) => m.user.toString() === oldestMember.user.toString(),
           );
           if (memberIndex !== -1) {
-            group.groupMembers[memberIndex].role = 'admin';
+            group.groupMembers[memberIndex].role = "admin";
           }
         }
       }
@@ -1231,26 +1333,31 @@ exports.leaveGroup = async (req, res) => {
 
     // Remove user from group
     group.groupMembers = group.groupMembers.filter(
-      member => member.user.toString() !== userId.toString()
+      (member) => member.user.toString() !== userId.toString(),
     );
     group.admins = group.admins.filter(
-      adminId => adminId.toString() !== userId.toString()
+      (adminId) => adminId.toString() !== userId.toString(),
     );
 
     if (group.groupMembers.length === 0) {
       await group.deleteOne();
-      return successResponse(res, "", "Group deleted as no members remain", 200);
+      return successResponse(
+        res,
+        "",
+        "Group deleted as no members remain",
+        200,
+      );
     }
 
     await group.save();
 
     // Notify other members
     const io = getIo();
-    group.groupMembers.forEach(member => {
-      io.to(member.user.toString()).emit('groupMemberLeft', {
+    group.groupMembers.forEach((member) => {
+      io.to(member.user.toString()).emit("groupMemberLeft", {
         groupId,
         userId,
-        remainingMembers: group.groupMembers.length
+        remainingMembers: group.groupMembers.length,
       });
     });
 
@@ -1277,7 +1384,7 @@ exports.removeUserFromGroup = async (req, res) => {
 
     // Check if user to be removed is in the group
     const isMember = group.groupMembers.some(
-      member => member.user.toString() === userIdToRemove
+      (member) => member.user.toString() === userIdToRemove,
     );
     if (!isMember) {
       return errorResponse(res, "User is not a member of this group", 400);
@@ -1285,34 +1392,43 @@ exports.removeUserFromGroup = async (req, res) => {
 
     // Prevent removing self using this endpoint
     if (adminId.toString() === userIdToRemove.toString()) {
-      return errorResponse(res, "Use leaveGroup to leave the group yourself", 400);
+      return errorResponse(
+        res,
+        "Use leaveGroup to leave the group yourself",
+        400,
+      );
     }
 
     // Remove from members
     group.groupMembers = group.groupMembers.filter(
-      member => member.user.toString() !== userIdToRemove
+      (member) => member.user.toString() !== userIdToRemove,
     );
 
     // Remove from admins (if admin)
     group.admins = group.admins.filter(
-      adminId => adminId.toString() !== userIdToRemove
+      (adminId) => adminId.toString() !== userIdToRemove,
     );
 
     // If no members left, delete group
     if (group.groupMembers.length === 0) {
       await group.deleteOne();
-      return successResponse(res, "", "Group deleted as no members remain", 200);
+      return successResponse(
+        res,
+        "",
+        "Group deleted as no members remain",
+        200,
+      );
     }
 
     await group.save();
 
     // Notify members via socket.io
     const io = getIo();
-    group.groupMembers.forEach(member => {
-      io.to(member.user.toString()).emit('groupMemberRemoved', {
+    group.groupMembers.forEach((member) => {
+      io.to(member.user.toString()).emit("groupMemberRemoved", {
         groupId,
         removedUserId: userIdToRemove,
-        by: adminId
+        by: adminId,
       });
     });
 
@@ -1344,14 +1460,16 @@ exports.updateGroupIcon = async (req, res) => {
 
     // Delete old icon if exists
     if (group.groupImage) {
-      const oldKey = group.groupImage.split('.com/')[1]; // Extract key from URL
+      const oldKey = group.groupImage.split(".com/")[1]; // Extract key from URL
       try {
-        await s3Client.send(new DeleteObjectCommand({
-          Bucket: process.env.AWS_BUCKET_NAME,
-          Key: oldKey
-        }));
+        await s3Client.send(
+          new DeleteObjectCommand({
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: oldKey,
+          }),
+        );
       } catch (deleteError) {
-        console.error('Error deleting old icon:', deleteError);
+        console.error("Error deleting old icon:", deleteError);
         // Continue with update even if delete fails
       }
     }
@@ -1362,14 +1480,19 @@ exports.updateGroupIcon = async (req, res) => {
 
     // Notify members
     const io = getIo();
-    group.groupMembers.forEach(member => {
-      io.to(member.user.toString()).emit('groupIconUpdated', {
+    group.groupMembers.forEach((member) => {
+      io.to(member.user.toString()).emit("groupIconUpdated", {
         groupId,
-        newIcon: group.groupImage
+        newIcon: group.groupImage,
       });
     });
 
-    return successResponse(res, { groupImage: group.groupImage }, "Group icon updated successfully", 200);
+    return successResponse(
+      res,
+      { groupImage: group.groupImage },
+      "Group icon updated successfully",
+      200,
+    );
   } catch (error) {
     return errorResponse(res, error.message, 500);
   }
@@ -1387,15 +1510,20 @@ exports.checkMembership = async (req, res) => {
     }
 
     const isMember = group.groupMembers.some(
-      member => member.user.toString() === userId.toString()
+      (member) => member.user.toString() === userId.toString(),
     );
     const isAdmin = group.admins.includes(userId);
 
-    return successResponse(res, {
-      isMember,
-      isAdmin,
-      memberCount: group.groupMembers.length
-    }, "", 200);
+    return successResponse(
+      res,
+      {
+        isMember,
+        isAdmin,
+        memberCount: group.groupMembers.length,
+      },
+      "",
+      200,
+    );
   } catch (error) {
     return errorResponse(res, error.message, 500);
   }
@@ -1419,28 +1547,36 @@ exports.addMembers = async (req, res) => {
     }
 
     // Filter out existing members
-    const newMembers = members.filter(memberId => 
-      !group.groupMembers.some(m => m.user.toString() === memberId)
+    const newMembers = members.filter(
+      (memberId) =>
+        !group.groupMembers.some((m) => m.user.toString() === memberId),
     );
 
     // Add new members
-    group.groupMembers.push(...newMembers.map(memberId => ({
-      user: memberId,
-      role: 'member'
-    })));
+    group.groupMembers.push(
+      ...newMembers.map((memberId) => ({
+        user: memberId,
+        role: "member",
+      })),
+    );
 
     await group.save();
 
     // Notify new members
     const io = getIo();
-    newMembers.forEach(memberId => {
-      io.to(memberId.toString()).emit('addedToGroup', {
+    newMembers.forEach((memberId) => {
+      io.to(memberId.toString()).emit("addedToGroup", {
         groupId: group._id,
-        groupName: group.groupName
+        groupName: group.groupName,
       });
     });
 
-    return successResponse(res, { addedMembers: newMembers }, "Members added successfully", 200);
+    return successResponse(
+      res,
+      { addedMembers: newMembers },
+      "Members added successfully",
+      200,
+    );
   } catch (error) {
     return errorResponse(res, error.message, 500);
   }
@@ -1468,14 +1604,19 @@ exports.updateGroupName = async (req, res) => {
 
     // Notify members
     const io = getIo();
-    group.groupMembers.forEach(member => {
-      io.to(member.user.toString()).emit('groupUpdated', {
+    group.groupMembers.forEach((member) => {
+      io.to(member.user.toString()).emit("groupUpdated", {
         groupId: group._id,
-        groupName: group.groupName
+        groupName: group.groupName,
       });
     });
 
-    return successResponse(res, { groupName: group.groupName }, "Group name updated successfully", 200);
+    return successResponse(
+      res,
+      { groupName: group.groupName },
+      "Group name updated successfully",
+      200,
+    );
   } catch (error) {
     return errorResponse(res, error.message, 500);
   }
@@ -1491,8 +1632,10 @@ exports.makeAdmin = async (req, res) => {
   if (!isCurrentUserAdmin) return res.status(403).send("Not authorized");
 
   // Update role
-  const member = group.groupMembers.find(m => m.user.toString() === targetUserId);
-  if (member) member.role = 'admin';
+  const member = group.groupMembers.find(
+    (m) => m.user.toString() === targetUserId,
+  );
+  if (member) member.role = "admin";
 
   if (!group.admins.includes(targetUserId)) {
     group.admins.push(targetUserId);
@@ -1524,14 +1667,14 @@ exports.removeAdmin = async (req, res) => {
 
     // Update role in groupMembers
     const member = group.groupMembers.find(
-      m => m.user.toString() === targetUserId
+      (m) => m.user.toString() === targetUserId,
     );
     if (member) {
       member.role = "member"; // 👈 downgrade
     }
 
     // Remove from admins array
-    group.admins = group.admins.filter(id => id.toString() !== targetUserId);
+    group.admins = group.admins.filter((id) => id.toString() !== targetUserId);
 
     await group.save();
 
@@ -1544,13 +1687,15 @@ exports.removeAdmin = async (req, res) => {
 // ============================================================================
 // ✅ NEW: Group read/unread APIs (existing logic untouched, sirf add-on)
 // ============================================================================
- 
+
 // Helper: ek group ke andar current user ka unread count nikaalo
 const computeGroupUnread = (group, uid) => {
   let count = 0;
   (group.groupMessages || []).forEach((msg) => {
     const senderId = msg.sender
-      ? (msg.sender._id ? msg.sender._id.toString() : msg.sender.toString())
+      ? msg.sender._id
+        ? msg.sender._id.toString()
+        : msg.sender.toString()
       : null;
     if (senderId === uid) return; // apne msg unread nahi hote
     const delFor = (msg.deletedFor || []).map((id) => id.toString());
@@ -1562,37 +1707,36 @@ const computeGroupUnread = (group, uid) => {
   });
   return count;
 };
- 
+
 // ✅ MARK READ: user ne group khola/dekha -> us group ke saare msg read mark
 exports.markGroupMessagesRead = async (req, res) => {
   try {
     const { groupId } = req.params;
-    const userId =
-      req.accountType === "sangh" ? req.sangh?._id : req.user?._id;
- 
+    const userId = req.accountType === "sangh" ? req.sangh?._id : req.user?._id;
+
     if (!userId) {
       return errorResponse(res, "User or Sangh ID not found", 400);
     }
- 
+
     const group = await GroupChat.findById(groupId);
     if (!group) {
       return errorResponse(res, "Group not found", 404);
     }
- 
+
     const isMember = group.groupMembers.some(
       (m) => m.user.toString() === userId.toString(),
     );
     if (!isMember) {
       return errorResponse(res, "Not authorized for this group", 403);
     }
- 
+
     const uid = userId.toString();
     let changed = false;
- 
+
     group.groupMessages.forEach((msg) => {
       const delFor = (msg.deletedFor || []).map((id) => id.toString());
       if (delFor.includes(uid)) return; // mere liye deleted skip
- 
+
       const alreadyRead = (msg.readBy || []).some(
         (r) => r.user && r.user.toString() === uid,
       );
@@ -1601,9 +1745,9 @@ exports.markGroupMessagesRead = async (req, res) => {
         changed = true;
       }
     });
- 
+
     if (changed) await group.save();
- 
+
     // ✅ Socket: doosron ko seen-status + khud ko unread=0 (instant)
     try {
       const io = getIo();
@@ -1616,37 +1760,41 @@ exports.markGroupMessagesRead = async (req, res) => {
     } catch (e) {
       // socket fail ho to bhi response break na ho
     }
- 
-    return successResponse(res, { groupId, unreadCount: 0 }, "Messages marked as read", 200);
+
+    return successResponse(
+      res,
+      { groupId, unreadCount: 0 },
+      "Messages marked as read",
+      200,
+    );
   } catch (error) {
     console.error("markGroupMessagesRead error:", error);
     return errorResponse(res, error.message, 500);
   }
 };
- 
+
 // ✅ UNREAD COUNTS: saare groups ka per-group unread + total
 exports.getGroupUnreadCounts = async (req, res) => {
   try {
-    const userId =
-      req.accountType === "sangh" ? req.sangh?._id : req.user?._id;
- 
+    const userId = req.accountType === "sangh" ? req.sangh?._id : req.user?._id;
+
     if (!userId) {
       return errorResponse(res, "User or Sangh ID not found", 400);
     }
     const uid = userId.toString();
- 
+
     // sirf zaroori fields (light query)
     const groups = await GroupChat.find({ "groupMembers.user": userId }).select(
       "groupName groupMessages.sender groupMessages.readBy groupMessages.deletedFor",
     );
- 
+
     let totalUnread = 0;
     const perGroup = groups.map((group) => {
       const unreadCount = computeGroupUnread(group, uid);
       totalUnread += unreadCount;
       return { groupId: group._id, unreadCount };
     });
- 
+
     return successResponse(
       res,
       { totalUnread, groups: perGroup },
