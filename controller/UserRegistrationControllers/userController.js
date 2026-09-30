@@ -371,7 +371,11 @@ const registerFinalUser = asyncHandler(async (req, res) => {
 
     // ✅ Only check email if it's not empty
     if (email && email?.trim()) {
-      orConditions.push({ email: email.trim(), accountType: "user" });
+      // Schema email ko lowercase me save karta hai, isliye check bhi lowercase me
+      orConditions.push({
+        email: email.trim().toLowerCase(),
+        accountType: "user",
+      });
     }
 
     if (orConditions.length > 0) {
@@ -383,7 +387,7 @@ const registerFinalUser = asyncHandler(async (req, res) => {
           existingUser.phoneNumber === phoneNumber.trim();
 
         const isEmailDuplicate =
-          email?.trim() && existingUser.email === email.trim();
+          email?.trim() && existingUser.email === email.trim().toLowerCase();
 
         if (isPhoneDuplicate) {
           return errorResponse(
@@ -436,7 +440,28 @@ const registerFinalUser = asyncHandler(async (req, res) => {
     newUserData.location = { country };
   }
 
-  const newUser = await User.create(newUserData);
+  // DB me koi purana unique index (jaise email_1) bacha ho to raw Mongo error
+  // seedha app ke popup me chala jata tha. Ab friendly message jayega.
+  let newUser;
+  try {
+    newUser = await User.create(newUserData);
+  } catch (err) {
+    if (err && err.code === 11000) {
+      const dupField = Object.keys(err.keyPattern || err.keyValue || {})[0];
+      console.error(
+        `[registerFinalUser] E11000 on "${dupField}" for accountType "${accountType}". ` +
+          `Check db.users.getIndexes() for a leftover unique index.`,
+      );
+      return errorResponse(
+        res,
+        dupField === "phoneNumber"
+          ? "This mobile number is already registered for this account type."
+          : "This email is already registered for this account type.",
+        409,
+      );
+    }
+    throw err;
+  }
 
   const token = generateToken(newUser);
   newUser.token = token;
@@ -506,7 +531,6 @@ const registerFinalUser = asyncHandler(async (req, res) => {
 // });
 
 // Register woith mobile new modal
-// Register woith mobile new modal
 const sendOtp = asyncHandler(async (req, res) => {
   const { phoneNumber, email, country = "India" } = req.body; // ✅ NEW: Country parameter add किया
 
@@ -515,44 +539,28 @@ const sendOtp = asyncHandler(async (req, res) => {
   }
 
   // ✅ ───────── NEW BLOCK START ─────────
-  // Signup screen `checkExisting: true` bhejti hai. Login / resend /
-  // add-another-account ye flag nahi bhejte, isliye unka behaviour pehle jaisa.
-  //
-  //   accountType "user"  → ek number/email par SIRF EK personal account.
-  //   business/sadhu/tirth → usi type ka account pehle se ho tabhi rok.
-  //
-  // Yani ek vyakti apne personal (user) account wale number se apna vyapar,
-  // sadhu ya tirth account bana sakta hai — par doosra "user" account nahi.
+  // Signup screen (MobileNumber.jsx) `checkExisting: true` bhejti hai.
+  // Login / resend / add-another-account ye flag nahi bhejte, isliye
+  // unke liye behaviour bilkul pehle jaisa hi rahega.
   if (req.body?.checkExisting === true) {
+    // DUPLICATE KA NIYAM accountType PAR TIKA HAI — registerFinalUser neeche
+    // theek yahi niyam lagata hai, aur dono ka ek jaisa hona zaroori hai.
+    // Warna user yahan ruk jata hai jabki account banne me koi rukawat nahi
+    // thi — wahi ho raha tha, kyunki yeh check accountType dekhta hi nahi tha.
+    //
+    //   accountType "user"  → ek number/email par SIRF EK personal account.
+    //   business/sadhu/tirth → usi type ka account pehle se ho tabhi rok.
+    //
+    // Yani ek vyakti apne personal account wale number se apna vyapar, sadhu
+    // ya tirth account bana sakta hai — aksar wahi vyakti dono chalata hai.
     const accountType = String(req.body?.accountType || "user").trim();
 
-    // "user" ke liye legacy accounts (jinme accountType set hi nahi / null hai)
-    // ko bhi "user" maano — warna un par duplicate user account ban jata hai.
-    // business/sadhu/tirth ke liye exact type match.
-    const accountTypeMatch =
-      accountType === "user" ? { $in: ["user", null] } : accountType;
-
     const orQuery = [];
-
     if (phoneNumber) {
-      // ⚠️ Number DB me kisi bhi format me ho sakta hai (+91XXXXXXXXXX ya 10-digit),
-      // aur frontend sirf 10-digit bhejta hai. Isliye sirf ANK nikaal ke, optional
-      // country-code ke saath, END-match karo — warna format mismatch se duplicate
-      // chhut jata tha aur doosra user account ban jata tha.
-      const digits = String(phoneNumber).replace(/\D/g, "");
-      if (digits.length >= 6) {
-        orQuery.push({
-          phoneNumber: new RegExp("^\\+?\\d{0,3}" + digits + "$"),
-          accountType: accountTypeMatch,
-        });
-      }
+      orQuery.push({ phoneNumber: String(phoneNumber).trim(), accountType });
     }
-
     if (email) {
-      orQuery.push({
-        email: String(email).trim().toLowerCase(),
-        accountType: accountTypeMatch,
-      });
+      orQuery.push({ email: String(email).trim().toLowerCase(), accountType });
     }
 
     if (orQuery.length > 0) {
@@ -577,6 +585,11 @@ const sendOtp = asyncHandler(async (req, res) => {
 
   // 📱 Phone number case
   if (phoneNumber) {
+    // const existingUser = await User.findOne({ phoneNumber: String(phoneNumber) });
+    // if (existingUser) {
+    //   return errorResponse(res, "User with this phone number already exists", 400);
+    // }
+
     await MobileOtpVerification.deleteMany({ phoneNumber, isVerified: false });
 
     const verificationCode = generateVerificationCode();
@@ -630,6 +643,11 @@ const sendOtp = asyncHandler(async (req, res) => {
 
   // 📧 Email case
   if (email) {
+    // const existingUser = await User.findOne({ email: email.toLowerCase() });
+    // if (existingUser) {
+    //   return errorResponse(res, "User with this email already exists", 400);
+    // }
+
     await EmailVerification.deleteMany({ email, isVerified: false });
 
     const verificationCode = generateVerificationCode();
@@ -655,8 +673,9 @@ const sendOtp = asyncHandler(async (req, res) => {
   }
 });
 // Resend OTP (for phone or email)
+// Resend OTP (for phone or email)
 const resendOtp = asyncHandler(async (req, res) => {
-  const { phoneNumber, email, country = "India" } = req.body;
+  const { phoneNumber, email, country = "India" } = req.body; // ✅ Add country parameter
 
   if (!phoneNumber && !email) {
     return errorResponse(res, "Phone number or email is required", 400);
