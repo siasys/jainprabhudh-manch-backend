@@ -42,9 +42,12 @@ router.post(
   upload.uploadToS3,
   createGroupChat,
 );
+// ✅ FIX: compressFiles + uploadToS3 missing the -> groupImage S3 par nahi jaati thi.
 router.post(
   "/create-gotra-group",
   upload.single("groupImage"),
+  upload.compressFiles,
+  upload.uploadToS3,
   createOrFindGotraGroup,
 );
 router.post(
@@ -53,9 +56,12 @@ router.post(
 );
 router.post("/create-sangh-global-group", createSanghGlobalGroup);
 router.post("/remove-user", removeUserFromGroup);
+// ✅ FIX: compressFiles + uploadToS3 missing the -> groupImage S3 par nahi jaati thi.
 router.post(
   "/create-city-group",
   upload.single("groupImage"),
+  upload.compressFiles,
+  upload.uploadToS3,
   createOrFindCityGroup,
 );
 
@@ -87,14 +93,31 @@ router.delete(
 );
 
 // Update Group Details (Name, Image, Members)
-router.put("/update/:groupId", upload.single("groupImage"), updateGroupDetails);
+// ✅ FIX: `upload.compressFiles` aur `upload.uploadToS3` missing the.
+// updateGroupDetails `req.file.location` padhta hai, jo sirf uploadToS3 set
+// karta hai -- uske bina image kabhi S3 par jati hi nahi thi.
+// Ye wahi chain hai jo /create aur /send-message par pehle se lagi hai.
+router.put(
+  "/update/:groupId",
+  upload.single("groupImage"),
+  upload.compressFiles,
+  upload.uploadToS3,
+  updateGroupDetails,
+);
 router.put("/make-admin/:groupId", makeAdmin);
 router.put("/remove-admin/:groupId", removeAdmin);
 
 // Leave group
 router.post("/leave/:groupId", leaveGroup);
 // Update group icon
-router.post("/icon/:groupId", upload.single("groupIcon"), updateGroupIcon);
+// ✅ FIX: compressFiles + uploadToS3 missing the -> groupIcon S3 par nahi jaati thi.
+router.post(
+  "/icon/:groupId",
+  upload.single("groupIcon"),
+  upload.compressFiles,
+  upload.uploadToS3,
+  updateGroupIcon,
+);
 // Check group membership
 router.get("/check-membership/:groupId", checkMembership);
 // Add members to group
