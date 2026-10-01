@@ -1058,32 +1058,27 @@ const updateSanghDetails = async (req, res) => {
   }
 };
 
-/** 🔹 Helper function: Assign role to User
- *  Same sangh me hamesha EK hi role rahega -> member se president banaya to
- *  usi entry ki jagah president aa jayega (alag se doosri entry nahi banegi).
- *  Doosre sanghon ke roles (country/city waale) bilkul chhute nahi.
- */
+/** 🔹 Helper function: Assign role to User */
 const assignRoleToUser = async (userId, sanghId, role, level, sanghType) => {
-  // 1) Is sangh ke sabhi purane role(s) hata do (member + koi duplicate bhi).
-  await User.updateOne(
-    { _id: userId },
-    { $pull: { sanghRoles: { sanghId: sanghId } } },
-  );
+  const user = await User.findById(userId);
+  if (user) {
+    const roleIndex = user.sanghRoles.findIndex(
+      (r) => r.sanghId?.toString() === sanghId,
+    );
 
-  // 2) Ab is sangh ka naya role add karo -> is sangh me sirf yahi ek role.
-  await User.updateOne(
-    { _id: userId },
-    {
-      $push: {
-        sanghRoles: {
-          sanghId,
-          role,
-          level,
-          sanghType: sanghType || "main",
-        },
-      },
-    },
-  );
+    if (roleIndex !== -1) {
+      user.sanghRoles[roleIndex].role = role;
+    } else {
+      user.sanghRoles.push({
+        sanghId,
+        role,
+        level,
+        sanghType: sanghType || "main",
+      });
+    }
+
+    await user.save();
+  }
 };
 const deleteSanghTeamMember = async (req, res) => {
   try {
@@ -1817,31 +1812,26 @@ const addSanghMember = asyncHandler(async (req, res) => {
   try {
     const sanghId = req.params.sanghId;
     const MAX_BULK_MEMBERS = 50;
-
+ 
     const sangh = await HierarchicalSangh.findById(sanghId);
     if (!sangh) return errorResponse(res, "Sangh not found", 404);
-
-    // 🔴 International sangh ki fixed membership fee -- amount 0 ki jagah 21000 store hoga
-    const INTERNATIONAL_MEMBER_AMOUNT = 21000;
-    const forcedMemberAmount =
-      sangh.level === "international" ? INTERNATIONAL_MEMBER_AMOUNT : null;
-
+ 
     const isBulk = req.body.members && Array.isArray(req.body.members);
-
+ 
     if (isBulk) {
       const { members } = req.body;
       if (members.length === 0)
         return errorResponse(res, "Members array cannot be empty", 400);
-
+ 
       if (members.length > MAX_BULK_MEMBERS)
         return errorResponse(
           res,
           `Cannot add more than ${MAX_BULK_MEMBERS} members at once`,
           400,
         );
-
+ 
       const results = { success: [], failed: [] };
-
+ 
       for (const member of members) {
         if (!member.jainAadharNumber) {
           results.failed.push({
@@ -1850,11 +1840,11 @@ const addSanghMember = asyncHandler(async (req, res) => {
           });
           continue;
         }
-
+ 
         try {
-          // helper se lookup
+          // ✅ CHANGED: helper se lookup
           const user = await findJainAadharUser(member.jainAadharNumber);
-
+ 
           if (!user) {
             results.failed.push({
               jainAadharNumber: member.jainAadharNumber,
@@ -1862,7 +1852,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             });
             continue;
           }
-
+ 
           const location = user?.jainAadharApplication?.location || {};
           const contact = user?.jainAadharApplication?.contactDetails || {};
           const rawImage =
@@ -1881,16 +1871,17 @@ const addSanghMember = asyncHandler(async (req, res) => {
           const userImage = rawImage ? convertS3UrlToCDN(rawImage) : "";
           const paymentStatus = member.paymentStatus || "pending";
           const isPaid = paymentStatus === "paid";
-
+ 
           const membershipStartDate = new Date();
           const membershipEndDate = new Date(
             Date.now() + 365 * 24 * 60 * 60 * 1000,
           );
-
+ 
+          // Duplicate guard -- yahi userId is sangh me pehle se member hai?
           const alreadyMember = sangh.members.some(
             (m) => m?.userId?.toString() === user._id.toString(),
           );
-
+ 
           if (alreadyMember) {
             results.failed.push({
               jainAadharNumber: member.jainAadharNumber,
@@ -1898,7 +1889,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             });
             continue;
           }
-
+ 
           const paymentDate = isPaid ? new Date() : null;
           const newMember = {
             userId: user._id,
@@ -1909,12 +1900,13 @@ const addSanghMember = asyncHandler(async (req, res) => {
             postMember: member.postMember || "",
             userImage,
             memberScreenshot,
-            amount: forcedMemberAmount ?? (member.amount || 0),
+            amount: member.amount || 0,
             paymentStatus,
             paymentDate,
             membershipStartDate,
             membershipEndDate,
             status: isPaid ? "active" : "inactive",
+            // Country-aware address (India ka natija bilkul pehle jaisa)
             address: toMemberAddress(location),
             addedBy: req.user._id,
             addedAt: new Date(),
@@ -1927,13 +1919,15 @@ const addSanghMember = asyncHandler(async (req, res) => {
                 }
               : undefined,
           };
-
+ 
           sangh.members.push(newMember);
           results.success.push({
             jainAadharNumber: member.jainAadharNumber,
             name: newMember.name,
           });
-
+ 
+          // STEP 1: Add MEMBER role first (Index 0)
+          // Isi sangh ka member role dobara na jude
           await User.updateOne(
             {
               _id: user._id,
@@ -1953,7 +1947,8 @@ const addSanghMember = asyncHandler(async (req, res) => {
               },
             },
           );
-
+ 
+          // STEP 2: Add HONORARY MEMBER role if applicable (Index 1)
           if (
             (member.isHonorary === "true" || member.isHonorary === true) &&
             member.localSangh?.sanghId
@@ -1961,7 +1956,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             const localSangh = await HierarchicalSangh.findById(
               member.localSangh.sanghId,
             );
-
+ 
             if (localSangh) {
               const honoraryMember = {
                 userId: user._id,
@@ -1975,6 +1970,8 @@ const addSanghMember = asyncHandler(async (req, res) => {
                 userImage: newMember.userImage,
                 memberScreenshot: newMember.memberScreenshot,
                 amount: member.amount || 0,
+                // ✅ FIXED: yahan `finalPaymentStatus` tha jo bulk scope me
+                // define hi nahi hota — ReferenceError aata tha
                 paymentStatus,
                 paymentDate: isPaid ? new Date() : null,
                 membershipStartDate,
@@ -1985,20 +1982,21 @@ const addSanghMember = asyncHandler(async (req, res) => {
                 addedBy: req.user._id,
                 addedAt: new Date(),
               };
-
+ 
               if (!localSangh.honoraryMembers) {
                 localSangh.honoraryMembers = [];
               }
-
+ 
               const exists = localSangh.honoraryMembers.some(
                 (h) => h.jainAadharNumber === member.jainAadharNumber,
               );
-
+ 
               if (!exists) {
                 localSangh.honoraryMembers.push(honoraryMember);
                 await localSangh.save();
               }
-
+ 
+              // Add honoraryMember role AFTER member role
               await User.findByIdAndUpdate(user._id, {
                 $push: {
                   sanghRoles: {
@@ -2019,9 +2017,9 @@ const addSanghMember = asyncHandler(async (req, res) => {
           });
         }
       }
-
+ 
       if (results.success.length > 0) await sangh.save();
-
+ 
       return successResponse(
         res,
         {
@@ -2036,7 +2034,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
         `Added ${results.success.length} members, ${results.failed.length} failed`,
       );
     }
-
+ 
     // ======= SINGLE MEMBER ADDITION =======
     const {
       jainAadharNumber,
@@ -2047,7 +2045,8 @@ const addSanghMember = asyncHandler(async (req, res) => {
       amount,
       isHonorary,
     } = req.body;
-
+ 
+    // ✅ Parse localSangh if needed
     if (req.body.localSangh && typeof req.body.localSangh === "string") {
       try {
         req.body.localSangh = JSON.parse(req.body.localSangh);
@@ -2056,31 +2055,34 @@ const addSanghMember = asyncHandler(async (req, res) => {
         req.body.localSangh = undefined;
       }
     }
-
+ 
     if (!jainAadharNumber)
       return errorResponse(res, "Jain Aadhar number is required", 400);
-
+ 
+    // ✅ CHANGED: helper se lookup
     const user = await findJainAadharUser(jainAadharNumber);
-
+ 
     if (!user)
       return errorResponse(
         res,
         "Invalid or unverified Jain Aadhar number",
         400,
       );
-
+ 
+    // Duplicate guard -- double submit se do baar member ban jaata tha.
+    // Yahi userId is sangh me pehle se hai to aage badhna hi nahi hai.
     const alreadyMember = sangh.members.some(
       (m) => m?.userId?.toString() === user._id.toString(),
     );
-
+ 
     if (alreadyMember) {
       return errorResponse(res, "Already a member of this Sangh", 400);
     }
-
+ 
     const location = user?.jainAadharApplication?.location || {};
     const contact = user?.jainAadharApplication?.contactDetails || {};
     const manualImage = req.file?.location || req.file?.path;
-
+ 
     const rawImage =
       manualImage ||
       user?.jainAadharApplication?.userProfile ||
@@ -2091,7 +2093,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
       req.files?.memberScreenshot?.[0]?.location ||
       req.files?.memberScreenshot?.[0]?.path ||
       "";
-
+ 
     const memberScreenshot = rawScreenshot
       ? convertS3UrlToCDN(rawScreenshot)
       : "";
@@ -2099,7 +2101,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
     const isPaid = finalPaymentStatus === "paid";
     const membershipStartDate = new Date();
     const membershipEndDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
-
+ 
     const newMember = {
       userId: user._id,
       name: user?.jainAadharApplication?.name || "Unknown",
@@ -2111,7 +2113,8 @@ const addSanghMember = asyncHandler(async (req, res) => {
       sanghType: sanghType || "main",
       userImage,
       memberScreenshot,
-      amount: forcedMemberAmount ?? (amount || 0),
+      amount: amount || 0,
+      // Country-aware address (India ka natija bilkul pehle jaisa)
       address: toMemberAddress(location),
       paymentStatus: finalPaymentStatus,
       paymentDate: isPaid ? new Date() : null,
@@ -2130,10 +2133,12 @@ const addSanghMember = asyncHandler(async (req, res) => {
       addedBy: req.user._id,
       addedAt: new Date(),
     };
-
+ 
     sangh.members.push(newMember);
     await sangh.save();
-
+ 
+    // STEP 1: UPDATE USER SANGH ROLES - MEMBER ROLE FIRST (Index 0)
+    // Isi sangh ka member role dobara na jude
     await User.updateOne(
       {
         _id: user._id,
@@ -2153,7 +2158,8 @@ const addSanghMember = asyncHandler(async (req, res) => {
         },
       },
     );
-
+ 
+    // ✅ STEP 2: HONORARY MEMBER ROLE ADDITION (Index 1) - Only if isHonorary is true
     if (
       (isHonorary === "true" || isHonorary === true) &&
       req.body.localSangh?.sanghId
@@ -2161,7 +2167,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
       const localSangh = await HierarchicalSangh.findById(
         req.body.localSangh.sanghId,
       );
-
+ 
       if (localSangh) {
         const honoraryMember = {
           userId: user._id,
@@ -2185,20 +2191,22 @@ const addSanghMember = asyncHandler(async (req, res) => {
           addedBy: req.user._id,
           addedAt: new Date(),
         };
-
+ 
         if (!localSangh.honoraryMembers) {
           localSangh.honoraryMembers = [];
         }
-
+ 
+        // prevent duplicate
         const exists = localSangh.honoraryMembers.some(
           (h) => h.jainAadharNumber === jainAadharNumber,
         );
-
+ 
         if (!exists) {
           localSangh.honoraryMembers.push(honoraryMember);
           await localSangh.save();
         }
-
+ 
+        // ✅ Add honoraryMember role AFTER member role (ensures proper order)
         await User.findByIdAndUpdate(user._id, {
           $push: {
             sanghRoles: {
@@ -2212,18 +2220,22 @@ const addSanghMember = asyncHandler(async (req, res) => {
         });
       }
     }
-
+ 
+    // =================================================
+    // ✅ PAYMENT DISTRIBUTION (ONLY IF PAID)
+    // =================================================
     if (isPaid && !newMember.paymentDistributed) {
       await distributeMemberPayment({
         member: newMember,
         user,
         sourceSangh: sangh,
       });
-
+ 
+      // flag update
       newMember.paymentDistributed = true;
       await sangh.save();
     }
-
+ 
     return successResponse(
       res,
       {
@@ -3669,7 +3681,7 @@ const generateLetterhead = async (req, res) => {
     ctx.textAlign = "left";
 
     // Address (max 2 lines, next to the location icon)
-    ctx.font = `bold 24px ${letterheadFont}`;
+    ctx.font = `bold 22px ${letterheadFont}`;
     const addrLines = lhWrapText(ctx, addressText, 250, 2);
     let addrY = 88;
     for (const line of addrLines) {
@@ -3679,7 +3691,7 @@ const generateLetterhead = async (req, res) => {
 
     // Phone (next to the phone icon)
     if (phone) {
-      ctx.font = `bold 26px ${letterheadFont}`;
+      ctx.font = `bold 22px ${letterheadFont}`;
       ctx.fillText(String(phone), 1145, 182);
     }
 
@@ -3972,6 +3984,85 @@ const alFormatDate = (d = new Date()) =>
     "0",
   )}-${d.getFullYear()}`;
 
+// ===== Signing President resolver (hierarchy + location + sanghType match) =====
+// Rule: appointee ke apne sangh ka president (KHUD ko chhod ke). Na mile to
+// location + sanghType match karke level ladder upar chadho -- jahan pehle
+// president mile wahin ruk jao. Kahin na mile to foundation (main) = Vivek Jain.
+const AL_LEVEL_CHAIN = [
+  "city",
+  "district",
+  "state",
+  "country",
+  "international",
+  "foundation",
+];
+
+const alGetPresident = (s, excludeUserId) =>
+  (s?.officeBearers || []).find(
+    (ob) =>
+      (ob.role || "").toLowerCase() === "president" &&
+      ob.userId &&
+      ob.userId.toString() !== String(excludeUserId),
+  );
+
+const alResolveSigningPresident = async (appointeeSangh, appointeeUserId) => {
+  const type = appointeeSangh.sanghType || "main";
+  const locn = appointeeSangh.location || {};
+
+  // 1) Apne sangh ka president (khud ko chhod ke)
+  const own = alGetPresident(appointeeSangh, appointeeUserId);
+  if (own) {
+    return {
+      entry: own,
+      sangh: appointeeSangh,
+      isFoundation: appointeeSangh.level === "foundation",
+    };
+  }
+
+  // 2) Location + sanghType match karke upar chadho -- jahan pehle mile wahin ruk
+  const startIdx = AL_LEVEL_CHAIN.indexOf(appointeeSangh.level);
+  for (let i = startIdx + 1; i < AL_LEVEL_CHAIN.length; i++) {
+    const lvl = AL_LEVEL_CHAIN[i];
+    const q = { level: lvl, sanghType: type };
+    if (lvl === "district") {
+      if (locn.state) q["location.state"] = locn.state;
+      if (locn.district) q["location.district"] = locn.district;
+    } else if (lvl === "state") {
+      if (locn.state) q["location.state"] = locn.state;
+    } else if (lvl === "country") {
+      if (locn.country) q["location.country"] = locn.country;
+    }
+    // international / foundation -> sirf sanghType (location match nahi)
+
+    let candidates = [];
+    try {
+      candidates = await HierarchicalSangh.find(q);
+    } catch (e) {
+      candidates = [];
+    }
+    for (const c of candidates) {
+      const p = alGetPresident(c, appointeeUserId);
+      if (p) return { entry: p, sangh: c, isFoundation: lvl === "foundation" };
+    }
+  }
+
+  // 3) Final fallback -> foundation (main) sangh = Vivek Jain
+  try {
+    const foundation = await HierarchicalSangh.findOne({
+      level: "foundation",
+      sanghType: "main",
+    });
+    if (foundation) {
+      const p = alGetPresident(foundation, appointeeUserId);
+      return { entry: p || null, sangh: foundation, isFoundation: true };
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return null;
+};
+
 const generateAppointmentLetter = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -4038,6 +4129,36 @@ const generateAppointmentLetter = async (req, res) => {
     const districtText = addr.district || loc.district || "";
     const stateText = addr.state || loc.state || "";
 
+    // ===== SIGNING PRESIDENT (left sidebar + top-right contact + भवदीय block) =====
+    // Body/date appointee ka rahega; ye block sirf hastakshar karne wale president ka.
+    const signing = await alResolveSigningPresident(sangh, userId);
+    const presEntry = signing?.entry || null;
+    const presSangh = signing?.sangh || null;
+    const presIsFoundation = signing?.isFoundation || !presEntry;
+
+    // President ka missing contact (phone/photo/email) User collection se
+    let dbPres = null;
+    if (presEntry?.userId) {
+      try {
+        dbPres = await User.findById(presEntry.userId).select(
+          "fullName email phoneNumber profilePicture",
+        );
+      } catch (e) {
+        console.error("President lookup failed:", e.message);
+      }
+    }
+
+    const presName = presEntry?.name || dbPres?.fullName || "विवेक जैन";
+    const presEmail = presEntry?.email || dbPres?.email || "";
+    const presPhone = presEntry?.phoneNumber || dbPres?.phoneNumber || "";
+    const presPhotoUrl = presEntry?.userImage || dbPres?.profilePicture || "";
+    const presAddr = presEntry?.address || {};
+    const presSanghName = presSangh?.name || "जैन प्रबुद्ध मंच ट्रस्ट";
+    const presRoleSidebar = presEntry?.role
+      ? presEntry.role.charAt(0).toUpperCase() + presEntry.role.slice(1)
+      : "President";
+    const presRoleHindi = presIsFoundation ? "फाउंडर अध्यक्ष" : "अध्यक्ष";
+
     // ===== Canvas =====
     const width = 1414;
     const height = 2000;
@@ -4065,11 +4186,11 @@ const generateAppointmentLetter = async (req, res) => {
     ctx.textAlign = "left";
 
     const addressText = [
-      addr.street,
-      cityText,
-      districtText,
-      stateText,
-      addr.pincode,
+      presAddr.street,
+      presAddr.city,
+      presAddr.district,
+      presAddr.state,
+      presAddr.pincode,
     ]
       .filter(Boolean)
       .join(", ");
@@ -4082,21 +4203,21 @@ const generateAppointmentLetter = async (req, res) => {
       addrY += 34;
     }
 
-    if (phone) {
+    if (presPhone) {
       ctx.font = `bold 26px ${AL_FONT}`;
-      ctx.fillText(String(phone), AL.addrX, AL.phoneY);
+      ctx.fillText(String(presPhone), AL.addrX, AL.phoneY);
     }
 
-    if (email) {
+    if (presEmail) {
       ctx.font = `20px ${AL_FONT}`;
-      ctx.fillText(String(email), AL.emailX, AL.emailY);
+      ctx.fillText(String(presEmail), AL.emailX, AL.emailY);
     }
 
     // ========== LEFT SIDEBAR (photo + name + role + sangh) ==========
     // Ye bhi generateLetterhead se hi copy kiya gaya hai.
-    if (photoUrl) {
+    if (presPhotoUrl) {
       try {
-        const response = await axios.get(photoUrl, {
+        const response = await axios.get(presPhotoUrl, {
           responseType: "arraybuffer",
           timeout: 5000,
           headers: { "User-Agent": "Mozilla/5.0" },
@@ -4131,14 +4252,14 @@ const generateAppointmentLetter = async (req, res) => {
 
     ctx.fillStyle = "#E53935";
     ctx.font = `bold 30px ${AL_FONT}`;
-    ctx.fillText(name, 120, 515);
+    ctx.fillText(presName, 120, 515);
 
     ctx.fillStyle = "#1A1A1A";
     ctx.font = `bold 25px ${AL_FONT}`;
-    ctx.fillText(roleText, 120, 549);
+    ctx.fillText(presRoleSidebar, 120, 549);
 
     ctx.font = `bold 23px ${AL_FONT}`;
-    const sanghLines = alWrapText(ctx, sanghName, 215).slice(0, 2);
+    const sanghLines = alWrapText(ctx, presSanghName, 215).slice(0, 2);
     let sanghY = 580;
     for (const line of sanghLines) {
       ctx.fillText(line, 120, sanghY);
@@ -4279,25 +4400,47 @@ const generateAppointmentLetter = async (req, res) => {
     ctx.fillText("भवदीय", AL.bodyX, y);
     y += 10;
 
-    const sign = await loadAppointmentSign();
-    if (sign) {
-      ctx.drawImage(sign, AL.bodyX, y, AL.signW, AL.signH);
-      y += AL.signH + 6;
+    // Signature image sirf foundation president (Vivek) ki available hai.
+    // Doosre presidents ke liye jagah chhod do (unki sign image nahi hai).
+    if (presIsFoundation) {
+      const sign = await loadAppointmentSign();
+      if (sign) {
+        ctx.drawImage(sign, AL.bodyX, y, AL.signW, AL.signH);
+        y += AL.signH + 6;
+      } else {
+        y += 55;
+      }
     } else {
-      y += 55; // signature na mile to bhi jagah chhod do
+      y += 55;
     }
 
     ctx.fillStyle = "#E53935";
     ctx.font = `bold 29px ${AL_FONT}`;
-    ctx.fillText("विवेक जैन", AL.bodyX, y);
+    ctx.fillText(presName, AL.bodyX, y);
     y += 34;
 
     ctx.fillStyle = "#1A1A1A";
     ctx.font = `bold 24px ${AL_FONT}`;
-    ctx.fillText("फाउंडर अध्यक्ष", AL.bodyX, y);
+    ctx.fillText(presRoleHindi, AL.bodyX, y);
     y += 30;
 
-    ctx.fillText("जैन प्रबुद्ध मंच ट्रस्ट", AL.bodyX, y);
+    ctx.fillText(presSanghName, AL.bodyX, y);
+
+    // ================= BOTTOM-RIGHT NOTE (digitally generated) =================
+    // Chूँki sab presidents ke signature image nahi hain, isliye ye note.
+    // x KAM karo -> left; y KAM karo -> upar (footerSafeY = 1740 ke upar rakhna).
+    ctx.save();
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#555555";
+    ctx.font = `18px ${AL_FONT}`;
+    ctx.fillText("यह पत्र डिजिटल रूप से जनरेट किया गया है।", 1360, 1690);
+    ctx.fillText(
+      "इस पर अंकित नाम ही हस्ताक्षर के रूप में मान्य है।",
+      1360,
+      1716,
+    );
+    ctx.restore();
+    ctx.textAlign = "left";
 
     // ===== RESPONSE =====
     res.setHeader("Content-Type", "image/jpeg");
