@@ -4047,13 +4047,21 @@ const alResolveSigningPresident = async (appointeeSangh, appointeeUserId) => {
   }
 
   // 3) Final fallback -> foundation (main) sangh = Vivek Jain
+  // 3) Final fallback -> foundation (main) sangh = Vivek Jain
   try {
     const foundation = await HierarchicalSangh.findOne({
       level: "foundation",
       sanghType: "main",
     });
     if (foundation) {
-      const p = alGetPresident(foundation, appointeeUserId);
+      // Pehle doosra president (khud ko chhod ke). Na mile to foundation ka
+      // apna president KHUD bhi chalega -- foundation top authority hai, isliye
+      // founder-president apne hi letter par apni details/sign laga sakta hai.
+      const p =
+        alGetPresident(foundation, appointeeUserId) ||
+        (foundation.officeBearers || []).find(
+          (ob) => (ob.role || "").toLowerCase() === "president",
+        );
       return { entry: p || null, sangh: foundation, isFoundation: true };
     }
   } catch (e) {
@@ -4061,7 +4069,7 @@ const alResolveSigningPresident = async (appointeeSangh, appointeeUserId) => {
   }
 
   return null;
-};
+};;
 
 const generateAppointmentLetter = async (req, res) => {
   try {
