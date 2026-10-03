@@ -67,7 +67,9 @@ const applyCountryAddress = (doc, fields) => {
 };
 const HierarchicalSangh = require("../../model/SanghModels/hierarchicalSanghModel");
 const { successResponse, errorResponse } = require("../../utils/apiResponse");
-const { s3Client, DeleteObjectCommand } = require("../../config/config");
+// ✅ FIX: s3Client "config/config" me export nahi hota tha (undefined aata tha).
+// userController jaisa hi "config/s3Config" se lo.
+const { s3Client, DeleteObjectCommand } = require("../../config/s3Config");
 const {
   extractS3KeyFromUrl,
   convertS3UrlToCDN,
@@ -202,7 +204,9 @@ const getAllTirth = async (req, res) => {
     const { search, sect, state, city } = req.query;
 
     // CHANGED - status filter hata diya, ab list direct saara data laati hai
-    const filter = {};
+    // ✅ FIX: sirf deleted (inactive) tirth chhupao. $ne isliye ki purane records
+    // jinme status field hi nahi hai, wo pehle ki tarah dikhte rahein.
+    const filter = { status: { $ne: "inactive" } };
     if (sect) filter["basic.sect"] = sect;
     if (state) filter["address.state"] = state;
     if (city) filter["address.city"] = new RegExp(`^${city}$`, "i");
@@ -275,7 +279,11 @@ const getTirthDetails = async (req, res) => {
     const { tirthId } = req.params;
 
     // CHANGED - status filter hata diya, taaki list ka har card khul sake
-    const tirth = await Tirth.findOne({ _id: tirthId }).lean();
+    // ✅ FIX: delete (inactive) hua tirth ab nahi khulega — 404 aayega
+    const tirth = await Tirth.findOne({
+      _id: tirthId,
+      status: { $ne: "inactive" },
+    }).lean();
     if (!tirth) return errorResponse(res, "Tirth not found", 404);
 
     // Map → plain object (frontend ke liye)
@@ -553,18 +561,38 @@ const updateTirthImages = async (req, res) => {
   }
 };
 
-// Soft delete
+// HARD DELETE — tirth aur uska saara juda data database + S3 se hamesha ke liye
+// hata deta hai. Wapas nahi aa sakta.
+//
+// Model file ka naam alag ho ya file na mile to wo model skip hota hai
+// (server crash nahi hota) aur Render logs me warning aati hai.
+const loadTirthModel = (file) => {
+  try {
+    return require(`../../model/TirthModels/${file}`);
+  } catch (e) {
+    console.warn(
+      `⚠️ [deleteTirth] model load nahi hua: ${file} — ${e.message}`,
+    );
+    return null;
+  }
+};
+
 const deleteTirth = async (req, res) => {
   try {
     const { tirthId } = req.params;
+    const mongoose = require("mongoose");
+
+    if (!mongoose.Types.ObjectId.isValid(tirthId)) {
+      return errorResponse(res, "Invalid tirth id", 400);
+    }
 
     const tirth = await Tirth.findById(tirthId);
     if (!tirth) return errorResponse(res, "Tirth not found", 404);
 
     const User = require("../../model/UserRegistrationModels/userModel");
 
-    // ADDED - sirf owner (submittedBy) ya jiske paas is tirth ka
-    // tirthRole hai wahi delete kar sake. req.user na ho to purana behaviour.
+    // sirf owner (submittedBy) ya jiske paas is tirth ka tirthRole hai
+    // wahi delete kar sake. req.user na ho to purana behaviour.
     const requesterId = req.user?._id;
     if (requesterId) {
       const isOwner = String(tirth.submittedBy || "") === String(requesterId);
@@ -584,76 +612,135 @@ const deleteTirth = async (req, res) => {
       }
     }
 
-    tirth.status = "inactive"; // enum: active | inactive
-    await tirth.save();
-
-    // ADDED - tirthRoles cleanup.
-    // userId in priority order:
-    //   1) explicitly bheja hua userId (body ya query se)
-    //   2) tirth.submittedBy  -> jis account se tirth register hua tha
-    //   3) request karne wala logged-in user
-    // aur last me safety-net: baaki koi bhi user jiske paas ye role bacha ho.
-    const mongoose = require("mongoose");
-    const toObjectId = (v) => {
-      try {
-        return new mongoose.Types.ObjectId(String(v));
-      } catch {
-        return null;
-      }
-    };
-
     const tirthObjId = tirth._id;
 
-    const candidateIds = [
-      req.body?.userId,
-      req.query?.userId,
-      req.params?.userId,
-      tirth.submittedBy,
-      requesterId,
-    ]
-      .filter(Boolean)
-      .map((v) => String(v));
+    /* ---------- 1. juda hua data collect + delete ---------- */
+    const Accounting = loadTirthModel("Tirthaccountingmodel");
+    const Announcement = loadTirthModel("tirthAnnouncementModel");
+    const Attendance = loadTirthModel("tirthAttendanceModel");
+    const Bhojan = loadTirthModel("tirthBhojanModel"); // { TirthBhojanSetting, TirthMenu, TirthFoodOrder }
+    const Booking = loadTirthModel("Tirthbookingmodel");
+    const Complaint = loadTirthModel("tirthComplaintModel");
+    const Employee = loadTirthModel("tirthEmployeeModel");
+    const Inventory = loadTirthModel("tirthInventoryModel"); // { TirthCategory, TirthItem, TirthMovement }
+    const Puja = loadTirthModel("tirthPujaModel"); // { TirthPujaType, TirthPujaBooking }
+    const Room = loadTirthModel("Tirthroommodel");
 
-    const uniqueUserIds = [...new Set(candidateIds)]
-      .map(toObjectId)
-      .filter(Boolean);
+    // S3 se hatane wali images — DB delete se PEHLE url nikal lo
+    const imageUrls = [...(tirth.photos || [])];
+    try {
+      if (Announcement) {
+        const a = await Announcement.find({ tirthId: tirthObjId })
+          .select("image")
+          .lean();
+        a.forEach((x) => x.image && imageUrls.push(x.image));
+      }
+      if (Employee) {
+        const e = await Employee.find({ tirthId: tirthObjId })
+          .select("photo")
+          .lean();
+        e.forEach((x) => x.photo && imageUrls.push(x.photo));
+      }
+    } catch (e) {
+      console.error("[deleteTirth] image list error:", e.message);
+    }
 
-    const removedFromUsers = [];
-    for (const uid of uniqueUserIds) {
+    // [label, model] — model null ho to skip
+    const targets = [
+      ["accounting", Accounting],
+      ["announcements", Announcement],
+      ["attendance", Attendance],
+      ["bhojanSettings", Bhojan?.TirthBhojanSetting],
+      ["bhojanMenus", Bhojan?.TirthMenu],
+      ["foodOrders", Bhojan?.TirthFoodOrder],
+      ["roomBookings", Booking],
+      ["complaints", Complaint],
+      ["employees", Employee],
+      ["inventoryMovements", Inventory?.TirthMovement],
+      ["inventoryItems", Inventory?.TirthItem],
+      ["inventoryCategories", Inventory?.TirthCategory],
+      ["pujaBookings", Puja?.TirthPujaBooking],
+      ["pujaTypes", Puja?.TirthPujaType],
+      ["rooms", Room],
+    ];
+
+    const deleted = {};
+    const failed = [];
+    for (const [label, Model] of targets) {
+      if (!Model || typeof Model.deleteMany !== "function") {
+        failed.push(`${label} (model not loaded)`);
+        continue;
+      }
       try {
-        const r = await User.updateOne(
-          { _id: uid },
-          { $pull: { tirthRoles: { tirthId: tirthObjId } } },
-        );
-        if ((r?.modifiedCount ?? r?.nModified ?? 0) > 0) {
-          removedFromUsers.push(String(uid));
-        }
+        const r = await Model.deleteMany({ tirthId: tirthObjId });
+        deleted[label] = r?.deletedCount ?? 0;
       } catch (e) {
-        console.error(
-          "tirthRoles pull failed for user:",
-          String(uid),
-          e.message,
-        );
+        failed.push(`${label} (${e.message})`);
+        console.error(`[deleteTirth] ${label} delete failed:`, e.message);
       }
     }
 
-    // safety-net - agar kisi aur user ke paas bhi ye role pada ho
-    let extraRemoved = 0;
+    /* ---------- 2. tirth document hamesha ke liye delete ---------- */
+    await Tirth.deleteOne({ _id: tirthObjId });
+
+    /* ---------- 3. sabhi users se tirthRoles hatao ---------- */
+    let rolesRemovedFrom = 0;
     try {
       const pulled = await User.updateMany(
         { "tirthRoles.tirthId": tirthObjId },
         { $pull: { tirthRoles: { tirthId: tirthObjId } } },
       );
-      extraRemoved = pulled?.modifiedCount ?? pulled?.nModified ?? 0;
+      rolesRemovedFrom = pulled?.modifiedCount ?? pulled?.nModified ?? 0;
     } catch (e) {
-      console.error("tirthRoles cleanup failed:", e.message);
+      console.error("[deleteTirth] tirthRoles cleanup failed:", e.message);
     }
+
+    /* ---------- 4. S3 images (background — response nahi rukega) ---------- */
+    const keys = [...new Set(imageUrls)]
+      .map((url) => {
+        try {
+          return extractS3KeyFromUrl(url);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+
+    if (keys.length && s3Client && typeof s3Client.send === "function") {
+      Promise.allSettled(
+        keys.map((Key) =>
+          s3Client.send(
+            new DeleteObjectCommand({
+              Bucket: process.env.AWS_BUCKET_NAME,
+              Key,
+            }),
+          ),
+        ),
+      ).then((results) => {
+        const bad = results.filter((r) => r.status === "rejected").length;
+        if (bad) console.error(`[deleteTirth] ${bad} S3 image delete failed`);
+      });
+    } else if (keys.length) {
+      // S3 setup na mile to bhi delete fail nahi hona chahiye
+      console.error(
+        "[deleteTirth] s3Client nahi mila — images S3 par reh gayi",
+      );
+    }
+
+    console.log(
+      `🗑️ [deleteTirth] ${tirthObjId} deleted. related=${JSON.stringify(
+        deleted,
+      )} roles=${rolesRemovedFrom} images=${keys.length}` +
+        (failed.length ? ` FAILED=${failed.join(", ")}` : ""),
+    );
 
     return successResponse(res, {
       message: "Tirth deleted successfully",
-      tirthId: tirth._id,
-      removedFromUsers,
-      rolesRemovedFrom: removedFromUsers.length + extraRemoved,
+      tirthId: tirthObjId,
+      rolesRemovedFrom,
+      deleted,
+      imagesRemoved: keys.length,
+      ...(failed.length ? { failed } : {}),
     });
   } catch (error) {
     console.error("Delete Tirth Error:", error);
@@ -674,7 +761,11 @@ const getPendingApplications = async (req, res) => {
       .lean()
       .catch(() => null);
 
-    const filter = { applicationStatus: "pending" };
+    // ✅ FIX: owner ne pending tirth delete kar diya to review list me na aaye
+    const filter = {
+      applicationStatus: "pending",
+      status: { $ne: "inactive" },
+    };
     if (sangh?.location?.city) {
       filter["address.city"] = new RegExp(`^${sangh.location.city}$`, "i");
     }

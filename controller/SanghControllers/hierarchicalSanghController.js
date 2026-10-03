@@ -19,7 +19,6 @@ const { default: axios } = require("axios");
 const sharp = require("sharp");
 const { toMemberAddress } = require("../../helpers/locationHelper");
 
-
 // Helper Functions
 const formatFullName = (firstName, lastName) => {
   return lastName.toLowerCase() === "jain"
@@ -331,7 +330,7 @@ const createAdminSangh = asyncHandler(async (req, res) => {
   const sanghImage = req.files?.sanghImage
     ? convertS3UrlToCDN(req.files.sanghImage[0].location)
     : null;
- 
+
   try {
     const {
       name,
@@ -346,12 +345,12 @@ const createAdminSangh = asyncHandler(async (req, res) => {
       parentSanghAccessId,
       sanghType = "main",
     } = req.body;
- 
+
     // 1️⃣ Validate required fields
     if (!name || !level || !location || !officeAddress) {
       return errorResponse(res, "Missing required fields", 400);
     }
- 
+
     // 2️⃣ Validate Sangh type
     if (!["main", "women", "youth", "veerSena"].includes(sanghType)) {
       return errorResponse(
@@ -360,13 +359,13 @@ const createAdminSangh = asyncHandler(async (req, res) => {
         400,
       );
     }
- 
+
     // 3️⃣ Validate location based on level
     // India me poora chain chahiye (state > district > city).
     // Dusri countries me beech ke levels hote hi nahi -- Country ke neeche
     // seedha City (Local) banta hai, isliye wahan sirf country + city.
     const isIndiaSangh = (location.country || "India") === "India";
- 
+
     const requiredLocationFields = isIndiaSangh
       ? {
           foundation: ["country"],
@@ -398,29 +397,29 @@ const createAdminSangh = asyncHandler(async (req, res) => {
         400,
       );
     }
- 
+
     // 4️⃣ Validate parent Sangh if provided
     let resolvedSanghType = sanghType;
     let parentMainSanghId = null;
- 
+
     if (parentSanghId) {
       const parentSangh = await HierarchicalSangh.findById(parentSanghId);
       if (!parentSangh) {
         return errorResponse(res, "Parent Sangh not found", 404);
       }
- 
+
       // Specialized Sangh inherits type from parent
       if (parentSangh.sanghType !== "main") {
         resolvedSanghType = parentSangh.sanghType;
       }
- 
+
       if (resolvedSanghType !== "main") {
         parentMainSanghId =
           parentSangh.parentMainSangh ||
           (parentSangh.sanghType === "main" ? parentSangh._id : null);
       }
     }
- 
+
     // 5️⃣ Area-specific uniqueness check
     if (level === "area") {
       const areaQuery = {
@@ -444,7 +443,7 @@ const createAdminSangh = asyncHandler(async (req, res) => {
         );
       }
     }
- 
+
     // 6️⃣ Create Sangh
     const sangh = await HierarchicalSangh.create({
       name,
@@ -461,16 +460,16 @@ const createAdminSangh = asyncHandler(async (req, res) => {
       coverImage,
       sanghImage,
     });
- 
+
     // 7️⃣ Validate hierarchy for users with sanghRoles (optional safety)
     if (req.user?.sanghRoles && req.user.sanghRoles.length > 0) {
       await sangh.validateHierarchy();
     }
- 
+
     // 8️⃣ Create SanghAccess
     const SanghAccess = require("../../model/SanghModels/sanghAccessModel");
     const mongoose = require("mongoose");
- 
+
     let resolvedParentSanghAccessId = null;
     if (parentSanghAccessId) {
       if (mongoose.Types.ObjectId.isValid(parentSanghAccessId)) {
@@ -483,7 +482,7 @@ const createAdminSangh = asyncHandler(async (req, res) => {
         if (parentAccess) resolvedParentSanghAccessId = parentAccess._id;
       }
     }
- 
+
     let sanghAccess = await SanghAccess.findOne({
       sanghId: sangh._id,
       status: "active",
@@ -501,7 +500,7 @@ const createAdminSangh = asyncHandler(async (req, res) => {
         sanghAccessId: sanghAccess._id,
       });
     }
- 
+
     return successResponse(
       res,
       {
@@ -1812,26 +1811,26 @@ const addSanghMember = asyncHandler(async (req, res) => {
   try {
     const sanghId = req.params.sanghId;
     const MAX_BULK_MEMBERS = 50;
- 
+
     const sangh = await HierarchicalSangh.findById(sanghId);
     if (!sangh) return errorResponse(res, "Sangh not found", 404);
- 
+
     const isBulk = req.body.members && Array.isArray(req.body.members);
- 
+
     if (isBulk) {
       const { members } = req.body;
       if (members.length === 0)
         return errorResponse(res, "Members array cannot be empty", 400);
- 
+
       if (members.length > MAX_BULK_MEMBERS)
         return errorResponse(
           res,
           `Cannot add more than ${MAX_BULK_MEMBERS} members at once`,
           400,
         );
- 
+
       const results = { success: [], failed: [] };
- 
+
       for (const member of members) {
         if (!member.jainAadharNumber) {
           results.failed.push({
@@ -1840,11 +1839,11 @@ const addSanghMember = asyncHandler(async (req, res) => {
           });
           continue;
         }
- 
+
         try {
           // ✅ CHANGED: helper se lookup
           const user = await findJainAadharUser(member.jainAadharNumber);
- 
+
           if (!user) {
             results.failed.push({
               jainAadharNumber: member.jainAadharNumber,
@@ -1852,7 +1851,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             });
             continue;
           }
- 
+
           const location = user?.jainAadharApplication?.location || {};
           const contact = user?.jainAadharApplication?.contactDetails || {};
           const rawImage =
@@ -1871,17 +1870,17 @@ const addSanghMember = asyncHandler(async (req, res) => {
           const userImage = rawImage ? convertS3UrlToCDN(rawImage) : "";
           const paymentStatus = member.paymentStatus || "pending";
           const isPaid = paymentStatus === "paid";
- 
+
           const membershipStartDate = new Date();
           const membershipEndDate = new Date(
             Date.now() + 365 * 24 * 60 * 60 * 1000,
           );
- 
+
           // Duplicate guard -- yahi userId is sangh me pehle se member hai?
           const alreadyMember = sangh.members.some(
             (m) => m?.userId?.toString() === user._id.toString(),
           );
- 
+
           if (alreadyMember) {
             results.failed.push({
               jainAadharNumber: member.jainAadharNumber,
@@ -1889,7 +1888,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             });
             continue;
           }
- 
+
           const paymentDate = isPaid ? new Date() : null;
           const newMember = {
             userId: user._id,
@@ -1919,13 +1918,13 @@ const addSanghMember = asyncHandler(async (req, res) => {
                 }
               : undefined,
           };
- 
+
           sangh.members.push(newMember);
           results.success.push({
             jainAadharNumber: member.jainAadharNumber,
             name: newMember.name,
           });
- 
+
           // STEP 1: Add MEMBER role first (Index 0)
           // Isi sangh ka member role dobara na jude
           await User.updateOne(
@@ -1947,7 +1946,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
               },
             },
           );
- 
+
           // STEP 2: Add HONORARY MEMBER role if applicable (Index 1)
           if (
             (member.isHonorary === "true" || member.isHonorary === true) &&
@@ -1956,7 +1955,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
             const localSangh = await HierarchicalSangh.findById(
               member.localSangh.sanghId,
             );
- 
+
             if (localSangh) {
               const honoraryMember = {
                 userId: user._id,
@@ -1982,20 +1981,20 @@ const addSanghMember = asyncHandler(async (req, res) => {
                 addedBy: req.user._id,
                 addedAt: new Date(),
               };
- 
+
               if (!localSangh.honoraryMembers) {
                 localSangh.honoraryMembers = [];
               }
- 
+
               const exists = localSangh.honoraryMembers.some(
                 (h) => h.jainAadharNumber === member.jainAadharNumber,
               );
- 
+
               if (!exists) {
                 localSangh.honoraryMembers.push(honoraryMember);
                 await localSangh.save();
               }
- 
+
               // Add honoraryMember role AFTER member role
               await User.findByIdAndUpdate(user._id, {
                 $push: {
@@ -2017,9 +2016,9 @@ const addSanghMember = asyncHandler(async (req, res) => {
           });
         }
       }
- 
+
       if (results.success.length > 0) await sangh.save();
- 
+
       return successResponse(
         res,
         {
@@ -2034,7 +2033,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
         `Added ${results.success.length} members, ${results.failed.length} failed`,
       );
     }
- 
+
     // ======= SINGLE MEMBER ADDITION =======
     const {
       jainAadharNumber,
@@ -2045,7 +2044,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
       amount,
       isHonorary,
     } = req.body;
- 
+
     // ✅ Parse localSangh if needed
     if (req.body.localSangh && typeof req.body.localSangh === "string") {
       try {
@@ -2055,34 +2054,34 @@ const addSanghMember = asyncHandler(async (req, res) => {
         req.body.localSangh = undefined;
       }
     }
- 
+
     if (!jainAadharNumber)
       return errorResponse(res, "Jain Aadhar number is required", 400);
- 
+
     // ✅ CHANGED: helper se lookup
     const user = await findJainAadharUser(jainAadharNumber);
- 
+
     if (!user)
       return errorResponse(
         res,
         "Invalid or unverified Jain Aadhar number",
         400,
       );
- 
+
     // Duplicate guard -- double submit se do baar member ban jaata tha.
     // Yahi userId is sangh me pehle se hai to aage badhna hi nahi hai.
     const alreadyMember = sangh.members.some(
       (m) => m?.userId?.toString() === user._id.toString(),
     );
- 
+
     if (alreadyMember) {
       return errorResponse(res, "Already a member of this Sangh", 400);
     }
- 
+
     const location = user?.jainAadharApplication?.location || {};
     const contact = user?.jainAadharApplication?.contactDetails || {};
     const manualImage = req.file?.location || req.file?.path;
- 
+
     const rawImage =
       manualImage ||
       user?.jainAadharApplication?.userProfile ||
@@ -2093,7 +2092,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
       req.files?.memberScreenshot?.[0]?.location ||
       req.files?.memberScreenshot?.[0]?.path ||
       "";
- 
+
     const memberScreenshot = rawScreenshot
       ? convertS3UrlToCDN(rawScreenshot)
       : "";
@@ -2101,7 +2100,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
     const isPaid = finalPaymentStatus === "paid";
     const membershipStartDate = new Date();
     const membershipEndDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
- 
+
     const newMember = {
       userId: user._id,
       name: user?.jainAadharApplication?.name || "Unknown",
@@ -2133,10 +2132,10 @@ const addSanghMember = asyncHandler(async (req, res) => {
       addedBy: req.user._id,
       addedAt: new Date(),
     };
- 
+
     sangh.members.push(newMember);
     await sangh.save();
- 
+
     // STEP 1: UPDATE USER SANGH ROLES - MEMBER ROLE FIRST (Index 0)
     // Isi sangh ka member role dobara na jude
     await User.updateOne(
@@ -2158,7 +2157,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
         },
       },
     );
- 
+
     // ✅ STEP 2: HONORARY MEMBER ROLE ADDITION (Index 1) - Only if isHonorary is true
     if (
       (isHonorary === "true" || isHonorary === true) &&
@@ -2167,7 +2166,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
       const localSangh = await HierarchicalSangh.findById(
         req.body.localSangh.sanghId,
       );
- 
+
       if (localSangh) {
         const honoraryMember = {
           userId: user._id,
@@ -2191,21 +2190,21 @@ const addSanghMember = asyncHandler(async (req, res) => {
           addedBy: req.user._id,
           addedAt: new Date(),
         };
- 
+
         if (!localSangh.honoraryMembers) {
           localSangh.honoraryMembers = [];
         }
- 
+
         // prevent duplicate
         const exists = localSangh.honoraryMembers.some(
           (h) => h.jainAadharNumber === jainAadharNumber,
         );
- 
+
         if (!exists) {
           localSangh.honoraryMembers.push(honoraryMember);
           await localSangh.save();
         }
- 
+
         // ✅ Add honoraryMember role AFTER member role (ensures proper order)
         await User.findByIdAndUpdate(user._id, {
           $push: {
@@ -2220,7 +2219,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
         });
       }
     }
- 
+
     // =================================================
     // ✅ PAYMENT DISTRIBUTION (ONLY IF PAID)
     // =================================================
@@ -2230,12 +2229,12 @@ const addSanghMember = asyncHandler(async (req, res) => {
         user,
         sourceSangh: sangh,
       });
- 
+
       // flag update
       newMember.paymentDistributed = true;
       await sangh.save();
     }
- 
+
     return successResponse(
       res,
       {
@@ -2254,8 +2253,7 @@ const addSanghMember = asyncHandler(async (req, res) => {
     return errorResponse(res, error.message, 500);
   }
 });
- 
- 
+
 // Add Honorary Member to Sangh (SINGLE ONLY)
 const addHonoraryMember = asyncHandler(async (req, res) => {
   try {
@@ -3542,6 +3540,7 @@ const unfollowSangh = asyncHandler(async (req, res) => {
 });
 
 let letterheadTemplate;
+let letterheadTemplateEn; // English letterhead template
 let letterheadFont = "Georgia";
 
 async function loadLetterheadTemplate() {
@@ -3550,6 +3549,15 @@ async function loadLetterheadTemplate() {
     letterheadTemplate = await loadImage(
       path.join(__dirname, "../../Public/letterhead_blank.jpeg"),
     );
+
+    // English letterhead template (optional)
+    try {
+      letterheadTemplateEn = await loadImage(
+        path.join(__dirname, "../../Public/letterhead_blank_english.jpeg"),
+      );
+    } catch (enErr) {
+      console.error("English letterhead template load error:", enErr.message);
+    }
 
     // Optional Devanagari font (needed if name/role/sangh name is in Hindi)
     try {
@@ -3669,8 +3677,15 @@ const generateLetterhead = async (req, res) => {
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
 
-    if (letterheadTemplate) {
-      ctx.drawImage(letterheadTemplate, 0, 0, width, height);
+    // 🔴 lang=en -> English template, warna Hindi (default)
+    const lang = String(req.query?.lang || "hi").toLowerCase();
+    const lhTemplate =
+      lang === "en" && letterheadTemplateEn
+        ? letterheadTemplateEn
+        : letterheadTemplate;
+
+    if (lhTemplate) {
+      ctx.drawImage(lhTemplate, 0, 0, width, height);
     } else {
       ctx.fillStyle = "#FFFFFF";
       ctx.fillRect(0, 0, width, height);
@@ -3681,7 +3696,7 @@ const generateLetterhead = async (req, res) => {
     ctx.textAlign = "left";
 
     // Address (max 2 lines, next to the location icon)
-    ctx.font = `bold 22px ${letterheadFont}`;
+    ctx.font = `bold 24px ${letterheadFont}`;
     const addrLines = lhWrapText(ctx, addressText, 250, 2);
     let addrY = 88;
     for (const line of addrLines) {
@@ -3691,7 +3706,7 @@ const generateLetterhead = async (req, res) => {
 
     // Phone (next to the phone icon)
     if (phone) {
-      ctx.font = `bold 22px ${letterheadFont}`;
+      ctx.font = `bold 26px ${letterheadFont}`;
       ctx.fillText(String(phone), 1145, 182);
     }
 
@@ -3771,7 +3786,6 @@ const generateLetterhead = async (req, res) => {
     });
   }
 };
-
 
 const { registerFont } = require("canvas");
 
@@ -3985,9 +3999,9 @@ const alFormatDate = (d = new Date()) =>
   )}-${d.getFullYear()}`;
 
 // ===== Signing President resolver (hierarchy + location + sanghType match) =====
-// Rule: appointee ke apne sangh ka president (KHUD ko chhod ke). Na mile to
-// location + sanghType match karke level ladder upar chadho -- jahan pehle
-// president mile wahin ruk jao. Kahin na mile to foundation (main) = Vivek Jain.
+// Appointee ke apne sangh ka president (khud ko chhod ke). Na mile to location +
+// sanghType match karke level ladder upar -- jahan pehle mile wahin ruk. Kahin na
+// mile to foundation (main). Foundation top hai -> wahan khud bhi sign kar sakta hai.
 const AL_LEVEL_CHAIN = [
   "city",
   "district",
@@ -4032,8 +4046,6 @@ const alResolveSigningPresident = async (appointeeSangh, appointeeUserId) => {
     } else if (lvl === "country") {
       if (locn.country) q["location.country"] = locn.country;
     }
-    // international / foundation -> sirf sanghType (location match nahi)
-
     let candidates = [];
     try {
       candidates = await HierarchicalSangh.find(q);
@@ -4046,17 +4058,13 @@ const alResolveSigningPresident = async (appointeeSangh, appointeeUserId) => {
     }
   }
 
-  // 3) Final fallback -> foundation (main) sangh = Vivek Jain
-  // 3) Final fallback -> foundation (main) sangh = Vivek Jain
+  // 3) Final fallback -> foundation (main). Foundation top hai: khud bhi chalega.
   try {
     const foundation = await HierarchicalSangh.findOne({
       level: "foundation",
       sanghType: "main",
     });
     if (foundation) {
-      // Pehle doosra president (khud ko chhod ke). Na mile to foundation ka
-      // apna president KHUD bhi chalega -- foundation top authority hai, isliye
-      // founder-president apne hi letter par apni details/sign laga sakta hai.
       const p =
         alGetPresident(foundation, appointeeUserId) ||
         (foundation.officeBearers || []).find(
@@ -4069,7 +4077,7 @@ const alResolveSigningPresident = async (appointeeSangh, appointeeUserId) => {
   }
 
   return null;
-};;
+};
 
 const generateAppointmentLetter = async (req, res) => {
   try {
@@ -4137,14 +4145,106 @@ const generateAppointmentLetter = async (req, res) => {
     const districtText = addr.district || loc.district || "";
     const stateText = addr.state || loc.state || "";
 
-    // ===== SIGNING PRESIDENT (left sidebar + top-right contact + भवदीय block) =====
-    // Body/date appointee ka rahega; ye block sirf hastakshar karne wale president ka.
+    // 🔴 Language: lang=en -> English content + English template, warna Hindi (default)
+    const lang = String(req.query?.lang || "hi").toLowerCase();
+    const isEn = lang === "en";
+    const lhTemplate =
+      isEn && letterheadTemplateEn ? letterheadTemplateEn : letterheadTemplate;
+
+    const salutationTxt = isEn
+      ? gender === "female"
+        ? "Ms./Mrs."
+        : "Mr."
+      : gender === "female"
+        ? "श्रीमती/सुश्री"
+        : "श्री";
+
+    const T = isEn
+      ? {
+          heading: "Appointment Letter",
+          greeting: `Respected ${salutationTxt} ${name},`,
+          labels: [
+            "Residence",
+            "City",
+            "District",
+            "State",
+            "Sangh Name",
+            "Designation",
+          ],
+          para1:
+            "It is our great pleasure to inform you that you have been appointed to the above-mentioned post in Jain Prabuddh Manch Trust for a term of the next 02 years.",
+          para2:
+            "Your appointment has been made in accordance with the rules, guidelines and constitution of the organization. Considering your dedication, commitment and active participation in social work, this responsibility is being entrusted to you.",
+          expect: "You are expected to:",
+          points: [
+            "Promote and propagate the objectives and ideals of the organization.",
+            "Discharge your duties with transparency, integrity and dedication.",
+            "Follow the guidelines given by the higher organization.",
+            "Participate in regular meetings and submit the necessary reports.",
+            "Play an active role in programs for the welfare of the community and the organization.",
+            "Strive to strengthen the organization and connect more and more members of the community.",
+            "Always uphold the dignity, discipline and rules of the organization.",
+            "Every month, between the 1st and 5th, you must submit your Sangh's regular report on the Jaintva App or website. The ranking of the Sangh's activities and performance will be decided on the basis of this report.",
+          ],
+          close1:
+            "Therefore, you are requested to sign a copy of this appointment letter and give your consent.",
+          close2:
+            "Hearty best wishes for your successful tenure and bright future.",
+          yours: "Yours sincerely,",
+          signName: "Vivek Jain",
+          signRole: "Founder President",
+          signTrust: "Jain Prabuddh Manch Trust",
+        }
+      : {
+          heading: "नियुक्ति पत्र",
+          greeting: `आदरणीय ${salutationTxt} ${name} जी,`,
+          labels: ["निवासी", "शहर", "जिला", "राज्य", "संघ का नाम", "पद"],
+          para1:
+            "हर्ष के साथ सूचित किया जाता है कि आपको जैन प्रबुद्ध मंच ट्रस्ट में उक्तलिखित पद पर आगामी 02 वर्षों की अवधि के लिए नियुक्त किया जाता है।",
+          para2:
+            "आपकी नियुक्ति संस्था के नियमों, दिशा-निर्देशों एवं संविधान के अनुरूप की गई है। संस्था के प्रति आपकी निष्ठा, समर्पण एवं सामाजिक कार्यों में सक्रिय सहभागिता को ध्यान में रखते हुए आपको यह जिम्मेदारी सौंपी जा रही है।",
+          expect: "आपसे अपेक्षा की जाती है कि आप—",
+          points: [
+            "संस्था के उद्देश्यों एवं विचारों का प्रचार-प्रसार करेंगे।",
+            "पारदर्शिता, निष्ठा एवं समर्पण के साथ अपने दायित्वों का निर्वहन करेंगे।",
+            "उच्च संगठन द्वारा दिए गए दिशा-निर्देशों का पालन करेंगे।",
+            "नियमित बैठकों में सहभागिता करेंगे एवं आवश्यक प्रतिवेदन प्रस्तुत करेंगे।",
+            "समाजहित एवं संगठनहित के कार्यक्रमों में सक्रिय भूमिका निभाएंगे।",
+            "संगठन को मजबूत बनाने एवं अधिक से अधिक समाजजनों को जोड़ने का प्रयास करेंगे।",
+            "संस्था की गरिमा, अनुशासन एवं नियमों का सदैव पालन करेंगे।",
+            "प्रत्येक माह दिनांक 1 से 5 तारीख के बीच अपने संघ की नियमित रिपोर्ट जैनत्व ऐप या वेबसाइट पर करना आवश्यक होगा। इसी रिपोर्ट के आधार पर संघ की गतिविधियों एवं कार्यप्रदर्शन की रैंकिंग तय की जाएगी।",
+          ],
+          close1:
+            "अतः आपसे अनुरोध है कि इस नियुक्ति पत्र की प्रति पर हस्ताक्षर कर अपनी सहमति प्रदान करें।",
+          close2:
+            "आपके सफल कार्यकाल एवं उज्ज्वल भविष्य के लिए हार्दिक शुभकामनाएँ।",
+          yours: "भवदीय",
+          signName: "विवेक जैन",
+          signRole: "फाउंडर अध्यक्ष",
+          signTrust: "जैन प्रबुद्ध मंच ट्रस्ट",
+        };
+
+    // 🔴 Appointment date = us role ki appointmentDate (officeBearer/sanghTeam).
+    // Na mile to blank (aaj ki date NAHI).
+    const sanghTeamEntry = sangh.sanghTeams?.find(
+      (st) => st.userId?.toString() === userId,
+    );
+    const rawAppointmentDate =
+      officeBearerEntry?.appointmentDate ||
+      sanghTeamEntry?.appointmentDate ||
+      null;
+    let appointmentDateValue = null;
+    if (rawAppointmentDate) {
+      const dtmp = new Date(rawAppointmentDate);
+      if (!isNaN(dtmp.getTime())) appointmentDateValue = dtmp;
+    }
+
+    // 🔴 Signing president (sidebar + top-right contact + भवदीय) — hierarchy/location match
     const signing = await alResolveSigningPresident(sangh, userId);
     const presEntry = signing?.entry || null;
     const presSangh = signing?.sangh || null;
     const presIsFoundation = signing?.isFoundation || !presEntry;
 
-    // President ka missing contact (phone/photo/email) User collection se
     let dbPres = null;
     if (presEntry?.userId) {
       try {
@@ -4156,16 +4256,27 @@ const generateAppointmentLetter = async (req, res) => {
       }
     }
 
-    const presName = presEntry?.name || dbPres?.fullName || "विवेक जैन";
+    const presName =
+      presEntry?.name ||
+      dbPres?.fullName ||
+      (isEn ? "Vivek Jain" : "विवेक जैन");
     const presEmail = presEntry?.email || dbPres?.email || "";
     const presPhone = presEntry?.phoneNumber || dbPres?.phoneNumber || "";
     const presPhotoUrl = presEntry?.userImage || dbPres?.profilePicture || "";
     const presAddr = presEntry?.address || {};
-    const presSanghName = presSangh?.name || "जैन प्रबुद्ध मंच ट्रस्ट";
-    const presRoleSidebar = presEntry?.role
+    const presSanghName =
+      presSangh?.name ||
+      (isEn ? "Jain Prabuddh Manch Trust" : "जैन प्रबुद्ध मंच ट्रस्ट");
+    const presRoleWord = presEntry?.role
       ? presEntry.role.charAt(0).toUpperCase() + presEntry.role.slice(1)
       : "President";
-    const presRoleHindi = presIsFoundation ? "फाउंडर अध्यक्ष" : "अध्यक्ष";
+    const presRoleLabel = isEn
+      ? presIsFoundation
+        ? "Founder President"
+        : presRoleWord
+      : presIsFoundation
+        ? "फाउंडर अध्यक्ष"
+        : "अध्यक्ष";
 
     // ===== Canvas =====
     const width = 1414;
@@ -4173,20 +4284,29 @@ const generateAppointmentLetter = async (req, res) => {
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
 
-    if (letterheadTemplate) {
-      ctx.drawImage(letterheadTemplate, 0, 0, width, height);
+    if (lhTemplate) {
+      ctx.drawImage(lhTemplate, 0, 0, width, height);
     } else {
       ctx.fillStyle = "#FFFFFF";
       ctx.fillRect(0, 0, width, height);
     }
 
-    // ================= DATE =================
-    // Template me "दिनांक-" pehle se chhapa hai, isliye sirf VALUE draw
-    // karte hain — uske theek aage, right-aligned.
-    ctx.fillStyle = "#1A1A1A";
-    ctx.textAlign = "right";
-    ctx.font = `bold ${AL.dateSize}px ${AL_FONT}`;
-    ctx.fillText(alFormatDate(), AL.dateX, AL.dateY);
+    // ================= DATE (appointee ki appointmentDate; na ho to blank) =======
+    if (appointmentDateValue) {
+      ctx.fillStyle = "#1A1A1A";
+      ctx.textAlign = "right";
+      ctx.font = `bold ${AL.dateSize}px ${AL_FONT}`;
+      ctx.fillText(alFormatDate(appointmentDateValue), AL.dateX, AL.dateY);
+    }
+
+    // 🔴 Date line ke CENTER me heading "नियुक्ति पत्र"
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#000";
+    ctx.font = `bold 34px ${AL_FONT}`;
+    ctx.fillText(T.heading, width / 2, AL.dateY + 4);
+    ctx.restore();
+    ctx.textAlign = "left";
 
     // ========== TOP RIGHT CONTACT BLOCK (icons ke aage, white text) ==========
     // Ye block generateLetterhead se copy kiya gaya hai — wahi coordinates.
@@ -4264,7 +4384,7 @@ const generateAppointmentLetter = async (req, res) => {
 
     ctx.fillStyle = "#1A1A1A";
     ctx.font = `bold 25px ${AL_FONT}`;
-    ctx.fillText(presRoleSidebar, 120, 549);
+    ctx.fillText(presRoleLabel, 120, 549);
 
     ctx.font = `bold 23px ${AL_FONT}`;
     const sanghLines = alWrapText(ctx, presSanghName, 215).slice(0, 2);
@@ -4279,22 +4399,23 @@ const generateAppointmentLetter = async (req, res) => {
 
     // ================= BODY =================
     ctx.fillStyle = "#1A1A1A";
-    let y = AL.startY;
+    let y = AL.startY + 60;
 
-    // आदरणीय श्री ... जी,
+    // आदरणीय श्री ... जी,  (lang-aware)
     ctx.font = `bold ${AL.labelSize}px ${AL_FONT}`;
-    ctx.fillText(`आदरणीय ${salutation} ${name} जी,`, AL.bodyX, y);
+    ctx.fillText(T.greeting, AL.bodyX, y);
     y += AL.lineH + 4;
 
-    // निवासी / शहर / जिला / राज्य / संघ / पद
-    const infoRows = [
-      ["निवासी", residence],
-      ["शहर", cityText],
-      ["जिला", districtText],
-      ["राज्य", stateText],
-      ["संघ का नाम", sanghName],
-      ["पद", roleText],
+    // निवासी / शहर / जिला / राज्य / संघ / पद  (labels lang-aware)
+    const infoValues = [
+      residence,
+      cityText,
+      districtText,
+      stateText,
+      sanghName,
+      roleText,
     ];
+    const infoRows = T.labels.map((lbl, i) => [lbl, infoValues[i]]);
 
     for (const [label, value] of infoRows) {
       ctx.font = `bold ${AL.fontSize}px ${AL_FONT}`;
@@ -4322,48 +4443,18 @@ const generateAppointmentLetter = async (req, res) => {
 
     // ===== Paragraph 1 =====
     ctx.font = `${AL.fontSize}px ${AL_FONT}`;
-    y = alDrawParagraph(
-      ctx,
-      "हर्ष के साथ सूचित किया जाता है कि आपको जैन प्रबुद्ध मंच ट्रस्ट में उक्तलिखित पद पर आगामी 02 वर्षों की अवधि के लिए नियुक्त किया जाता है।",
-      AL.bodyX,
-      y,
-      AL.bodyMaxW,
-      AL.lineH,
-    );
+    y = alDrawParagraph(ctx, T.para1, AL.bodyX, y, AL.bodyMaxW, AL.lineH);
     y += 8;
 
     // ===== Paragraph 2 =====
-    y = alDrawParagraph(
-      ctx,
-      "आपकी नियुक्ति संस्था के नियमों, दिशा-निर्देशों एवं संविधान के अनुरूप की गई है। संस्था के प्रति आपकी निष्ठा, समर्पण एवं सामाजिक कार्यों में सक्रिय सहभागिता को ध्यान में रखते हुए आपको यह जिम्मेदारी सौंपी जा रही है।",
-      AL.bodyX,
-      y,
-      AL.bodyMaxW,
-      AL.lineH,
-    );
+    y = alDrawParagraph(ctx, T.para2, AL.bodyX, y, AL.bodyMaxW, AL.lineH);
     y += 8;
 
-    y = alDrawParagraph(
-      ctx,
-      "आपसे अपेक्षा की जाती है कि आप—",
-      AL.bodyX,
-      y,
-      AL.bodyMaxW,
-      AL.lineH,
-    );
+    y = alDrawParagraph(ctx, T.expect, AL.bodyX, y, AL.bodyMaxW, AL.lineH);
     y += 4;
 
     // ===== 8 points =====
-    const points = [
-      "संस्था के उद्देश्यों एवं विचारों का प्रचार-प्रसार करेंगे।",
-      "पारदर्शिता, निष्ठा एवं समर्पण के साथ अपने दायित्वों का निर्वहन करेंगे।",
-      "उच्च संगठन द्वारा दिए गए दिशा-निर्देशों का पालन करेंगे।",
-      "नियमित बैठकों में सहभागिता करेंगे एवं आवश्यक प्रतिवेदन प्रस्तुत करेंगे।",
-      "समाजहित एवं संगठनहित के कार्यक्रमों में सक्रिय भूमिका निभाएंगे।",
-      "संगठन को मजबूत बनाने एवं अधिक से अधिक समाजजनों को जोड़ने का प्रयास करेंगे।",
-      "संस्था की गरिमा, अनुशासन एवं नियमों का सदैव पालन करेंगे।",
-      "प्रत्येक माह दिनांक 1 से 5 तारीख के बीच अपने संघ की नियमित रिपोर्ट जैनत्व ऐप या वेबसाइट पर करना आवश्यक होगा। इसी रिपोर्ट के आधार पर संघ की गतिविधियों एवं कार्यप्रदर्शन की रैंकिंग तय की जाएगी।",
-    ];
+    const points = T.points;
 
     ctx.font = `${AL.fontSize}px ${AL_FONT}`;
     for (let i = 0; i < points.length; i++) {
@@ -4382,34 +4473,19 @@ const generateAppointmentLetter = async (req, res) => {
     y += 10;
 
     // ===== Closing =====
-    y = alDrawParagraph(
-      ctx,
-      "अतः आपसे अनुरोध है कि इस नियुक्ति पत्र की प्रति पर हस्ताक्षर कर अपनी सहमति प्रदान करें।",
-      AL.bodyX,
-      y,
-      AL.bodyMaxW,
-      AL.lineH,
-    );
+    y = alDrawParagraph(ctx, T.close1, AL.bodyX, y, AL.bodyMaxW, AL.lineH);
     y += 4;
 
-    y = alDrawParagraph(
-      ctx,
-      "आपके सफल कार्यकाल एवं उज्ज्वल भविष्य के लिए हार्दिक शुभकामनाएँ।",
-      AL.bodyX,
-      y,
-      AL.bodyMaxW,
-      AL.lineH,
-    );
+    y = alDrawParagraph(ctx, T.close2, AL.bodyX, y, AL.bodyMaxW, AL.lineH);
 
     y += 18;
 
-    // ================= SIGNATURE BLOCK =================
+    // ================= SIGNATURE BLOCK (PRESIDENT ka) =================
     ctx.font = `bold ${AL.fontSize}px ${AL_FONT}`;
-    ctx.fillText("भवदीय", AL.bodyX, y);
+    ctx.fillText(T.yours, AL.bodyX, y);
     y += 10;
 
-    // Signature image sirf foundation president (Vivek) ki available hai.
-    // Doosre presidents ke liye jagah chhod do (unki sign image nahi hai).
+    // Signature image sirf foundation president (Vivek) ki hai; baaki ke liye jagah khaali.
     if (presIsFoundation) {
       const sign = await loadAppointmentSign();
       if (sign) {
@@ -4429,24 +4505,31 @@ const generateAppointmentLetter = async (req, res) => {
 
     ctx.fillStyle = "#1A1A1A";
     ctx.font = `bold 24px ${AL_FONT}`;
-    ctx.fillText(presRoleHindi, AL.bodyX, y);
+    ctx.fillText(presRoleLabel, AL.bodyX, y);
     y += 30;
 
     ctx.fillText(presSanghName, AL.bodyX, y);
 
     // ================= BOTTOM-RIGHT NOTE (digitally generated) =================
-    // Chूँki sab presidents ke signature image nahi hain, isliye ye note.
-    // x KAM karo -> left; y KAM karo -> upar (footerSafeY = 1740 ke upar rakhna).
     ctx.save();
     ctx.textAlign = "right";
     ctx.fillStyle = "#555555";
     ctx.font = `18px ${AL_FONT}`;
-    ctx.fillText("यह पत्र डिजिटल रूप से जनरेट किया गया है।", 1360, 1690);
-    ctx.fillText(
-      "इस पर अंकित नाम ही हस्ताक्षर के रूप में मान्य है।",
-      1360,
-      1716,
-    );
+    if (isEn) {
+      ctx.fillText("This letter is digitally generated.", 1360, 1690);
+      ctx.fillText(
+        "The printed name is treated as a valid signature.",
+        1360,
+        1716,
+      );
+    } else {
+      ctx.fillText("यह पत्र डिजिटल रूप से जनरेट किया गया है।", 1360, 1690);
+      ctx.fillText(
+        "इस पर अंकित नाम ही हस्ताक्षर के रूप में मान्य है।",
+        1360,
+        1716,
+      );
+    }
     ctx.restore();
     ctx.textAlign = "left";
 
@@ -4469,10 +4552,10 @@ const getClaimTargetSanghs = asyncHandler(async (req, res) => {
     if (!current) {
       return errorResponse(res, "Sangh not found", 404);
     }
- 
+
     const loc = current.location || {};
     const level = current.level;
- 
+
     // Level -> upar wala level + location key jispe match karna hai
     const map = {
       city: { upLevel: "district", key: "district", val: loc.district },
@@ -4481,10 +4564,10 @@ const getClaimTargetSanghs = asyncHandler(async (req, res) => {
       country: { upLevel: "foundation", key: null, val: null },
       area: { upLevel: "city", key: "city", val: loc.city },
     };
- 
+
     const rule = map[level];
     const options = [];
- 
+
     // Upar wala level ka sangh (location match) - foundation ke alawa
     if (rule && rule.upLevel && rule.upLevel !== "foundation") {
       const q = { level: rule.upLevel, status: "active" };
@@ -4502,13 +4585,13 @@ const getClaimTargetSanghs = asyncHandler(async (req, res) => {
         }),
       );
     }
- 
+
     // Foundation hamesha (dynamically level=foundation)
     const foundation = await HierarchicalSangh.findOne({
       level: "foundation",
       status: "active",
     }).select("name level location");
- 
+
     if (foundation) {
       options.push({
         _id: foundation._id,
@@ -4518,7 +4601,7 @@ const getClaimTargetSanghs = asyncHandler(async (req, res) => {
         isFoundation: true,
       });
     }
- 
+
     return successResponse(
       res,
       {
