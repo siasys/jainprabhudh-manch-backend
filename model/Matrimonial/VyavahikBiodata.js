@@ -525,6 +525,19 @@ const vyavahikBiodataSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+// ✅ Ek user = ek biodata (DB level guarantee)
+// In-memory lock sirf ek server process me kaam karta hai; ye unique index
+// har case me duplicate rokta hai (multiple instances, restart, retry).
+// partialFilterExpression: purane docs jinke paas userId nahi hai, wo conflict nahi karenge.
+vyavahikBiodataSchema.index(
+  { userId: 1 },
+  {
+    unique: true,
+    name: "uniq_userId",
+    partialFilterExpression: { userId: { $type: "objectId" } },
+  },
+);
+
 const VyavahikBiodata = mongoose.model(
   "VyavahikBiodata",
   vyavahikBiodataSchema,
