@@ -321,34 +321,6 @@ const upsertSelfScore = async ({
   );
 };
 
-/**
- * FIX: totalScore = selfScore + receivedScore — bulkWrite se sync.
- * Pehle har doc par doc.save() hota tha → ek bhi invalid doc (jaise level
- * "international" jo enum me nahi tha) par poora loop crash ho jaata tha,
- * aur baaki sanghon ka totalScore 0 reh jaata tha.
- */
-const syncTotalScores = async (periodType, periodKey) => {
-  const docs = await SanghScore.find({ periodType, periodKey })
-    .select("_id selfScore receivedScore totalScore")
-    .lean();
-
-  const ops = [];
-  for (const d of docs) {
-    const total = (d.selfScore || 0) + (d.receivedScore || 0);
-    if (d.totalScore !== total) {
-      ops.push({
-        updateOne: {
-          filter: { _id: d._id },
-          update: { $set: { totalScore: total } },
-        },
-      });
-    }
-  }
-
-  if (ops.length) await SanghScore.bulkWrite(ops, { ordered: false });
-  return ops.length;
-};
-
 // hoisting fix — upar ke function me SanghScore call ho raha hai
 function SanghScoreModel() {
   return SanghScore;
@@ -371,6 +343,13 @@ function SanghScoreModel() {
 const runScoreForPeriod = async (periodType, start, end, opts = {}) => {
   const { manualBySangh = {}, requireForm = false } = opts;
   const periodKey = buildPeriodKey(periodType, start);
+
+  // DB-SAVER: daily me 0 score wale sangh ka record NAHI banta
+  // (monthly/yearly me sabka banta hai — form status track karna hai)
+  const skipZero = periodType === "daily";
+  // received wale sangh ka record banana pade to uski info yahan se milegi
+  const receiverMeta = {};
+  let skippedZero = 0;
 
   const sanghs = await Sangh()
     .find({ status: "active" })
@@ -428,6 +407,14 @@ const runScoreForPeriod = async (periodType, start, end, opts = {}) => {
       const distributedTo = formMissed
         ? []
         : buildDistribution(selfScore, ancestors);
+
+      for (const a of ancestors) receiverMeta[String(a._id)] = a;
+
+      // DB-SAVER: daily + 0 score → record save mat karo
+      if (skipZero && selfScore <= 0) {
+        skippedZero++;
+        continue;
+      }
 
       const doc = await upsertSelfScore({
         sangh,
@@ -492,14 +479,38 @@ const runScoreForPeriod = async (periodType, start, end, opts = {}) => {
     try {
       const receivedScore = fromList.reduce((s, f) => s + (f.points || 0), 0);
 
+      const update = {
+        $set: {
+          receivedScore,
+          receivedFrom: fromList,
+        },
+      };
+      const options = {};
+
+      // DB-SAVER: daily me receiver ka apna score 0 tha to uska record bana
+      // hi nahi — ab received points ke liye record bana do
+      if (skipZero) {
+        const meta = receiverMeta[toSanghId] || {};
+        update.$setOnInsert = {
+          sanghName: meta.name,
+          level: meta.level,
+          sanghType: meta.sanghType || "main",
+          periodStart: start,
+          periodEnd: end,
+          day: start.getDate(),
+          month: start.getMonth() + 1,
+          year: start.getFullYear(),
+          selfScore: 0,
+          source: "auto",
+        };
+        options.upsert = true;
+        options.setDefaultsOnInsert = true;
+      }
+
       await SanghScore.findOneAndUpdate(
         { sanghId: toSanghId, periodType, periodKey },
-        {
-          $set: {
-            receivedScore,
-            receivedFrom: fromList,
-          },
-        },
+        update,
+        options,
       );
     } catch (err) {
       console.error(
@@ -510,7 +521,26 @@ const runScoreForPeriod = async (periodType, start, end, opts = {}) => {
   }
 
   // totalScore sync (pre-save hook findOneAndUpdate par nahi chalta)
-  await syncTotalScores(periodType, periodKey);
+  const allDocs = await SanghScore.find({ periodType, periodKey });
+  for (const doc of allDocs) {
+    const total = (doc.selfScore || 0) + (doc.receivedScore || 0);
+    if (doc.totalScore !== total) {
+      doc.totalScore = total;
+      await doc.save();
+    }
+  }
+
+  // DB-SAVER: cron dobara chala ho to pichli run ke 0 wale daily records hatao
+  let removedZero = 0;
+  if (skipZero) {
+    const del = await SanghScore.deleteMany({
+      periodType,
+      periodKey,
+      selfScore: 0,
+      receivedScore: 0,
+    });
+    removedZero = del.deletedCount || 0;
+  }
 
   return {
     periodType,
@@ -518,6 +548,7 @@ const runScoreForPeriod = async (periodType, start, end, opts = {}) => {
     sanghCount: sanghs.length,
     processed: results.length,
     distributions: distributionLedger.length,
+    ...(skipZero ? { skippedZero, removedZero } : {}),
   };
 };
 
@@ -869,7 +900,6 @@ const saveMonthlyManualData = async ({
     extra: {
       formSubmitted: true,
       formSubmittedAt: new Date(),
-      formMissed: false, // FIX: snapshot ne true kiya tha, form bharne par reset
       reportId,
     },
   });
@@ -919,7 +949,11 @@ const refreshReceivedForPeriod = async (periodType, periodKey) => {
   }
 
   // totalScore sync
-  await syncTotalScores(periodType, periodKey);
+  const docs = await SanghScore.find({ periodType, periodKey });
+  for (const doc of docs) {
+    doc.totalScore = (doc.selfScore || 0) + (doc.receivedScore || 0);
+    await doc.save();
+  }
 };
 
 /**
@@ -995,6 +1029,5 @@ module.exports = {
   previewSanghScore,
   saveMonthlyManualData,
   refreshReceivedForPeriod,
-  syncTotalScores,
   lockMonthlyReports,
 };

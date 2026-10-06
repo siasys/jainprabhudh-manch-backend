@@ -105,16 +105,7 @@ const sanghScoreSchema = new mongoose.Schema(
     sanghName: { type: String },
     level: {
       type: String,
-      // FIX: "international" add kiya — warna doc.save() validation fail hota tha
-      enum: [
-        "foundation",
-        "international",
-        "country",
-        "state",
-        "district",
-        "city",
-        "area",
-      ],
+      enum: ["foundation", "country", "state", "district", "city", "area"],
     },
     sanghType: {
       type: String,
@@ -203,6 +194,21 @@ sanghScoreSchema.index(
 sanghScoreSchema.index({ periodType: 1, periodKey: 1, totalScore: -1 });
 // Ek sangh ki history timeline
 sanghScoreSchema.index({ sanghId: 1, periodType: 1, periodStart: -1 });
+
+// DB-SAVER: sirf DAILY records 15 din baad MongoDB khud delete karega (TTL).
+// Monthly / yearly records hamesha rahenge (partialFilterExpression).
+// 15 din periodStart (jis din ka score hai) se gine jaate hain.
+// Din badalne ho to DAILY_RETENTION_DAYS badlo — aur Atlas me collMod se
+// purane index ka expireAfterSeconds update karo.
+const DAILY_RETENTION_DAYS = 15;
+sanghScoreSchema.index(
+  { periodStart: 1 },
+  {
+    name: "daily_ttl_periodStart",
+    expireAfterSeconds: DAILY_RETENTION_DAYS * 24 * 60 * 60,
+    partialFilterExpression: { periodType: "daily" },
+  },
+);
 
 // ── HELPERS ───────────────────────────────────────────────────────────
 
