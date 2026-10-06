@@ -8,12 +8,9 @@ const {
   FORM_WINDOW,
 } = require("../config/scoreConfig");
 
-
 // ── MODEL GETTERS (lazy) ────────────────────────────────────────────────
 const Sangh = () => mongoose.model("HierarchicalSangh");
 const JainAadhar = () => mongoose.model("JainAadhar");
-
-
 
 /** Ek din ka range: [aaj 00:00:00, kal 00:00:00) */
 const getDayRange = (date = new Date()) => {
@@ -324,6 +321,34 @@ const upsertSelfScore = async ({
   );
 };
 
+/**
+ * FIX: totalScore = selfScore + receivedScore — bulkWrite se sync.
+ * Pehle har doc par doc.save() hota tha → ek bhi invalid doc (jaise level
+ * "international" jo enum me nahi tha) par poora loop crash ho jaata tha,
+ * aur baaki sanghon ka totalScore 0 reh jaata tha.
+ */
+const syncTotalScores = async (periodType, periodKey) => {
+  const docs = await SanghScore.find({ periodType, periodKey })
+    .select("_id selfScore receivedScore totalScore")
+    .lean();
+
+  const ops = [];
+  for (const d of docs) {
+    const total = (d.selfScore || 0) + (d.receivedScore || 0);
+    if (d.totalScore !== total) {
+      ops.push({
+        updateOne: {
+          filter: { _id: d._id },
+          update: { $set: { totalScore: total } },
+        },
+      });
+    }
+  }
+
+  if (ops.length) await SanghScore.bulkWrite(ops, { ordered: false });
+  return ops.length;
+};
+
 // hoisting fix — upar ke function me SanghScore call ho raha hai
 function SanghScoreModel() {
   return SanghScore;
@@ -485,14 +510,7 @@ const runScoreForPeriod = async (periodType, start, end, opts = {}) => {
   }
 
   // totalScore sync (pre-save hook findOneAndUpdate par nahi chalta)
-  const allDocs = await SanghScore.find({ periodType, periodKey });
-  for (const doc of allDocs) {
-    const total = (doc.selfScore || 0) + (doc.receivedScore || 0);
-    if (doc.totalScore !== total) {
-      doc.totalScore = total;
-      await doc.save();
-    }
-  }
+  await syncTotalScores(periodType, periodKey);
 
   return {
     periodType,
@@ -851,6 +869,7 @@ const saveMonthlyManualData = async ({
     extra: {
       formSubmitted: true,
       formSubmittedAt: new Date(),
+      formMissed: false, // FIX: snapshot ne true kiya tha, form bharne par reset
       reportId,
     },
   });
@@ -900,11 +919,7 @@ const refreshReceivedForPeriod = async (periodType, periodKey) => {
   }
 
   // totalScore sync
-  const docs = await SanghScore.find({ periodType, periodKey });
-  for (const doc of docs) {
-    doc.totalScore = (doc.selfScore || 0) + (doc.receivedScore || 0);
-    await doc.save();
-  }
+  await syncTotalScores(periodType, periodKey);
 };
 
 /**
@@ -980,5 +995,6 @@ module.exports = {
   previewSanghScore,
   saveMonthlyManualData,
   refreshReceivedForPeriod,
+  syncTotalScores,
   lockMonthlyReports,
 };

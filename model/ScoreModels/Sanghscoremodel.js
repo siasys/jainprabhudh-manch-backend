@@ -105,7 +105,16 @@ const sanghScoreSchema = new mongoose.Schema(
     sanghName: { type: String },
     level: {
       type: String,
-      enum: ["foundation", "country", "state", "district", "city", "area"],
+      // FIX: "international" add kiya — warna doc.save() validation fail hota tha
+      enum: [
+        "foundation",
+        "international",
+        "country",
+        "state",
+        "district",
+        "city",
+        "area",
+      ],
     },
     sanghType: {
       type: String,

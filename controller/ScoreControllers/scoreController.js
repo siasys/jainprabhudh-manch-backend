@@ -502,13 +502,43 @@ const getLeaderboard = asyncHandler(async (req, res) => {
   if (req.query.level) filter.level = req.query.level;
   if (req.query.sanghType) filter.sanghType = req.query.sanghType;
 
-  const records = await SanghScore.find(filter)
+  let records = await SanghScore.find(filter)
     .select(
-      "sanghId sanghName level sanghType selfScore receivedScore totalScore",
+      "sanghId sanghName level sanghType selfScore receivedScore totalScore formSubmitted formMissed locked",
     )
     .sort({ totalScore: -1 })
     .limit(limit)
     .lean();
+
+  // FIX: yearly snapshot sirf 1 Jan ko pichle saal ka banta hai — chalte saal
+  // me yearly records nahi hote. Tab monthly records jodkar running total do
+  // (getYearlyScore bhi yahi karta hai).
+  let isFinal = true;
+  if (periodType === "yearly" && records.length === 0) {
+    isFinal = false;
+    const match = { periodType: "monthly", year: parseInt(periodKey, 10) };
+    if (req.query.level) match.level = req.query.level;
+    if (req.query.sanghType) match.sanghType = req.query.sanghType;
+
+    records = await SanghScore.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: "$sanghId",
+          sanghName: { $first: "$sanghName" },
+          level: { $first: "$level" },
+          sanghType: { $first: "$sanghType" },
+          selfScore: { $sum: { $ifNull: ["$selfScore", 0] } },
+          receivedScore: { $sum: { $ifNull: ["$receivedScore", 0] } },
+          totalScore: { $sum: { $ifNull: ["$totalScore", 0] } },
+          monthsSubmitted: { $sum: { $cond: ["$formSubmitted", 1, 0] } },
+        },
+      },
+      { $sort: { totalScore: -1 } },
+      { $limit: limit },
+    ]);
+    records = records.map((r) => ({ ...r, sanghId: r._id }));
+  }
 
   // ── NEW: har sangh ka location (state/district/city) jodo — podium ke liye ──
   let locationMap = {};
@@ -532,6 +562,7 @@ const getLeaderboard = asyncHandler(async (req, res) => {
     message: {
       periodType,
       periodKey,
+      isFinal, // yearly: false = saal chal raha hai (monthly ka running total)
       count: records.length,
       leaderboard: records.map((r, i) => ({
         rank: i + 1,
@@ -570,14 +601,23 @@ const getScoreConfig = asyncHandler(async (req, res) => {
 //  8. MANUAL TRIGGERS  (superadmin — testing)
 // ════════════════════════════════════════════════════════════════════════
 
+/** FIX: manual triggers sirf superadmin — pehle koi bhi logged-in user chala sakta tha */
+const denyIfNotSuperadmin = (req, res) => {
+  if (req.user?.role === "superadmin") return false;
+  res.status(403).json({ success: false, message: "Superadmin only" });
+  return true;
+};
+
 /** POST /api/score/trigger/daily   body: { date? } */
 const triggerDaily = asyncHandler(async (req, res) => {
+  if (denyIfNotSuperadmin(req, res)) return;
   const result = await triggers.daily(req.body.date || null);
   return res.json({ success: true, message: result });
 });
 
 /** POST /api/score/trigger/monthly  body: { year, month } */
 const triggerMonthly = asyncHandler(async (req, res) => {
+  if (denyIfNotSuperadmin(req, res)) return;
   const result = await triggers.monthly(
     parseInt(req.body.year, 10) || null,
     parseInt(req.body.month, 10) || null,
@@ -587,12 +627,14 @@ const triggerMonthly = asyncHandler(async (req, res) => {
 
 /** POST /api/score/trigger/yearly  body: { year } */
 const triggerYearly = asyncHandler(async (req, res) => {
+  if (denyIfNotSuperadmin(req, res)) return;
   const result = await triggers.yearly(parseInt(req.body.year, 10) || null);
   return res.json({ success: true, message: result });
 });
 
 /** POST /api/score/trigger/lock  body: { year, month } */
 const triggerLock = asyncHandler(async (req, res) => {
+  if (denyIfNotSuperadmin(req, res)) return;
   const result = await triggers.lock(
     parseInt(req.body.year, 10) || null,
     parseInt(req.body.month, 10) || null,
