@@ -195,9 +195,9 @@ sanghScoreSchema.index({ periodType: 1, periodKey: 1, totalScore: -1 });
 // Ek sangh ki history timeline
 sanghScoreSchema.index({ sanghId: 1, periodType: 1, periodStart: -1 });
 
-// DB-SAVER: sirf DAILY records 15 din baad MongoDB khud delete karega (TTL).
+// DB-SAVER: sirf DAILY records 10 din baad MongoDB khud delete karega (TTL).
 // Monthly / yearly records hamesha rahenge (partialFilterExpression).
-// 15 din periodStart (jis din ka score hai) se gine jaate hain.
+// 10 din periodStart (jis din ka score hai) se gine jaate hain.
 // Din badalne ho to DAILY_RETENTION_DAYS badlo — aur Atlas me collMod se
 // purane index ka expireAfterSeconds update karo.
 const DAILY_RETENTION_DAYS = 10;
