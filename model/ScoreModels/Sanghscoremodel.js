@@ -200,7 +200,7 @@ sanghScoreSchema.index({ sanghId: 1, periodType: 1, periodStart: -1 });
 // 15 din periodStart (jis din ka score hai) se gine jaate hain.
 // Din badalne ho to DAILY_RETENTION_DAYS badlo — aur Atlas me collMod se
 // purane index ka expireAfterSeconds update karo.
-const DAILY_RETENTION_DAYS = 15;
+const DAILY_RETENTION_DAYS = 10;
 sanghScoreSchema.index(
   { periodStart: 1 },
   {
