@@ -5,6 +5,8 @@ const {
   getDonationPoints,
   DISTRIBUTION,
   isPanchAllowed,
+  SCORE_EXCLUDED_LEVELS,
+  isLevelScored,
   FORM_WINDOW,
 } = require("../config/scoreConfig");
 
@@ -245,6 +247,7 @@ const buildDistribution = (selfScore, ancestors) => {
 
   const dist = [];
   for (const anc of ancestors) {
+    if (!isLevelScored(anc.level)) continue; // foundation → scoring se bahar
     const pct = DISTRIBUTION[anc.level];
     if (!pct) continue; // foundation / area → koi % nahi
 
@@ -351,8 +354,9 @@ const runScoreForPeriod = async (periodType, start, end, opts = {}) => {
   const receiverMeta = {};
   let skippedZero = 0;
 
+  // foundation level scoring se bahar — inka record banta hi nahi
   const sanghs = await Sangh()
-    .find({ status: "active" })
+    .find({ status: "active", level: { $nin: SCORE_EXCLUDED_LEVELS } })
     .select("_id name level sanghType parentSangh members panches")
     .lean();
 
@@ -615,6 +619,7 @@ const aggregateYearlyFromMonthly = async (year) => {
     periodType: "monthly",
     year,
     formSubmitted: true,
+    level: { $nin: SCORE_EXCLUDED_LEVELS },
   }).lean();
 
   // sangh ke hisaab se group karo
@@ -655,6 +660,7 @@ const aggregateYearlyFromMonthly = async (year) => {
         .select("_id name level sanghType parentSangh")
         .lean();
       if (!sangh) continue;
+      if (!isLevelScored(sangh.level)) continue; // foundation → yearly nahi
 
       const ancestors = await getAncestors(sangh);
       const distributedTo = buildDistribution(entry.selfScore, ancestors);
@@ -842,7 +848,9 @@ const saveMonthlyManualData = async ({
     .lean();
 
   if (!sangh) throw new Error("Sangh not found");
-
+  if (!isLevelScored(sangh.level)) {
+    throw new Error("Scoring is not applicable for foundation level sangh");
+  }
   const periodKey = buildPeriodKey("monthly", new Date(year, month - 1, 1));
 
   // lock check — 5 tareekh ke baad edit nahi

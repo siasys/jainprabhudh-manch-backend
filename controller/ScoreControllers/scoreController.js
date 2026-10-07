@@ -11,6 +11,8 @@ const {
   DONATION_SLABS,
   DISTRIBUTION,
   FORM_WINDOW,
+  SCORE_EXCLUDED_LEVELS,
+  isLevelScored,
 } = require("../../config/scoreConfig");
 
 /**
@@ -60,6 +62,23 @@ const canManageSangh = async (user, sanghId) => {
   );
 };
 
+/**
+ * Foundation level sangh scoring se bahar hai.
+ * true return kare to response bhej diya gaya hai — caller turant return kare.
+ */
+const denyIfNotScored = async (sanghId, res) => {
+  const sangh = await Sangh().findById(sanghId).select("level").lean();
+  if (sangh && !isLevelScored(sangh.level)) {
+    res.status(403).json({
+      success: false,
+      scoringApplicable: false,
+      message: "Scoring is not applicable for foundation level sangh",
+    });
+    return true;
+  }
+  return false;
+};
+
 /** Date string "2026-07-13" ko safely parse karo */
 const parseDate = (str) => {
   if (!str) return null;
@@ -94,6 +113,7 @@ const getDailyScore = asyncHandler(async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(sanghId)) {
     return res.status(400).json({ success: false, message: "Invalid sanghId" });
   }
+  if (await denyIfNotScored(sanghId, res)) return;
 
   const { start, end } = scoreService.getDayRange(target);
   const periodKey = scoreService.buildPeriodKey("daily", start);
@@ -181,6 +201,7 @@ const getMonthlyScore = asyncHandler(async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(sanghId)) {
     return res.status(400).json({ success: false, message: "Invalid sanghId" });
   }
+  if (await denyIfNotScored(sanghId, res)) return;
 
   // default = PICHLA mahina (kyunki form pichle mahine ka bharta hai)
   const prev = scoreService.getPreviousMonth();
@@ -273,6 +294,7 @@ const getYearlyScore = asyncHandler(async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(sanghId)) {
     return res.status(400).json({ success: false, message: "Invalid sanghId" });
   }
+  if (await denyIfNotScored(sanghId, res)) return;
 
   const periodKey = String(year);
 
@@ -341,6 +363,7 @@ const getScoreHistory = asyncHandler(async (req, res) => {
       .status(400)
       .json({ success: false, message: "Invalid periodType" });
   }
+  if (await denyIfNotScored(sanghId, res)) return;
 
   const records = await SanghScore.find({ sanghId, periodType })
     .select(
@@ -498,8 +521,23 @@ const getLeaderboard = asyncHandler(async (req, res) => {
     }
   }
 
+  // foundation level ko compare nahi karna — seedha khaali list
+  if (req.query.level && !isLevelScored(req.query.level)) {
+    return res.json({
+      success: true,
+      message: {
+        periodType,
+        periodKey,
+        isFinal: true,
+        count: 0,
+        leaderboard: [],
+      },
+    });
+  }
+
   const filter = { periodType, periodKey };
-  if (req.query.level) filter.level = req.query.level;
+  // level na diya ho to bhi foundation ko bahar rakho (purane records ke liye)
+  filter.level = req.query.level || { $nin: SCORE_EXCLUDED_LEVELS };
   if (req.query.sanghType) filter.sanghType = req.query.sanghType;
 
   let records = await SanghScore.find(filter)
@@ -517,7 +555,7 @@ const getLeaderboard = asyncHandler(async (req, res) => {
   if (periodType === "yearly" && records.length === 0) {
     isFinal = false;
     const match = { periodType: "monthly", year: parseInt(periodKey, 10) };
-    if (req.query.level) match.level = req.query.level;
+    match.level = req.query.level || { $nin: SCORE_EXCLUDED_LEVELS };
     if (req.query.sanghType) match.sanghType = req.query.sanghType;
 
     records = await SanghScore.aggregate([
@@ -593,6 +631,7 @@ const getScoreConfig = asyncHandler(async (req, res) => {
       })),
       distribution: DISTRIBUTION,
       formWindow: FORM_WINDOW,
+      excludedLevels: SCORE_EXCLUDED_LEVELS, // UI: in levels par score tab chhupao
     },
   });
 });

@@ -158,6 +158,16 @@ const isPanchAllowed = (sanghType) =>
   !PANCH_EXCLUDED_SANGH_TYPES.includes(sanghType);
 
 /**
+ * SCORE EXCLUDED LEVELS — in levels ke sangh scoring se POORI TARAH bahar hain:
+ *  - inka daily / monthly / yearly score record NAHI banta
+ *  - leaderboard / comparison me nahi aate
+ *  - niche walon se koi % nahi milta
+ */
+const SCORE_EXCLUDED_LEVELS = ["foundation"];
+
+const isLevelScored = (level) => !SCORE_EXCLUDED_LEVELS.includes(level);
+
+/**
  * MONTHLY FORM WINDOW
  * Har mahine ki 1 se 5 tareekh tak PICHLE mahine ka form bhara jaayega.
  * 5 tareekh raat 12:00 (यानी 6 tareekh 00:00) par window band.
@@ -189,6 +199,8 @@ module.exports = {
   SANGH_TYPES,
   PANCH_EXCLUDED_SANGH_TYPES,
   isPanchAllowed,
+  SCORE_EXCLUDED_LEVELS,
+  isLevelScored,
   FORM_WINDOW,
   CRON,
 };
