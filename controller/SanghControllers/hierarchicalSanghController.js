@@ -3941,7 +3941,7 @@ const AL = {
   labelSize: 25,
   // Template me "दिनांक-" already chhapa hua hai (canvas y ~294).
   // Value uske aage right-aligned rakhi hai taaki canvas se bahar na jaye.
-  dateX: 1350,
+  dateX: 1390,
   dateY: 294,
   dateSize: 20,
   // Top-right contact block (letterhead ke same coordinates)
