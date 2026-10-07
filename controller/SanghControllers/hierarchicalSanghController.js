@@ -4378,22 +4378,46 @@ const generateAppointmentLetter = async (req, res) => {
 
     ctx.textAlign = "center";
 
+    const SIDE_CX = 120; // sidebar ka center
+    const SIDE_MAX_W = 205; // red line se pehle tak safe width
+
+    // ---- Naam: pehle font chhota karke ek line me fit karne ki koshish ----
     ctx.fillStyle = "#E53935";
-    ctx.font = `bold 30px ${AL_FONT}`;
-    ctx.fillText(presName, 120, 515);
-
-    ctx.fillStyle = "#1A1A1A";
-    ctx.font = `bold 25px ${AL_FONT}`;
-    ctx.fillText(presRoleLabel, 120, 549);
-
-    ctx.font = `bold 23px ${AL_FONT}`;
-    const sanghLines = alWrapText(ctx, presSanghName, 215).slice(0, 2);
-    let sanghY = 580;
-    for (const line of sanghLines) {
-      ctx.fillText(line, 120, sanghY);
-      sanghY += 28;
+    let nameSize = 30;
+    ctx.font = `bold ${nameSize}px ${AL_FONT}`;
+    while (ctx.measureText(presName).width > SIDE_MAX_W && nameSize > 22) {
+      nameSize -= 1;
+      ctx.font = `bold ${nameSize}px ${AL_FONT}`;
     }
 
+    let sideY = 515;
+    if (ctx.measureText(presName).width <= SIDE_MAX_W) {
+      // ek line me fit ho gaya
+      ctx.fillText(presName, SIDE_CX, sideY);
+      sideY += 34;
+    } else {
+      // 22px par bhi fit nahi -> 2 line me todo
+      const nameLines = alWrapText(ctx, presName, SIDE_MAX_W).slice(0, 2);
+      for (const line of nameLines) {
+        ctx.fillText(line, SIDE_CX, sideY);
+        sideY += nameSize + 4;
+      }
+      sideY += 4;
+    }
+
+    // ---- Role (अध्यक्ष) ----
+    ctx.fillStyle = "#1A1A1A";
+    ctx.font = `bold 25px ${AL_FONT}`;
+    ctx.fillText(presRoleLabel, SIDE_CX, sideY);
+    sideY += 31;
+
+    // ---- Sangh name ----
+    ctx.font = `bold 23px ${AL_FONT}`;
+    const sanghLines = alWrapText(ctx, presSanghName, SIDE_MAX_W).slice(0, 2);
+    for (const line of sanghLines) {
+      ctx.fillText(line, SIDE_CX, sideY);
+      sideY += 28;
+    }
     // body ke liye alignment/colour reset
     ctx.textAlign = "left";
 
