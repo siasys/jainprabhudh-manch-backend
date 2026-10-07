@@ -3941,7 +3941,7 @@ const AL = {
   labelSize: 25,
   // Template me "दिनांक-" already chhapa hua hai (canvas y ~294).
   // Value uske aage right-aligned rakhi hai taaki canvas se bahar na jaye.
-  dateX: 1405,
+  dateX: 1350,
   dateY: 294,
   dateSize: 20,
   // Top-right contact block (letterhead ke same coordinates)
@@ -4270,13 +4270,8 @@ const generateAppointmentLetter = async (req, res) => {
     const presRoleWord = presEntry?.role
       ? presEntry.role.charAt(0).toUpperCase() + presEntry.role.slice(1)
       : "President";
-    const presRoleLabel = isEn
-      ? presIsFoundation
-        ? "Founder President"
-        : presRoleWord
-      : presIsFoundation
-        ? "फाउंडर अध्यक्ष"
-        : "अध्यक्ष";
+    // Role label dono language (hi + en) me English me hi rahega
+    const presRoleLabel = presIsFoundation ? "Founder President" : presRoleWord;
 
     // ===== Canvas =====
     const width = 1414;
@@ -4539,21 +4534,13 @@ const generateAppointmentLetter = async (req, res) => {
     ctx.textAlign = "right";
     ctx.fillStyle = "#555555";
     ctx.font = `18px ${AL_FONT}`;
-    if (isEn) {
-      ctx.fillText("This letter is digitally generated.", 1360, 1690);
-      ctx.fillText(
-        "The printed name is treated as a valid signature.",
-        1360,
-        1716,
-      );
-    } else {
-      ctx.fillText("यह पत्र डिजिटल रूप से जनरेट किया गया है।", 1360, 1690);
-      ctx.fillText(
-        "इस पर अंकित नाम ही हस्ताक्षर के रूप में मान्य है।",
-        1360,
-        1716,
-      );
-    }
+    // Note dono language (hi + en) me English me
+    ctx.fillText("This letter is digitally generated.", 1360, 1690);
+    ctx.fillText(
+      "The printed name is treated as a valid signature.",
+      1360,
+      1716,
+    );
     ctx.restore();
     ctx.textAlign = "left";
 
