@@ -1687,7 +1687,12 @@ const getAllUsers = asyncHandler(async (req, res) => {
   // Search me ye ulta chahiye. forSearch=true par normal createdAt order
   // milega aur limit ka cap bhi bada. Admin panel ye param bhejta hi nahi,
   // isliye uske liye behaviour bilkul purana rehta hai.
-  const isSearchMode = forSearch === "true" || forSearch === true;
+  const isSearchMode =
+    forSearch === "true" ||
+    forSearch === true ||
+    (Object.prototype.hasOwnProperty.call(req.query, "search") &&
+      Number(limit) === 1000 &&
+      !accountType);
 
   const currentUserId = req.user._id.toString();
   let query = {};
@@ -1729,6 +1734,23 @@ const getAllUsers = asyncHandler(async (req, res) => {
 
   query._id = { $nin: [...blockedUserIds, currentUserId] };
 
+  // Search Feed ke existing Android/Web eligibility rules, pagination se pehle.
+  // Admin requests unchanged.
+  if (isSearchMode) {
+    query.accountStatus = { $ne: "deactivated" };
+    query.$and = [
+      ...(query.$and || []),
+      {
+        $or: [
+          { accountType: { $in: ["business", "sadhu", "tirth"] } },
+          { accountType: "user", jainAadharStatus: "verified" },
+          { accountType: null, jainAadharStatus: "verified" },
+          { accountType: { $exists: false }, jainAadharStatus: "verified" },
+        ],
+      },
+    ];
+  }
+
   // ✅ NEW: search mode me 100 ka cap bahut chhota padta tha (frontend
   // limit=1000 bhejta hai par 100 par kat jata tha).
   const maxLimit = accountType ? 10000 : isSearchMode ? 2000 : 100;
@@ -1751,7 +1773,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
     // ✅ find() ki jagah aggregate() — taki status-priority sort kar sake
     User.aggregate([
       { $match: aggregateQuery },
-      {
+      ...(!isSearchMode ? [{
         $addFields: {
           _statusOrder: {
             $switch: {
@@ -1776,7 +1798,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
             },
           },
         },
-      },
+      }] : []),
       // ✅ NEW: search mode -> sirf createdAt (naye pehle).
       // Admin mode -> bilkul purana: pehle status, phir latest.
       {
@@ -1792,11 +1814,14 @@ const getAllUsers = asyncHandler(async (req, res) => {
     User.countDocuments({
       ...query,
       accountType: { $nin: ["business", "sadhu", "tirth"] },
-      $or: [
-        { jainAadharStatus: "none" },
-        { jainAadharStatus: { $exists: false } },
-        { jainAadharStatus: null },
-        { jainAadharStatus: "" },
+      $and: [
+        ...(query.$and || []),
+        { $or: [
+          { jainAadharStatus: "none" },
+          { jainAadharStatus: { $exists: false } },
+          { jainAadharStatus: null },
+          { jainAadharStatus: "" },
+        ] },
       ],
     }),
   ]);
@@ -1819,7 +1844,6 @@ const getAllUsers = asyncHandler(async (req, res) => {
     hasPrevPage: parsedPage > 1,
   });
 });
-
 // Enhanced user profile retrieval
 
 // Enhanced user profile retrieval
