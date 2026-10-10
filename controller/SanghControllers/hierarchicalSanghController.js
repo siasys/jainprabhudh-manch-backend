@@ -3998,6 +3998,36 @@ const alFormatDate = (d = new Date()) =>
     "0",
   )}-${d.getFullYear()}`;
 
+// ===== sanghTeams roles -> letter me dikhne wala label (hi / en) =====
+// Keys lowercase me hain taaki DB key ka case (sanghSahsachive / sanghsahsachive)
+// mismatch hone par bhi sahi label mile.
+const AL_TEAM_ROLE_LABELS = {
+  sanghsarakshak: { hi: "संरक्षक", en: "Patron" },
+  sanghmargdarshak: { hi: "मार्गदर्शक", en: "Mentor" },
+  sanghupadhyaksh: { hi: "उपाध्यक्ष", en: "Vice President" },
+  sanghsanghthansachive: { hi: "संगठन सचिव", en: "Organisation Secretary" },
+  sanghsahsachive: { hi: "सह-सचिव", en: "Joint Secretary" },
+  sanghkoshadhyksha: { hi: "कोषाध्यक्ष", en: "Treasurer" },
+  sanghpracharak: { hi: "प्रचारक", en: "Pracharak" },
+  sanghkarykarmpramukh: { hi: "कार्यक्रम प्रमुख", en: "Programme Head" },
+  sanghkaryakarinisadasya: { hi: "कार्यकारिणी सदस्य", en: "Executive Member" },
+};
+
+/**
+ * sanghTeams role key ko letter ka label banata hai.
+ * Map me na ho (naya role) to "sanghNayaPad" -> "Naya Pad".
+ */
+const alTeamRoleLabel = (role, isEn) => {
+  const raw = String(role || "").trim();
+  if (!raw) return "Member";
+  const lbl = AL_TEAM_ROLE_LABELS[raw.toLowerCase()];
+  if (lbl) return isEn ? lbl.en : lbl.hi;
+  return raw
+    .replace(/^sangh/i, "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/^./, (c) => c.toUpperCase());
+};
+
 // ===== Signing President resolver (hierarchy + location + sanghType match) =====
 // Appointee ke apne sangh ka president (khud ko chhod ke). Na mile to location +
 // sanghType match karke level ladder upar -- jahan pehle mile wahin ruk. Kahin na
@@ -4090,6 +4120,14 @@ const generateAppointmentLetter = async (req, res) => {
     sangh = await HierarchicalSangh.findOne({ "officeBearers.userId": userId });
     if (sangh) {
       user = sangh.officeBearers.find((m) => m.userId.toString() === userId);
+    }
+
+    // ===== sanghTeams me dhoondo =====
+    if (!user) {
+      sangh = await HierarchicalSangh.findOne({ "sanghTeams.userId": userId });
+      if (sangh) {
+        user = sangh.sanghTeams.find((m) => m.userId?.toString() === userId);
+      }
     }
 
     // ===== Fallback: regular members =====
@@ -4229,6 +4267,14 @@ const generateAppointmentLetter = async (req, res) => {
     const sanghTeamEntry = sangh.sanghTeams?.find(
       (st) => st.userId?.toString() === userId,
     );
+
+    // 🔴 sanghTeams wale ka role sanghTeams se (officeBearer role na ho tab)
+    if (
+      !(officeBearerEntry && officeBearerEntry.role) &&
+      sanghTeamEntry?.role
+    ) {
+      roleText = alTeamRoleLabel(sanghTeamEntry.role, isEn);
+    }
     const rawAppointmentDate =
       officeBearerEntry?.appointmentDate ||
       sanghTeamEntry?.appointmentDate ||
