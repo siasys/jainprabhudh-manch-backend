@@ -1436,6 +1436,42 @@ const editBiodata = async (req, res) => {
       ? [...biodata.uploadedPhotos]
       : [];
 
+    // ✅ Purani profile — photos top-level fields me thi (schema se hat chuki).
+    // uploadedPhotos khaali ho to unhe yahan le aao, warna edit ke baad
+    // purani Half Photo profile se gayab ho jaati
+    if (!uploadedPhotos.length) {
+      const legacy = biodata.toObject ? biodata.toObject() : biodata;
+      [
+        ["passportPhoto", "Passport Photo"],
+        ["fullPhoto", "Full Photo"],
+        ["familyPhoto", "Family Photo"],
+      ].forEach(([key, label]) => {
+        if (typeof legacy?.[key] === "string" && legacy[key].trim()) {
+          uploadedPhotos.push({ label, url: legacy[key].trim() });
+        }
+      });
+    }
+
+    // ✅ Edit me photo DELETE — app "removePhotoUrls" (JSON array) bhejta hai.
+    // Half Photo ("Passport Photo") kabhi delete nahi hogi — sirf badli ja sakti hai
+    let removePhotoUrls = [];
+    try {
+      const rawRemove = body.removePhotoUrls;
+      removePhotoUrls = Array.isArray(rawRemove)
+        ? rawRemove
+        : rawRemove
+          ? JSON.parse(rawRemove)
+          : [];
+    } catch {
+      removePhotoUrls = [];
+    }
+    if (Array.isArray(removePhotoUrls) && removePhotoUrls.length) {
+      const removeSet = new Set(removePhotoUrls.map((u) => String(u)));
+      uploadedPhotos = uploadedPhotos.filter(
+        (p) => p?.label === "Passport Photo" || !removeSet.has(String(p?.url)),
+      );
+    }
+
     const replacePhotoByLabel = (label, url) => {
       if (!url) return;
 
@@ -2168,6 +2204,99 @@ const sendInterest = async (req, res) => {
   }
 };
 
+// ─── WITHDRAW (CANCEL) SENT INTEREST ─────────────────────────────────────────
+// DELETE /biodata/interest/:targetId
+// ✅ Galti se bheja interest wapas lo — sirf "pending" wala; accept / reject
+// ho chuka ho to nahi. Dono taraf se hatata hai (mera Sent + unka Received)
+const withdrawInterest = async (req, res) => {
+  try {
+    const { targetId } = req.params;
+
+    if (!targetId || !mongoose.Types.ObjectId.isValid(targetId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid target profile id",
+      });
+    }
+
+    // Active profile (x-biodata-id) — sendInterest jaisa hi
+    const myBiodata = await VyavahikBiodata.findOne(
+      await getActiveBiodataFilter(req),
+    );
+    if (!myBiodata) {
+      return res.status(404).json({
+        success: false,
+        message: "Your biodata not found",
+      });
+    }
+
+    const targetBiodata = await VyavahikBiodata.findOne({
+      $or: [{ _id: targetId }, { userId: targetId }],
+    });
+    if (!targetBiodata) {
+      return res.status(404).json({
+        success: false,
+        message: "Target profile not found",
+      });
+    }
+
+    const myProfileId = myBiodata._id.toString();
+    const targetProfileId = targetBiodata._id.toString();
+
+    const sentEntry = (myBiodata.interestsSent || []).find(
+      (i) => i?.profileId?.toString() === targetProfileId,
+    );
+    if (!sentEntry) {
+      return res.status(404).json({
+        success: false,
+        message: "No interest found to withdraw",
+      });
+    }
+    if (sentEntry.status && sentEntry.status !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message:
+          sentEntry.status === "accepted"
+            ? "Interest already accepted. It cannot be withdrawn."
+            : "Interest already responded. It cannot be withdrawn.",
+      });
+    }
+
+    // Atomic $pull — dono documents se sirf pending entry hatao
+    await Promise.all([
+      VyavahikBiodata.updateOne(
+        { _id: myBiodata._id },
+        {
+          $pull: {
+            interestsSent: { profileId: targetBiodata._id, status: "pending" },
+          },
+        },
+      ),
+      VyavahikBiodata.updateOne(
+        { _id: targetBiodata._id },
+        {
+          $pull: {
+            interestsReceived: { profileId: myBiodata._id, status: "pending" },
+          },
+        },
+      ),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: "Interest withdrawn successfully",
+      data: { profileId: targetProfileId, by: myProfileId },
+    });
+  } catch (error) {
+    console.error("❌ Withdraw Interest Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error withdrawing interest",
+      error: error.message,
+    });
+  }
+};
+
 // ─── RESPOND TO INTEREST (accept / reject) ───────────────────────────────────
 // PATCH /biodata/interest/:senderBiodataId/respond
 // body: { status: "accepted" | "rejected" }
@@ -2457,6 +2586,7 @@ module.exports = {
   likeProfile,
   sendInterest,
   respondToInterest,
+  withdrawInterest,
   getSentInterests,
   getReceivedInterests,
   editBiodata,

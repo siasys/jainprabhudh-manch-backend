@@ -17,6 +17,7 @@ const {
   getLikedProfiles,
   sendInterest,
   respondToInterest,
+  withdrawInterest,
   getSentInterests,
   getReceivedInterests,
   editBiodata,
@@ -62,6 +63,8 @@ router.get("/liked", getLikedProfiles);
 router.put("/:id", updateBiodata);
 router.put("/images/:id", upload.biodataImageUpload, updateBiodataImages);
 router.post("/interest/:targetId", sendInterest);
+// ✅ Galti se bheja (pending) interest wapas lo
+router.delete("/interest/:targetId", withdrawInterest);
 router.patch("/interest/:senderBiodataId/respond", respondToInterest);
 router.get("/interests/sent", getSentInterests);
 router.get("/interests/received", getReceivedInterests);
