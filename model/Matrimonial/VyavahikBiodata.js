@@ -289,6 +289,9 @@ const vyavahikBiodataSchema = new mongoose.Schema(
     // filled only if profile === 'someoneElse'
     relationWithCandidate: { type: String },
     creatorName: { type: String },
+    creatorShravakId: { type: String }, // creator ka apna Jain Shravak ID
+    creatorMobile: { type: String }, // creator ka mobile (bina country code)
+    creatorCountryCode: { type: String }, // e.g. +91
 
     // ─── Basic Info ──────────────────────
     shravakId: { type: String },
@@ -304,7 +307,10 @@ const vyavahikBiodataSchema = new mongoose.Schema(
     height: { type: Number }, // in cm
     complexion: { type: String },
     dietPreference: { type: String }, // veg / jain / vegan etc.
-    hobbies: { type: String },
+    hobbies: { type: String }, // comma wali list: "Reading, Music"
+    weight: { type: Number }, // in kg (max 3 digit)
+    smoking: { type: String, enum: ["Yes", "No"] },
+    drinking: { type: String, enum: ["Yes", "No"] },
     aboutMySelf: {
       type: String,
     },
@@ -346,7 +352,8 @@ const vyavahikBiodataSchema = new mongoose.Schema(
       collegeUniversity: { type: String },
       degreeName: { type: String },
       yearOfPassing: { type: String },
-      educationCertificate: { type: String },
+      extraQualification: { type: String }, // ✅ 10th/12th tak walon ke liye
+      educationCertificate: { type: String }, // purane profiles ke liye (ab upload nahi)
     },
 
     // ─── Work ─────────────────────────
@@ -360,6 +367,7 @@ const vyavahikBiodataSchema = new mongoose.Schema(
       workingIndustry: { type: String },
       workLocation: { type: String },
       annualIncome: { type: String },
+      incomeSource: { type: String }, // ✅ Unemployed — income kahan se
     },
     // ─── Family Background ───────────────────────────────────────
     familyInfo: {
@@ -388,6 +396,19 @@ const vyavahikBiodataSchema = new mongoose.Schema(
         {
           name: { type: String },
           occupation: { type: String },
+        },
+      ],
+
+      // ✅ Close Relatives — ek hi text box (naya)
+      relativesDetails: { type: String, maxlength: 1000 },
+
+      // Purane app version ke liye (list format) — naya app ab nahi bhejta
+      relatives: [
+        {
+          relation: { type: String },
+          name: { type: String },
+          occupation: { type: String },
+          city: { type: String },
         },
       ],
     },
@@ -423,8 +444,17 @@ const vyavahikBiodataSchema = new mongoose.Schema(
         name: { type: String },
         number: { type: String },
         relation: { type: String },
-        address: { type: String },
+        address: { type: String }, // purane profiles ke liye (ab nahi poocha jaata)
       },
+
+      // ✅ Saare alternate contacts (max 3) — name, relation, number
+      alternateContacts: [
+        {
+          name: { type: String },
+          relation: { type: String },
+          number: { type: String },
+        },
+      ],
     },
 
     // ─── Uploaded Photos ─────────────────────────────────────────
@@ -525,22 +555,35 @@ const vyavahikBiodataSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-// ✅ Ek user = ek biodata (DB level guarantee)
-// In-memory lock sirf ek server process me kaam karta hai; ye unique index
-// har case me duplicate rokta hai (multiple instances, restart, retry).
-// partialFilterExpression: purane docs jinke paas userId nahi hai, wo conflict nahi karenge.
-vyavahikBiodataSchema.index(
-  { userId: 1 },
-  {
-    unique: true,
-    name: "uniq_userId",
-    partialFilterExpression: { userId: { $type: "objectId" } },
-  },
-);
+// ✅ Ek user ab MAX 3 biodata bana sakta hai (limit controller me check hoti hai).
+// Pehle yahan userId par UNIQUE index tha ("uniq_userId") — wo 2nd profile ko
+// DB level par hi rok deta. Ab normal (non-unique) index: user ki profiles
+// jaldi milein, purani se nayi order me.
+vyavahikBiodataSchema.index({ userId: 1, createdAt: 1 });
 
 const VyavahikBiodata = mongoose.model(
   "VyavahikBiodata",
   vyavahikBiodataSchema,
 );
+
+// ✅ Purana unique index MongoDB se ek baar hatao.
+// Schema se hatane par bhi DB me index bana rehta hai — server start par drop.
+// Index na mile (pehle hi hat gaya) to chup-chaap aage.
+const dropOldUniqueUserIdIndex = () => {
+  VyavahikBiodata.collection
+    .dropIndex("uniq_userId")
+    .then(() => console.log("✅ Dropped old unique index: uniq_userId"))
+    .catch((err) => {
+      if (err?.codeName !== "IndexNotFound" && err?.code !== 27) {
+        console.warn("⚠️ Could not drop uniq_userId index:", err?.message);
+      }
+    });
+};
+
+if (mongoose.connection.readyState === 1) {
+  dropOldUniqueUserIdIndex();
+} else {
+  mongoose.connection.once("open", dropOldUniqueUserIdIndex);
+}
 
 module.exports = { VyavahikBiodata };

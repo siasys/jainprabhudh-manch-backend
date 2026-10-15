@@ -1,4 +1,4 @@
-const express = require('express');
+const express = require("express");
 const {
   createBiodata,
   updateBiodata,
@@ -19,45 +19,58 @@ const {
   respondToInterest,
   getSentInterests,
   getReceivedInterests,
-  editBiodata
+  editBiodata,
+  getShravakBasicDetails,
+  getMyProfiles,
+  searchCities,
 } = require("../../controller/Matrimonial/vyavahikBiodataController");
-const upload = require('../../middlewares/upload');
-const { 
-    createBiodataPaymentOrder,
-    verifyBiodataPayment,
-    completeBiodataRegistration
-  } = require('../../controller/PaymentControllers/paymentController');
-const { authMiddleware } = require('../../middlewares/authMiddlewares');
+const upload = require("../../middlewares/upload");
+const {
+  createBiodataPaymentOrder,
+  verifyBiodataPayment,
+  completeBiodataRegistration,
+} = require("../../controller/PaymentControllers/paymentController");
+const { authMiddleware } = require("../../middlewares/authMiddlewares");
 const router = express.Router();
 
 router.use(authMiddleware);
 // Check if user has a biodata
-router.get('/check-status', checkUserBiodata);
+router.get("/check-status", checkUserBiodata);
+// ✅ Login user ki profiles (max 3) — /:id se PEHLE
+router.get("/my-profiles", getMyProfiles);
+// ✅ Birth Place city search — /:id se PEHLE
+router.get("/cities", searchCities);
+// ✅ Candidate Shravak ID se name/gender/dob (/:id se PEHLE rehna chahiye)
+router.get("/shravak-details/:shravakId", getShravakBasicDetails);
 // New payment flow routes
-router.post('/', upload.biodataImageUpload, createBiodata);
+router.post("/", upload.biodataImageUpload, createBiodata);
 router.post("/create", upload.biodataImageUpload, createBiodatas);
 router.patch("/edit/:id", upload.biodataImageUpload, editBiodata);
-router.post('/create-payment', createBiodataPaymentOrder);
-router.post('/verify-payment', verifyBiodataPayment);
-router.post('/complete-registration/:orderId', upload.biodataImageUpload, completeBiodataRegistration);
+router.post("/create-payment", createBiodataPaymentOrder);
+router.post("/verify-payment", verifyBiodataPayment);
+router.post(
+  "/complete-registration/:orderId",
+  upload.biodataImageUpload,
+  completeBiodataRegistration,
+);
 router.get("/getall", getAllBiodata);
 router.get("/me", getMyBiodata);
 router.get("/get/:id", getBiodataById);
 router.post("/like/:targetId", likeProfile);
 router.get("/liked", getLikedProfiles);
 // Update a biodata by ID
-router.put('/:id', updateBiodata);
-router.put('/images/:id', upload.biodataImageUpload, updateBiodataImages);
+router.put("/:id", updateBiodata);
+router.put("/images/:id", upload.biodataImageUpload, updateBiodataImages);
 router.post("/interest/:targetId", sendInterest);
-router.patch("/interest/:senderBiodataId/respond", respondToInterest ,);
+router.patch("/interest/:senderBiodataId/respond", respondToInterest);
 router.get("/interests/sent", getSentInterests);
 router.get("/interests/received", getReceivedInterests);
 // Get a single biodata by ID
-router.get('/:id', getBiodata);
-router.get('/user/:userId', getBiodataByUserId);
-router.delete('/delete/:id', deleteBiodata);
+router.get("/:id", getBiodata);
+router.get("/user/:userId", getBiodataByUserId);
+router.delete("/delete/:id", deleteBiodata);
 router.delete("/unlike/:targetId", unlikeProfile);
 // Get all biodatas
-router.get('/', getAllBiodatas);
+router.get("/", getAllBiodatas);
 
 module.exports = router;

@@ -3,3 +3,4 @@ node_modules/
 *.log
 newrelic_agent.log
 config/firebaseServiceAccount.json
+scripts/geonames/

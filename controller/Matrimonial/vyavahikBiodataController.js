@@ -69,6 +69,356 @@ const applyCountryAddress = (doc, fields) => {
    ══════════════════════════════════════════════════════════════ */
 const creatingUsers = new Set();
 
+/* ══════════════════════════════════════════════════════════════
+   ✅ BASIC STEP — MANDATORY FIELDS VALIDATION
+   Create par sab required; Edit par jo field bheja gaya wo khaali na ho
+   Response: 400 + missingFields / invalidFields (Review screen dikhata hai)
+   ══════════════════════════════════════════════════════════════ */
+const BASIC_FIELD_LABELS = {
+  profile: "Profile For",
+  shravakId: "Jain Shravak ID",
+  name: "Full Name",
+  gender: "Gender",
+  dob: "Date of Birth",
+  timeOfBirth: "Time of Birth",
+  birthPlace: "Birth Place",
+  relationWithCandidate: "Relation with Candidate",
+  creatorShravakId: "Creator Jain Shravak ID",
+  creatorName: "Creator Name",
+  creatorMobile: "Creator Mobile",
+  marriageType: "Marital Status",
+};
+
+const MARRIAGE_TYPES = ["Single", "Divorced", "Widowed/widower"];
+
+const BASIC_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9\-/]{3,29}$/;
+const TIME_12H_PATTERN = /^(0?[1-9]|1[0-2]):[0-5]\d\s?(AM|PM)$/i;
+const TIME_24H_PATTERN = /^([01]?\d|2[0-3]):[0-5]\d$/;
+
+const isBlankValue = (v) =>
+  v === undefined || v === null || String(v).trim() === "";
+
+// Ek field ka format check — galat ho to reason, sahi ho to null
+const getBasicFieldFormatError = (field, value) => {
+  const v = String(value).trim();
+  switch (field) {
+    case "profile":
+      return ["mySelf", "someoneElse"].includes(v) ? null : "invalid value";
+    case "shravakId":
+    case "creatorShravakId":
+      return BASIC_ID_PATTERN.test(v) ? null : "invalid ID format";
+    case "gender":
+      return ["Male", "Female"].includes(v) ? null : "must be Male or Female";
+    case "dob": {
+      const d = new Date(v);
+      if (isNaN(d.getTime())) return "invalid date";
+      if (d.getTime() > Date.now()) return "cannot be in the future";
+      return null;
+    }
+    case "timeOfBirth":
+      return TIME_12H_PATTERN.test(v) || TIME_24H_PATTERN.test(v)
+        ? null
+        : "invalid time";
+    case "marriageType":
+      return MARRIAGE_TYPES.includes(v) ? null : "invalid option";
+    case "creatorMobile": {
+      const digits = v.replace(/[^0-9]/g, "");
+      return digits.length >= 6 && digits.length <= 15
+        ? null
+        : "invalid mobile number";
+    }
+    default:
+      return null;
+  }
+};
+
+const buildBasicErrorResponse = (missing, invalid) => {
+  const parts = [];
+  if (missing.length) {
+    parts.push(
+      `Please fill these required fields: ${missing
+        .map((m) => m.label)
+        .join(", ")}`,
+    );
+  }
+  if (invalid.length) {
+    parts.push(
+      `Please correct: ${invalid
+        .map((i) => `${i.label} (${i.reason})`)
+        .join(", ")}`,
+    );
+  }
+  return {
+    success: false,
+    message: parts.join(". "),
+    missingFields: missing,
+    invalidFields: invalid,
+  };
+};
+
+// Create — sab basic fields required
+const validateBasicForCreate = (body = {}) => {
+  const required = [
+    "profile",
+    "shravakId",
+    "name",
+    "gender",
+    "dob",
+    "timeOfBirth",
+    "birthPlace",
+    "marriageType", // ✅ Marital Status — Basic screen
+  ];
+  if (body.profile === "someoneElse") {
+    required.push(
+      "relationWithCandidate",
+      "creatorShravakId",
+      "creatorName",
+      "creatorMobile",
+    );
+  }
+
+  const missing = [];
+  const invalid = [];
+  for (const field of required) {
+    const label = BASIC_FIELD_LABELS[field];
+    if (isBlankValue(body[field])) {
+      missing.push({ field, label });
+      continue;
+    }
+    const reason = getBasicFieldFormatError(field, body[field]);
+    if (reason) invalid.push({ field, label, reason });
+  }
+
+  // ✅ Divorced — "Is Divorce Completed?" (Yes/No) required
+  if (body.marriageType === "Divorced") {
+    if (isBlankValue(body.isDivorceComplete)) {
+      missing.push({
+        field: "isDivorceComplete",
+        label: "Is Divorce Completed?",
+      });
+    } else if (!["Yes", "No"].includes(String(body.isDivorceComplete).trim())) {
+      invalid.push({
+        field: "isDivorceComplete",
+        label: "Is Divorce Completed?",
+        reason: "must be Yes or No",
+      });
+    }
+  }
+
+  // ✅ Number of Children optional — bhara ho to sirf number (DB me Number hai)
+  if (
+    ["Divorced", "Widowed/widower"].includes(body.marriageType) &&
+    !isBlankValue(body.numberOfChildren) &&
+    !/^\d{1,2}$/.test(String(body.numberOfChildren).trim())
+  ) {
+    invalid.push({
+      field: "numberOfChildren",
+      label: "Number of Children",
+      reason: "invalid number",
+    });
+  }
+  return { missing, invalid };
+};
+
+// Edit — partial update: sirf jo basic field bheja gaya wo khaali/galat na ho
+// "For Myself" profile me creator/relation fields check nahi hote
+const CREATOR_ONLY_FIELDS = [
+  "relationWithCandidate",
+  "creatorShravakId",
+  "creatorName",
+  "creatorMobile",
+];
+
+const validateBasicForEdit = (body = {}, currentProfile) => {
+  const profile = body.profile || currentProfile;
+  const missing = [];
+  const invalid = [];
+  for (const field of Object.keys(BASIC_FIELD_LABELS)) {
+    if (!Object.prototype.hasOwnProperty.call(body, field)) continue;
+    if (profile !== "someoneElse" && CREATOR_ONLY_FIELDS.includes(field)) {
+      continue;
+    }
+    const label = BASIC_FIELD_LABELS[field];
+    if (isBlankValue(body[field])) {
+      missing.push({ field, label });
+      continue;
+    }
+    const reason = getBasicFieldFormatError(field, body[field]);
+    if (reason) invalid.push({ field, label, reason });
+  }
+  return { missing, invalid };
+};
+
+/* ══════════════════════════════════════════════════════════════
+   ✅ EK ACCOUNT SE MAX 3 MATRIMONIAL PROFILES
+   - 3 ho gaye to 409 + limitReached
+   - "For Myself" sirf ek (apni hi do profile nahi) → 409 + selfExists
+   ══════════════════════════════════════════════════════════════ */
+const MAX_PROFILES_PER_USER = 3;
+const PROFILE_LIMIT_MESSAGE = `You can create a maximum of ${MAX_PROFILES_PER_USER} matrimonial profiles from one account.`;
+
+const checkProfileLimit = async (userId, profileType) => {
+  const count = await VyavahikBiodata.countDocuments({ userId });
+  if (count >= MAX_PROFILES_PER_USER) {
+    return {
+      status: 409,
+      body: {
+        success: false,
+        limitReached: true,
+        count,
+        maxProfiles: MAX_PROFILES_PER_USER,
+        message: PROFILE_LIMIT_MESSAGE,
+      },
+    };
+  }
+  if (profileType === "mySelf") {
+    const selfExists = await VyavahikBiodata.exists({
+      userId,
+      profile: "mySelf",
+    });
+    if (selfExists) {
+      return {
+        status: 409,
+        body: {
+          success: false,
+          selfExists: true,
+          message:
+            "You already have a matrimonial profile for yourself. Please choose 'Someone else' to create another profile.",
+        },
+      };
+    }
+  }
+  return null;
+};
+
+/* ══════════════════════════════════════════════════════════════
+   ✅ ACTIVE PROFILE — ek user ki 3 profiles me se kaunsi abhi chal rahi hai
+   App har request me header "x-biodata-id" bhejta hai.
+   Wo id is user ki ho to wahi; warna (purana app / galat id) pehli profile.
+   ══════════════════════════════════════════════════════════════ */
+const getActiveBiodataFilter = async (req) => {
+  const raw =
+    req.headers?.["x-biodata-id"] ||
+    req.query?.myBiodataId ||
+    req.body?.myBiodataId ||
+    "";
+  const id = String(raw).trim();
+
+  if (id && mongoose.Types.ObjectId.isValid(id)) {
+    const owned = await VyavahikBiodata.exists({
+      _id: id,
+      userId: req.user._id,
+    });
+    if (owned) return { _id: id };
+  }
+  return { userId: req.user._id };
+};
+
+/* ══════════════════════════════════════════════════════════════
+   ✅ CITY SEARCH (Birth Place autocomplete) — GET /biodata/cities?q=khar
+   GeoNames se import hui "cities" collection me "shuru hone wala" search.
+   India ke results pehle (max 10), phir duniya (max 5), bade sheher upar.
+   ══════════════════════════════════════════════════════════════ */
+const { City } = require("../../model/Location/CityModel");
+
+const toCitySearchText = (text) =>
+  String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Country code → naam ("IN" → "India") — DB me save nahi, yahan banta hai
+const cityCountryNames = new Intl.DisplayNames(["en"], { type: "region" });
+const getCityCountryName = (code) => {
+  try {
+    return cityCountryNames.of(code) || code;
+  } catch {
+    return code;
+  }
+};
+
+// Patla DB doc → app ka format (frontend wahi fields padhta hai)
+const toCityResponse = (doc) => {
+  const country = getCityCountryName(doc.cc);
+  return {
+    name: doc.n,
+    state: doc.st || "",
+    country,
+    countryCode: doc.cc,
+    displayName: [doc.n, doc.st && doc.st !== doc.n ? doc.st : "", country]
+      .filter(Boolean)
+      .join(", "),
+  };
+};
+
+const searchCities = async (req, res) => {
+  try {
+    const q = toCitySearchText(req.query.q);
+    if (q.length < 2) {
+      return res.status(200).json({ success: true, data: [] });
+    }
+
+    const prefix = { $regex: `^${escapeRegex(q)}` };
+    const fields = "n st cc";
+
+    const [india, world] = await Promise.all([
+      City.find({ cc: "IN", s: prefix })
+        .sort({ p: -1 })
+        .limit(10)
+        .select(fields)
+        .maxTimeMS(3000)
+        .lean(),
+      City.find({ cc: { $ne: "IN" }, s: prefix })
+        .sort({ p: -1 })
+        .limit(5)
+        .select(fields)
+        .maxTimeMS(3000)
+        .lean(),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: [...india, ...world].map(toCityResponse),
+    });
+  } catch (error) {
+    console.error("❌ searchCities error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Could not search cities" });
+  }
+};
+
+// GET /my-profiles — login user ki saari profiles + kitni aur bana sakta hai
+const getMyProfiles = async (req, res) => {
+  try {
+    const list = await VyavahikBiodata.find({ userId: req.user._id })
+      .select(
+        "name gender age profile relationWithCandidate uploadedPhotos createdAt",
+      )
+      .sort({ createdAt: 1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: list.length,
+      maxProfiles: MAX_PROFILES_PER_USER,
+      canCreateMore: list.length < MAX_PROFILES_PER_USER,
+      data: list,
+    });
+  } catch (error) {
+    console.error("❌ getMyProfiles error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Could not load your profiles",
+    });
+  }
+};
+
 const sendAlreadyExists = (res, existing) =>
   res.status(409).json({
     success: false,
@@ -94,9 +444,10 @@ const createBiodata = async (req, res) => {
     creatingUsers.add(lockKey);
     lockTaken = true;
 
-    const existingBiodata = await VyavahikBiodata.findOne({ userId: lockKey });
-    if (existingBiodata) {
-      return sendAlreadyExists(res, existingBiodata);
+    // ✅ Max 3 profiles (pehle sirf 1 tha)
+    const limitError = await checkProfileLimit(lockKey, req.body?.profile);
+    if (limitError) {
+      return res.status(limitError.status).json(limitError.body);
     }
 
     // Extract S3 uploaded URLs
@@ -480,13 +831,255 @@ const toCDN = (files, key) => {
 };
 
 // ─── CREATE ──────────────────────────────────────────────────────────────────
+/* ══════════════════════════════════════════════════════════════
+   ✅ LIFESTYLE — weight (kg, max 3 digit), smoking/drinking (Yes/No)
+   Galat value aaye to save nahi hoti (crash / cast error nahi)
+   ══════════════════════════════════════════════════════════════ */
+const toWeightKg = (value) => {
+  if (isBlankValue(value)) return undefined;
+  const digits = String(value).replace(/[^0-9]/g, "");
+  if (!digits || digits.length > 3) return undefined;
+  const kg = Number(digits);
+  return kg > 0 ? kg : undefined;
+};
+
+/* ══════════════════════════════════════════════════════════════
+   ✅ EDUCATION — Highest Education mandatory (fixed options)
+   School level → sirf extraQualification; Higher → college/degree/year
+   ══════════════════════════════════════════════════════════════ */
+const EDUCATION_LEVELS = [
+  "Less than 10th",
+  "10th",
+  "11th",
+  "12th",
+  "Under Graduate",
+  "Post Graduate",
+  "Diploma",
+  "PhD",
+];
+const SCHOOL_EDUCATION_LEVELS = ["Less than 10th", "10th", "11th", "12th"];
+const HIGHER_EDUCATION_LEVELS = [
+  "Under Graduate",
+  "Post Graduate",
+  "Diploma",
+  "PhD",
+];
+
+const getYearOfPassingError = (value) => {
+  const v = String(value).trim();
+  if (!/^\d{4}$/.test(v)) return "invalid year";
+  const year = Number(v);
+  const maxYear = new Date().getFullYear() + 6;
+  return year >= 1950 && year <= maxYear ? null : "invalid year";
+};
+
+// Create — highestEducation required + sahi option
+const validateEducationForCreate = (body = {}) => {
+  const missing = [];
+  const invalid = [];
+  if (isBlankValue(body.highestEducation)) {
+    missing.push({ field: "highestEducation", label: "Highest Education" });
+  } else if (!EDUCATION_LEVELS.includes(String(body.highestEducation).trim())) {
+    invalid.push({
+      field: "highestEducation",
+      label: "Highest Education",
+      reason: "invalid option",
+    });
+  }
+  if (!isBlankValue(body.yearOfPassing)) {
+    const reason = getYearOfPassingError(body.yearOfPassing);
+    if (reason) {
+      invalid.push({
+        field: "yearOfPassing",
+        label: "Year of Passing",
+        reason,
+      });
+    }
+  }
+  return { missing, invalid };
+};
+
+// Edit — jo bheja gaya wo sahi ho
+const validateEducationForEdit = (body = {}) => {
+  const missing = [];
+  const invalid = [];
+  if (Object.prototype.hasOwnProperty.call(body, "highestEducation")) {
+    if (isBlankValue(body.highestEducation)) {
+      missing.push({ field: "highestEducation", label: "Highest Education" });
+    } else if (
+      !EDUCATION_LEVELS.includes(String(body.highestEducation).trim())
+    ) {
+      invalid.push({
+        field: "highestEducation",
+        label: "Highest Education",
+        reason: "invalid option",
+      });
+    }
+  }
+  if (!isBlankValue(body.yearOfPassing)) {
+    const reason = getYearOfPassingError(body.yearOfPassing);
+    if (reason) {
+      invalid.push({
+        field: "yearOfPassing",
+        label: "Year of Passing",
+        reason,
+      });
+    }
+  }
+  return { missing, invalid };
+};
+
+// Level ke hisaab se sirf relevant fields rakho
+// (purana free-text level ho to kuch mat hatao)
+const shapeEducationByLevel = (education) => {
+  const level = String(education.highestEducation || "").trim();
+  if (SCHOOL_EDUCATION_LEVELS.includes(level)) {
+    return {
+      ...education,
+      collegeUniversity: undefined,
+      degreeName: undefined,
+      yearOfPassing: undefined,
+    };
+  }
+  if (HIGHER_EDUCATION_LEVELS.includes(level)) {
+    return { ...education, extraQualification: undefined };
+  }
+  return education;
+};
+
+/* ══════════════════════════════════════════════════════════════
+   ✅ ALTERNATE CONTACTS — name, relation, number (address nahi), max 3
+   Naya app: alternateContacts (JSON array)
+   Purana app: addNumber me JSON string ya sirf number + addNumberName...
+   Kuch bhi na bheja ho to null (edit me purana data rahe)
+   ══════════════════════════════════════════════════════════════ */
+const parseAlternateContacts = (body = {}) => {
+  let list = null;
+
+  if (!isBlankValue(body.alternateContacts)) {
+    try {
+      const parsed =
+        typeof body.alternateContacts === "string"
+          ? JSON.parse(body.alternateContacts)
+          : body.alternateContacts;
+      list = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      list = [];
+    }
+  } else if (!isBlankValue(body.addNumber)) {
+    const raw = String(body.addNumber).trim();
+    if (raw.startsWith("{")) {
+      try {
+        list = [JSON.parse(raw)];
+      } catch {
+        list = [];
+      }
+    } else {
+      list = [
+        {
+          name: body.addNumberName,
+          relation: body.addNumberRelation,
+          number: raw,
+        },
+      ];
+    }
+  } else if (
+    !isBlankValue(body.addNumberName) ||
+    !isBlankValue(body.addNumberRelation)
+  ) {
+    list = [{ name: body.addNumberName, relation: body.addNumberRelation }];
+  }
+
+  if (list === null) return null;
+
+  return list
+    .map((item) => ({
+      name: String(item?.name ?? "").trim(),
+      relation: String(item?.relation ?? "").trim(),
+      number: String(item?.number ?? item?.contact ?? "")
+        .replace(/[^0-9]/g, "")
+        .slice(0, 15),
+    }))
+    .filter((item) => item.name || item.number)
+    .slice(0, 3);
+};
+
+/* ══════════════════════════════════════════════════════════════
+   ✅ CLOSE RELATIVES — relation, name, occupation, city (max 5)
+   Kuch na bheja ho to null (edit me purana data rahe)
+   ══════════════════════════════════════════════════════════════ */
+const MAX_RELATIVES = 5;
+
+const parseRelatives = (value) => {
+  if (value === undefined || value === null) return null;
+
+  let list = value;
+  if (typeof value === "string") {
+    if (!value.trim()) return [];
+    try {
+      list = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(list)) return [];
+
+  const clean = (v) =>
+    String(v ?? "")
+      .trim()
+      .slice(0, 100);
+
+  return list
+    .map((item) => ({
+      relation: clean(item?.relation),
+      name: clean(item?.name),
+      occupation: clean(item?.occupation),
+      city: clean(item?.city),
+    }))
+    .filter((item) => item.relation || item.name)
+    .slice(0, MAX_RELATIVES);
+};
+
+// ✅ Close Relatives text — trim, max 1000 (undefined = bheja hi nahi)
+const MAX_RELATIVES_TEXT = 1000;
+const cleanRelativesText = (value) =>
+  value === undefined || value === null
+    ? undefined
+    : String(value).trim().slice(0, MAX_RELATIVES_TEXT);
+
+const toYesNo = (value) => {
+  const v = String(value ?? "").trim();
+  return v === "Yes" || v === "No" ? v : undefined;
+};
+
 const createBiodatas = async (req, res) => {
   const lockKey = String(req.user?._id || "");
   let lockTaken = false;
   try {
     const { body, files } = req;
 
-    // ✅ Duplicate guard — ek user ka sirf ek biodata
+    // ✅ Basic + Education ke mandatory fields
+    const basicCheck = validateBasicForCreate(body);
+    const educationCheck = validateEducationForCreate(body);
+    const createMissing = [...basicCheck.missing, ...educationCheck.missing];
+    const createInvalid = [...basicCheck.invalid, ...educationCheck.invalid];
+
+    // ✅ Half Photo (passportPhoto) mandatory — app Review screen ko bypass
+    // karke bhi (purana app / seedha API) bina photo profile na bane
+    const halfPhotoFile = Array.isArray(files?.passportPhoto)
+      ? files.passportPhoto[0]
+      : files?.passportPhoto;
+    if (!halfPhotoFile?.location) {
+      createMissing.push({ field: "passportPhoto", label: "Half Photo" });
+    }
+
+    if (createMissing.length || createInvalid.length) {
+      return res
+        .status(400)
+        .json(buildBasicErrorResponse(createMissing, createInvalid));
+    }
+
+    // ✅ Double-tap guard + max 3 profiles per user
     if (!lockKey) {
       return res.status(401).json({
         success: false,
@@ -500,9 +1093,10 @@ const createBiodatas = async (req, res) => {
     creatingUsers.add(lockKey);
     lockTaken = true;
 
-    const existingBiodata = await VyavahikBiodata.findOne({ userId: lockKey });
-    if (existingBiodata) {
-      return sendAlreadyExists(res, existingBiodata);
+    // ✅ Max 3 profiles (pehle sirf 1 tha)
+    const createLimitError = await checkProfileLimit(lockKey, body.profile);
+    if (createLimitError) {
+      return res.status(createLimitError.status).json(createLimitError.body);
     }
 
     // ── File uploads → CDN URLs ──────────────────────────────────
@@ -582,13 +1176,14 @@ const createBiodatas = async (req, res) => {
     }
 
     // ── Education ────────────────────────────────────────────────
-    const education = {
+    const education = shapeEducationByLevel({
       highestEducation: body.highestEducation,
       collegeUniversity: body.collegeUniversity,
       degreeName: body.degreeName,
       yearOfPassing: body.yearOfPassing,
+      extraQualification: body.extraQualification,
       educationCertificate: educationCertificateUrl,
-    };
+    });
 
     // ── Work Info ────────────────────────────────────────────────
     const workInfo = {
@@ -598,6 +1193,9 @@ const createBiodatas = async (req, res) => {
       workingIndustry: body.workingIndustry,
       workLocation: body.workLocation,
       annualIncome: body.annualIncome,
+      // ✅ Income source sirf Unemployed ke liye
+      incomeSource:
+        body.workStatus === "Unemployed" ? body.incomeSource : undefined,
     };
 
     // ── Brothers / Sisters — FormData string → array parse ──────
@@ -632,6 +1230,8 @@ const createBiodatas = async (req, res) => {
       brothers, // ✅ parsed array
       noOfSisters: body.noOfSisters,
       sisters, // ✅ parsed array
+      relativesDetails: cleanRelativesText(body.relativesDetails),
+      relatives: parseRelatives(body.relatives) || [], // purana app
     };
     // ── Community / Religion ─────────────────────────────────────
     const communityInfo = {
@@ -656,17 +1256,22 @@ const createBiodatas = async (req, res) => {
     };
 
     // ── Contact ──────────────────────────────────────────────────
+    const createAlternateContacts = parseAlternateContacts(body) || [];
+
     const contactInfo = {
       mobileNumber: body.contactMobile || body.mobileNumber,
       contactPerson: body.contactPerson,
       email: body.email,
 
-      addNumber: {
-        name: body.addNumberName,
-        number: body.addNumber,
-        relation: body.addNumberRelation,
-        address: body.addNumberAddress,
-      },
+      // ✅ Pehla alternate contact addNumber me (purani screens ke liye) + saare list me
+      addNumber: createAlternateContacts[0]
+        ? {
+            name: createAlternateContacts[0].name,
+            number: createAlternateContacts[0].number,
+            relation: createAlternateContacts[0].relation,
+          }
+        : undefined,
+      alternateContacts: createAlternateContacts,
     };
 
     // ── Partner Preference ───────────────────────────────────────
@@ -703,6 +1308,9 @@ const createBiodatas = async (req, res) => {
       profile: body.profile,
       relationWithCandidate: body.relationWithCandidate,
       creatorName: body.creatorName,
+      creatorShravakId: body.creatorShravakId,
+      creatorMobile: body.creatorMobile,
+      creatorCountryCode: body.creatorCountryCode,
 
       // basic info — schema mein 'name' hai, 'fullName' nahi
       shravakId: body.shravakId,
@@ -719,6 +1327,9 @@ const createBiodatas = async (req, res) => {
       complexion: body.complexion,
       dietPreference: body.dietPreference,
       hobbies: body.hobbies,
+      weight: toWeightKg(body.weight),
+      smoking: toYesNo(body.smoking),
+      drinking: toYesNo(body.drinking),
       aboutMySelf: body.aboutMySelf,
       physicalCondition: body.physicalCondition,
       physicalConditionDescribe: body.physicalConditionDescribe,
@@ -792,6 +1403,23 @@ const editBiodata = async (req, res) => {
         success: false,
         message: "You are not authorized to edit this biodata",
       });
+    }
+
+    // ✅ Bheje gaye basic fields khaali / galat na hon
+    const basicEditCheck = validateBasicForEdit(body, biodata.profile);
+    const educationEditCheck = validateEducationForEdit(body);
+    const editMissing = [
+      ...basicEditCheck.missing,
+      ...educationEditCheck.missing,
+    ];
+    const editInvalid = [
+      ...basicEditCheck.invalid,
+      ...educationEditCheck.invalid,
+    ];
+    if (editMissing.length || editInvalid.length) {
+      return res
+        .status(400)
+        .json(buildBasicErrorResponse(editMissing, editInvalid));
     }
 
     // ── Files: old preserve, new aaye to replace ─────────────────
@@ -948,6 +1576,11 @@ const editBiodata = async (req, res) => {
     biodata.relationWithCandidate =
       body.relationWithCandidate ?? biodata.relationWithCandidate;
     biodata.creatorName = body.creatorName ?? biodata.creatorName;
+    biodata.creatorShravakId =
+      body.creatorShravakId ?? biodata.creatorShravakId;
+    biodata.creatorMobile = body.creatorMobile ?? biodata.creatorMobile;
+    biodata.creatorCountryCode =
+      body.creatorCountryCode ?? biodata.creatorCountryCode;
 
     biodata.shravakId = body.shravakId ?? biodata.shravakId;
     biodata.jainShravak = body.jainShravak ?? biodata.jainShravak;
@@ -962,6 +1595,13 @@ const editBiodata = async (req, res) => {
     biodata.complexion = body.complexion ?? biodata.complexion;
     biodata.dietPreference = body.dietPreference ?? biodata.dietPreference;
     biodata.hobbies = body.hobbies ?? biodata.hobbies;
+    // ✅ Sirf sahi value aaye tabhi update
+    const editWeight = toWeightKg(body.weight);
+    if (editWeight !== undefined) biodata.weight = editWeight;
+    const editSmoking = toYesNo(body.smoking);
+    if (editSmoking) biodata.smoking = editSmoking;
+    const editDrinking = toYesNo(body.drinking);
+    if (editDrinking) biodata.drinking = editDrinking;
     biodata.aboutMySelf = body.aboutMySelf ?? biodata.aboutMySelf;
     biodata.physicalCondition =
       body.physicalCondition ?? biodata.physicalCondition;
@@ -970,15 +1610,17 @@ const editBiodata = async (req, res) => {
 
     biodata.marriageInfo = marriageInfo;
 
-    biodata.education = {
+    biodata.education = shapeEducationByLevel({
       highestEducation:
         body.highestEducation ?? biodata.education?.highestEducation,
       collegeUniversity:
         body.collegeUniversity ?? biodata.education?.collegeUniversity,
       degreeName: body.degreeName ?? biodata.education?.degreeName,
       yearOfPassing: body.yearOfPassing ?? biodata.education?.yearOfPassing,
+      extraQualification:
+        body.extraQualification ?? biodata.education?.extraQualification,
       educationCertificate: educationCertificateUrl,
-    };
+    });
 
     biodata.workInfo = {
       workStatus: body.workStatus ?? biodata.workInfo?.workStatus,
@@ -988,6 +1630,11 @@ const editBiodata = async (req, res) => {
         body.workingIndustry ?? biodata.workInfo?.workingIndustry,
       workLocation: body.workLocation ?? biodata.workInfo?.workLocation,
       annualIncome: body.annualIncome ?? biodata.workInfo?.annualIncome,
+      // ✅ Income source sirf Unemployed ke liye
+      incomeSource:
+        (body.workStatus ?? biodata.workInfo?.workStatus) === "Unemployed"
+          ? (body.incomeSource ?? biodata.workInfo?.incomeSource)
+          : undefined,
     };
 
     biodata.familyInfo = {
@@ -1004,6 +1651,13 @@ const editBiodata = async (req, res) => {
       brothers,
       noOfSisters: body.noOfSisters ?? biodata.familyInfo?.noOfSisters,
       sisters,
+      // ✅ Naye aaye to replace, warna purane rahein
+      relatives:
+        parseRelatives(body.relatives) ?? biodata.familyInfo?.relatives ?? [],
+      // ✅ Naya text aaya to replace, warna purana rahe
+      relativesDetails:
+        cleanRelativesText(body.relativesDetails) ??
+        biodata.familyInfo?.relativesDetails,
     };
 
     biodata.communityInfo = {
@@ -1049,6 +1703,8 @@ const editBiodata = async (req, res) => {
     // naye bheje gaye country-wise fields (agar edit me address badla)
     applyCountryAddress(biodata, parseCountryAddress(body.addressFields));
 
+    const editAlternateContacts = parseAlternateContacts(body);
+
     biodata.contactInfo = {
       mobileNumber:
         body.contactMobile ??
@@ -1059,14 +1715,18 @@ const editBiodata = async (req, res) => {
 
       email: body.email ?? biodata.contactInfo?.email,
 
-      addNumber: {
-        name: body.addNumberName ?? biodata.contactInfo?.addNumber?.name,
-        number: body.addNumber ?? biodata.contactInfo?.addNumber?.number,
-        relation:
-          body.addNumberRelation ?? biodata.contactInfo?.addNumber?.relation,
-        address:
-          body.addNumberAddress ?? biodata.contactInfo?.addNumber?.address,
-      },
+      // ✅ Naye contacts aaye to replace (address nahi), warna purane rahein
+      addNumber: editAlternateContacts
+        ? editAlternateContacts[0]
+          ? {
+              name: editAlternateContacts[0].name,
+              number: editAlternateContacts[0].number,
+              relation: editAlternateContacts[0].relation,
+            }
+          : undefined
+        : biodata.contactInfo?.addNumber,
+      alternateContacts:
+        editAlternateContacts ?? biodata.contactInfo?.alternateContacts,
     };
 
     biodata.partnerPreference = {
@@ -1236,7 +1896,9 @@ const getBiodataById = async (req, res) => {
 // ─── GET MY OWN BIODATA (logged in user) ─────────────────────────
 const getMyBiodata = async (req, res) => {
   try {
-    const biodata = await VyavahikBiodata.findOne({ userId: req.user._id })
+    const biodata = await VyavahikBiodata.findOne(
+      await getActiveBiodataFilter(req),
+    )
       .populate("likedProfiles", "name gender dob uploadedPhotos")
       .populate("interestsSent.profileId", "name gender dob uploadedPhotos")
       .populate("interestsReceived.profileId", "name gender dob uploadedPhotos")
@@ -1270,7 +1932,9 @@ const likeProfile = async (req, res) => {
     const { targetId } = req.params;
 
     // apna biodata dhundo
-    const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id });
+    const myBiodata = await VyavahikBiodata.findOne(
+      await getActiveBiodataFilter(req),
+    );
     if (!myBiodata) {
       return res.status(404).json({
         success: false,
@@ -1331,7 +1995,9 @@ const unlikeProfile = async (req, res) => {
   try {
     const { targetId } = req.params;
 
-    const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id });
+    const myBiodata = await VyavahikBiodata.findOne(
+      await getActiveBiodataFilter(req),
+    );
     if (!myBiodata) {
       return res.status(404).json({
         success: false,
@@ -1373,7 +2039,9 @@ const unlikeProfile = async (req, res) => {
 // GET /biodata/liked
 const getLikedProfiles = async (req, res) => {
   try {
-    const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
+    const myBiodata = await VyavahikBiodata.findOne(
+      await getActiveBiodataFilter(req),
+    )
       .populate(
         "likedProfiles",
         "name gender dob height complexion addressInfo uploadedPhotos communityInfo marriageInfo",
@@ -1416,9 +2084,10 @@ const sendInterest = async (req, res) => {
       });
     }
 
-    const myBiodata = await VyavahikBiodata.findOne({
-      userId: req.user._id,
-    });
+    // ✅ Active profile (x-biodata-id) se interest jaata hai
+    const myBiodata = await VyavahikBiodata.findOne(
+      await getActiveBiodataFilter(req),
+    );
 
     if (!myBiodata) {
       return res.status(404).json({
@@ -1515,7 +2184,9 @@ const respondToInterest = async (req, res) => {
     }
 
     // apna biodata (receiver)
-    const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id });
+    const myBiodata = await VyavahikBiodata.findOne(
+      await getActiveBiodataFilter(req),
+    );
     if (!myBiodata) {
       return res
         .status(404)
@@ -1571,7 +2242,9 @@ const respondToInterest = async (req, res) => {
 // GET /biodata/interests/sent
 const getSentInterests = async (req, res) => {
   try {
-    const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
+    const myBiodata = await VyavahikBiodata.findOne(
+      await getActiveBiodataFilter(req),
+    )
       .populate(
         "interestsSent.profileId",
         "name gender dob uploadedPhotos addressInfo",
@@ -1613,7 +2286,9 @@ const getSentInterests = async (req, res) => {
 // GET /biodata/interests/received
 const getReceivedInterests = async (req, res) => {
   try {
-    const myBiodata = await VyavahikBiodata.findOne({ userId: req.user._id })
+    const myBiodata = await VyavahikBiodata.findOne(
+      await getActiveBiodataFilter(req),
+    )
       .populate(
         "interestsReceived.profileId",
         "name gender dob uploadedPhotos addressInfo",
@@ -1650,7 +2325,121 @@ const getReceivedInterests = async (req, res) => {
     });
   }
 };
+
+/* ══════════════════════════════════════════════════════════════
+   ✅ CANDIDATE SHRAVAK LOOKUP (Matrimonial — someone else)
+   GET /shravak-details/:shravakId
+   Sirf name, gender, dob bhejte hain — mobile/email/address nahi (privacy)
+   ══════════════════════════════════════════════════════════════ */
+const SHRAVAK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9\-/]{3,29}$/;
+
+// Card me name/gender/dob alag key ya nested object me ho sakte hain
+const pickFilled = (values) =>
+  values.find((v) => v !== undefined && v !== null && String(v).trim() !== "");
+
+const extractShravakBasics = (card) => {
+  const sources = [
+    card,
+    card?.personalDetails,
+    card?.personalInfo,
+    card?.basicDetails,
+    card?.basicInfo,
+    card?.applicant,
+    card?.details,
+  ].filter((o) => o && typeof o === "object" && !Array.isArray(o));
+
+  const get = (keys) =>
+    pickFilled(sources.flatMap((o) => keys.map((k) => o[k])));
+
+  return {
+    name: get(["name", "fullName", "full_name", "naam", "applicantName"]) || "",
+    gender: get(["gender", "ling", "sex"]) || "",
+    dob:
+      get(["dob", "dateOfBirth", "date_of_birth", "birthDate", "janmTithi"]) ||
+      null,
+  };
+};
+
+const getShravakBasicDetails = async (req, res) => {
+  try {
+    const rawId = String(req.params.shravakId || "").trim();
+
+    if (!SHRAVAK_ID_PATTERN.test(rawId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Shravak ID format",
+      });
+    }
+
+    // Model default export ho ya { JainAadhar } — dono chalein
+    const JainAadharModel =
+      typeof JainAadhar?.find === "function"
+        ? JainAadhar
+        : JainAadhar?.JainAadhar || JainAadhar?.default;
+
+    if (!JainAadharModel || typeof JainAadharModel.find !== "function") {
+      console.error("❌ JainAadhar model export not found");
+      return res.status(500).json({
+        success: false,
+        message: "Shravak model not available",
+      });
+    }
+
+    const idVariants = [...new Set([rawId, rawId.toUpperCase()])];
+
+    const cards = await JainAadharModel.find({
+      jainAadharNumber: { $in: idVariants },
+    })
+      .sort({ updatedAt: -1 })
+      .limit(5)
+      .lean();
+
+    const card =
+      cards.find((c) => String(c.status || "").toLowerCase() === "approved") ||
+      cards[0];
+
+    if (!card) {
+      return res.status(404).json({
+        success: false,
+        notFound: true,
+        message: "Shravak card not found",
+      });
+    }
+
+    const basics = extractShravakBasics(card);
+
+    if (!basics.name && !basics.gender && !basics.dob) {
+      // Field names match nahi hue — keys log karo taaki pata chale
+      console.warn(
+        "⚠️ Shravak card mila par name/gender/dob nahi mile. Keys:",
+        Object.keys(card),
+      );
+    }
+
+    // ✅ Sirf yahi 3 fields bahar jaate hain — mobile/email/address nahi
+    return res.status(200).json({
+      success: true,
+      data: {
+        jainAadharNumber: card.jainAadharNumber,
+        name: basics.name,
+        gender: basics.gender,
+        dob: basics.dob,
+        status: card.status || "",
+      },
+    });
+  } catch (error) {
+    console.error("❌ getShravakBasicDetails error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong while fetching Shravak details",
+    });
+  }
+};
+
 module.exports = {
+  searchCities,
+  getMyProfiles,
+  getShravakBasicDetails,
   createBiodata,
   updateBiodata,
   getBiodata,
