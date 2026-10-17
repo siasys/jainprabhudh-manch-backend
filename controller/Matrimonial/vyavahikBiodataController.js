@@ -296,6 +296,42 @@ const checkProfileLimit = async (userId, profileType) => {
    App har request me header "x-biodata-id" bhejta hai.
    Wo id is user ki ho to wahi; warna (purana app / galat id) pehli profile.
    ══════════════════════════════════════════════════════════════ */
+// ─── LIVE AGE (DOB se aaj ki umar) ─────────────────────────────────────────
+// ✅ DB me "age" profile banate waqt ek baar save hoti hai aur saal badalne par
+// purani reh jaati thi. Profile bhejne se pehle DOB se aaj ki umar bhar do.
+// DB me kuch save nahi hota; DOB na ho / galat ho to purani "age" hi rehti hai.
+const getAgeFromDobLive = (dob) => {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  if (Number.isNaN(birth.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age >= 0 && age < 130 ? age : null;
+};
+
+// Lean data (object / array, populated profiles bhi) me jahan "dob" ho wahan age
+const withLiveAge = (value, depth = 0) => {
+  if (!value || typeof value !== "object" || depth > 6) return value;
+  if (value instanceof Date || value._bsontype || Buffer.isBuffer(value)) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => withLiveAge(item, depth + 1));
+    return value;
+  }
+  if (Object.prototype.hasOwnProperty.call(value, "dob")) {
+    const live = getAgeFromDobLive(value.dob);
+    if (live !== null) value.age = String(live);
+  }
+  Object.keys(value).forEach((key) => {
+    const child = value[key];
+    if (child && typeof child === "object") withLiveAge(child, depth + 1);
+  });
+  return value;
+};
+
 const getActiveBiodataFilter = async (req) => {
   const raw =
     req.headers?.["x-biodata-id"] ||
@@ -1878,7 +1914,7 @@ const getAllBiodata = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Biodatas fetched successfully",
-      data: biodatas,
+      data: withLiveAge(biodatas), // ✅ DOB se aaj ki umar
       pagination: {
         total,
         page: Number(page),
@@ -1917,7 +1953,7 @@ const getBiodataById = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Biodata fetched successfully",
-      data: biodata,
+      data: withLiveAge(biodata), // ✅ DOB se aaj ki umar
     });
   } catch (error) {
     console.error("❌ Get Biodata By ID Error:", error);
@@ -1950,7 +1986,7 @@ const getMyBiodata = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "My biodata fetched successfully",
-      data: biodata,
+      data: withLiveAge(biodata), // ✅ DOB se aaj ki umar
     });
   } catch (error) {
     console.error("❌ Get My Biodata Error:", error);
@@ -2095,7 +2131,7 @@ const getLikedProfiles = async (req, res) => {
       success: true,
       message: "Liked profiles fetched successfully",
       total: myBiodata.likedProfiles.length,
-      data: myBiodata.likedProfiles,
+      data: withLiveAge(myBiodata.likedProfiles), // ✅ DOB se aaj ki umar
     });
   } catch (error) {
     console.error("❌ Get Liked Profiles Error:", error);
@@ -2397,7 +2433,7 @@ const getSentInterests = async (req, res) => {
       success: true,
       message: "Sent interests fetched successfully",
       total: interestsSent.length,
-      data: interestsSent,
+      data: withLiveAge(interestsSent), // ✅ DOB se aaj ki umar
     });
   } catch (error) {
     console.error("❌ Get Sent Interests Error:", error);
@@ -2441,7 +2477,7 @@ const getReceivedInterests = async (req, res) => {
       success: true,
       message: "Received interests fetched successfully",
       total: interestsReceived.length,
-      data: interestsReceived,
+      data: withLiveAge(interestsReceived), // ✅ DOB se aaj ki umar
     });
   } catch (error) {
     console.error("❌ Get Received Interests Error:", error);
