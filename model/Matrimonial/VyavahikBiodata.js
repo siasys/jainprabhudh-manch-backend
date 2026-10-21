@@ -402,12 +402,15 @@ const vyavahikBiodataSchema = new mongoose.Schema(
       // ✅ Close Relatives — ek hi text box (naya)
       relativesDetails: { type: String, maxlength: 1000 },
 
-      // Purane app version ke liye (list format) — naya app ab nahi bhejta
+      // ✅ Close Relatives — list (naya app bhi bhejta hai: Naam, Phone,
+      // Occupation, Residence). Purane app ke relation / city bhi chalte hain
       relatives: [
         {
           relation: { type: String },
           name: { type: String },
+          phone: { type: String },
           occupation: { type: String },
+          residence: { type: String },
           city: { type: String },
         },
       ],

@@ -1069,8 +1069,13 @@ const parseRelatives = (value) => {
     .map((item) => ({
       relation: clean(item?.relation),
       name: clean(item?.name),
+      // ✅ Naye fields — Phone (sirf ank, max 15) aur Residence
+      phone: String(item?.phone ?? "")
+        .replace(/[^0-9]/g, "")
+        .slice(0, 15),
       occupation: clean(item?.occupation),
-      city: clean(item?.city),
+      residence: clean(item?.residence || item?.city),
+      city: clean(item?.city || item?.residence), // purana field bhi bhara rahe
     }))
     .filter((item) => item.relation || item.name)
     .slice(0, MAX_RELATIVES);
@@ -2581,7 +2586,16 @@ const getShravakBasicDetails = async (req, res) => {
       );
     }
 
-    // ✅ Sirf yahi 3 fields bahar jaate hain — mobile/email/address nahi
+    // ✅ Matrimonial Community (Someone Else) ke liye — Sect / Panth / Gotra /
+    // Sub Gotra / Upjati bhi. Mobile / email / address ab bhi bahar NAHI jaate.
+    const pickText = (...values) => {
+      for (const value of values) {
+        const text = String(value ?? "").trim();
+        if (text) return text;
+      }
+      return "";
+    };
+
     return res.status(200).json({
       success: true,
       data: {
@@ -2590,6 +2604,15 @@ const getShravakBasicDetails = async (req, res) => {
         gender: basics.gender,
         dob: basics.dob,
         status: card.status || "",
+        mulJain: pickText(card.mulJain, card.religiousDetails?.mulJain),
+        panth: pickText(card.panth, card.religiousDetails?.panth),
+        gotra: pickText(card.gotra, card.religiousDetails?.gotra),
+        subGotra: pickText(card.subGotra, card.religiousDetails?.subGotra),
+        subCaste: pickText(
+          card.subCaste,
+          card.upjati,
+          card.religiousDetails?.subCaste,
+        ),
       },
     });
   } catch (error) {
