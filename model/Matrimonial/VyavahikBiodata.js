@@ -368,6 +368,19 @@ const vyavahikBiodataSchema = new mongoose.Schema(
       workLocation: { type: String },
       annualIncome: { type: String },
       incomeSource: { type: String }, // ✅ Unemployed — income kahan se
+      // ✅ Add More — extra naukri / business / aay ka anya srot (max 5)
+      // workStatus: "Employed" | "SelfEmployed" | "OtherIncome"
+      additionalWork: [
+        {
+          workStatus: { type: String },
+          companyName: { type: String },
+          businessName: { type: String },
+          workingIndustry: { type: String },
+          workLocation: { type: String },
+          annualIncome: { type: String },
+          incomeSource: { type: String },
+        },
+      ],
     },
     // ─── Family Background ───────────────────────────────────────
     familyInfo: {

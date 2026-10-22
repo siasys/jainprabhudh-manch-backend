@@ -1046,6 +1046,50 @@ const parseAlternateContacts = (body = {}) => {
    ══════════════════════════════════════════════════════════════ */
 const MAX_RELATIVES = 5;
 
+// ✅ Additional work / income (Career "Add More") — FormData JSON → array.
+// undefined = bheja hi nahi (edit me purana rahe). Max 5.
+const MAX_ADDITIONAL_WORK = 5;
+const ADDITIONAL_WORK_STATUSES = ["Employed", "SelfEmployed", "OtherIncome"];
+const parseAdditionalWork = (value) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  let list = value;
+  if (typeof value === "string") {
+    try {
+      list = JSON.parse(value);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!Array.isArray(list)) return undefined;
+  const clean = (v, max = 120) =>
+    String(v ?? "")
+      .trim()
+      .slice(0, max);
+  return list
+    .map((item) => {
+      const status = clean(item?.workStatus, 30);
+      const workStatus =
+        status === "Self Employed"
+          ? "SelfEmployed"
+          : status === "Other Source of Income"
+            ? "OtherIncome"
+            : status;
+      const isOther = workStatus === "OtherIncome";
+      return {
+        workStatus,
+        companyName: workStatus === "Employed" ? clean(item?.companyName) : "",
+        businessName:
+          workStatus === "SelfEmployed" ? clean(item?.businessName) : "",
+        workingIndustry: isOther ? "" : clean(item?.workingIndustry),
+        workLocation: isOther ? "" : clean(item?.workLocation),
+        annualIncome: clean(item?.annualIncome, 40),
+        incomeSource: isOther ? clean(item?.incomeSource) : "",
+      };
+    })
+    .filter((item) => ADDITIONAL_WORK_STATUSES.includes(item.workStatus))
+    .slice(0, MAX_ADDITIONAL_WORK);
+};
+
 const parseRelatives = (value) => {
   if (value === undefined || value === null) return null;
 
@@ -1112,6 +1156,16 @@ const createBiodatas = async (req, res) => {
       : files?.passportPhoto;
     if (!halfPhotoFile?.location) {
       createMissing.push({ field: "passportPhoto", label: "Half Photo" });
+    }
+
+    // ✅ Height mandatory (Lifestyle) — app bypass / purana app / seedha API
+    const heightRaw = String(body.height ?? "").trim();
+    if (
+      !heightRaw ||
+      Number.isNaN(Number(heightRaw)) ||
+      Number(heightRaw) <= 0
+    ) {
+      createMissing.push({ field: "height", label: "Height" });
     }
 
     if (createMissing.length || createInvalid.length) {
@@ -1237,6 +1291,8 @@ const createBiodatas = async (req, res) => {
       // ✅ Income source sirf Unemployed ke liye
       incomeSource:
         body.workStatus === "Unemployed" ? body.incomeSource : undefined,
+      // ✅ Add More — extra kaam / aay
+      additionalWork: parseAdditionalWork(body.additionalWork) || [],
     };
 
     // ── Brothers / Sisters — FormData string → array parse ──────
@@ -1712,6 +1768,11 @@ const editBiodata = async (req, res) => {
         (body.workStatus ?? biodata.workInfo?.workStatus) === "Unemployed"
           ? (body.incomeSource ?? biodata.workInfo?.incomeSource)
           : undefined,
+      // ✅ Add More — na bheja to purana hi rahe (workInfo poora replace hota hai)
+      additionalWork:
+        parseAdditionalWork(body.additionalWork) ??
+        biodata.workInfo?.additionalWork ??
+        [],
     };
 
     biodata.familyInfo = {
@@ -2613,6 +2674,23 @@ const getShravakBasicDetails = async (req, res) => {
           card.upjati,
           card.religiousDetails?.subCaste,
         ),
+        // ✅ Matrimonial Family (Someone Else) — purana + naya dono card format
+        fatherName: pickText(
+          card.fatherName,
+          card.pitaKaNaam,
+          card.pitaOrpatiName,
+        ),
+        motherName: pickText(card.mataKaNaam, card.motherName),
+        nativePlace: pickText(card.pitaKaMulNiwas, card.nativePlace),
+        brotherCount: pickText(card.brotherCount),
+        sisterCount: pickText(card.sisterCount),
+        // Naam list — string ya {name} dono; khaali hatao
+        brothers: (Array.isArray(card.brother) ? card.brother : [])
+          .map((item) => pickText(typeof item === "string" ? item : item?.name))
+          .filter(Boolean),
+        sisters: (Array.isArray(card.sister) ? card.sister : [])
+          .map((item) => pickText(typeof item === "string" ? item : item?.name))
+          .filter(Boolean),
       },
     });
   } catch (error) {
