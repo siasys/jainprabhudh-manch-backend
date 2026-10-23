@@ -1117,6 +1117,11 @@ const parseRelatives = (value) => {
       phone: String(item?.phone ?? "")
         .replace(/[^0-9]/g, "")
         .slice(0, 15),
+      // ✅ Phone ka country code (jaise +91, +971)
+      countryCode: (() => {
+        const code = String(item?.countryCode ?? "").replace(/[^0-9+]/g, "");
+        return /^\+\d{1,4}$/.test(code) ? code : "";
+      })(),
       occupation: clean(item?.occupation),
       residence: clean(item?.residence || item?.city),
       city: clean(item?.city || item?.residence), // purana field bhi bhara rahe

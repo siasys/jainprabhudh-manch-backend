@@ -422,6 +422,7 @@ const vyavahikBiodataSchema = new mongoose.Schema(
           relation: { type: String },
           name: { type: String },
           phone: { type: String },
+          countryCode: { type: String }, // ✅ jaise +91, +971
           occupation: { type: String },
           residence: { type: String },
           city: { type: String },
