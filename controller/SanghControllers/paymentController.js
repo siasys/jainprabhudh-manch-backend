@@ -19,14 +19,18 @@ const getAmountByLevel = (level, sanghType, age, country) => {
   const type = sanghType?.toLowerCase();
   const lvl = level?.toLowerCase();
 
-  // International level ka ek hi sangh hota hai -- usme India aur non-India
-  // dono member ban sakte hain, dono ke liye yahi fee. India ke bahar ke
-  // kisi bhi level par bhi yahi.
-  if (lvl === "international" || (country || "India") !== "India") {
+  // ── International level: Main 21000, baaki (women/youth/veerSena) 11000 ──
+  if (lvl === "international") {
+    return type === "main" ? 21000 : 11000;
+  }
+
+  // ── Non-India (international ke alawa): har type ki ek hi fee ──
+  if ((country || "India") !== "India") {
     return OVERSEAS_FEE;
   }
 
-  if (type === "youth" || type === "women") {
+  // ── India: women/youth/veerSena ek jaisी fees, main alag ──
+  if (type === "youth" || type === "women" || type === "veersena") {
     switch (lvl) {
       case "city":
         return 550;

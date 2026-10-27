@@ -7,10 +7,11 @@ const sanghTeamRoles = [
   "sanghUpadhyaksh",
   "sanghSanghthanSachive",
   "sanghSahsachive",
-  "sanghKoshadhyksha",
+  // "sanghKoshadhyksha" removed — Treasurer already in Office Bearers
   "sanghPracharak",
   "sanghKarykarmPramukh",
   "sanghKaryakariniSadasya",
+  "sanghPrabhari",
 ];
 // ---------------------------------------------------------------------------
 // MEMBER ADDRESS SUB-SCHEMA
