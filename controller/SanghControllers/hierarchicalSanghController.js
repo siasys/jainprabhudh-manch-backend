@@ -188,6 +188,55 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
         );
       }
     }
+
+    // ── NEW: International level sirf EK hi ho sakta hai (poore system me) ──
+    if (level === "international") {
+      const existingInternational = await HierarchicalSangh.findOne({
+        level: "international",
+        status: "active",
+      });
+      if (existingInternational) {
+        return errorResponse(
+          res,
+          "An International level Sangh already exists. Only one is allowed.",
+          400,
+        );
+      }
+    }
+
+    // ── NEW: same level + sanghType + location ka duplicate na bane ──
+    // (country/state/district/city — ek location + level + type ka ek hi sangh)
+    if (["country", "state", "district", "city"].includes(level)) {
+      const dupQuery = {
+        level,
+        sanghType,
+        status: "active",
+      };
+      if (level === "country") {
+        dupQuery["location.country"] = location?.country;
+      } else if (level === "state") {
+        dupQuery["location.country"] = location?.country;
+        dupQuery["location.state"] = location?.state;
+      } else if (level === "district") {
+        dupQuery["location.country"] = location?.country;
+        dupQuery["location.state"] = location?.state;
+        dupQuery["location.district"] = location?.district;
+      } else if (level === "city") {
+        dupQuery["location.country"] = location?.country;
+        dupQuery["location.state"] = location?.state;
+        dupQuery["location.district"] = location?.district;
+        dupQuery["location.city"] = location?.city;
+      }
+      const existingSameLevel = await HierarchicalSangh.findOne(dupQuery);
+      if (existingSameLevel) {
+        return errorResponse(
+          res,
+          `A ${sanghType} Sangh already exists at this ${level} level and location.`,
+          400,
+        );
+      }
+    }
+
     // Validate hierarchy level before creation
     const parentSangh = parentSanghId
       ? await HierarchicalSangh.findById(parentSanghId)
@@ -195,6 +244,7 @@ const createHierarchicalSangh = asyncHandler(async (req, res) => {
     if (parentSangh) {
       const levelHierarchy = [
         "foundation",
+        "international",
         "country",
         "state",
         "district",

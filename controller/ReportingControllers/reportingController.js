@@ -121,7 +121,7 @@ exports.createReport = async (req, res) => {
       sadhuRegisterCount,
       tirthRegisterCount,
       matrimonyCount,
-      scholarshipCount,
+      scholarshipCount: "0", // scholarship form se hataya — hamesha 0
       panchActivityCount,
       membershipFeesCount,
       employmentCount,
@@ -380,7 +380,7 @@ exports.getSubmittedReports = async (req, res) => {
     let sanghId = null;
 
     if (user.role === "superadmin") {
-      sanghId = req.query.sanghId; // Superadmin ke liye query se ID allow karein
+      sanghId = req.query.sanghId;
     } else {
       const userSangh = (user.sanghRoles || []).find((role) =>
         ["president", "secretary", "treasurer"].includes(role.role),
