@@ -12,17 +12,18 @@
  * AUTO  = system khud count karega (daily cron)
  * MANUAL = sangh president monthly form me bharega
  */
-const POINTS = {
-  // ── AUTO FETCH (5) ────────────────────────────────────────────────
-  sanghCreate: 50, // 1 sangh create par 50
-  memberCreate: 20, // 1 member add par 20
-  membershipFees: 20, // 1 member ki fees collect par 20
-  shravakCard: 10, // 1 shravak card (Jain Aadhar approved) par 10
-  panchCreate: 50, // 1 panch create par 50 (veerSena me 0 — niche rule dekho)
 
-  // ── MANUAL (11) ───────────────────────────────────────────────────
-  officialVisit: 100,
-  meetings: 100,
+const POINTS = {
+  // ── AUTO FETCH (5) ─────────────────────────
+  sanghCreate: 50,
+  memberCreate: 20,
+  membershipFees: 50,
+  shravakCard: 10,
+  panchCreate: 50,
+
+  // ── MANUAL (11) ────────────────────────────
+  officialVisit: 200,
+  meetings: 200,
   projects: 200,
   trainings: 20,
   tirthAccount: 50,
@@ -32,10 +33,8 @@ const POINTS = {
   employmentRegister: 20,
   scholarshipRegister: 20,
 
-  // donation ke points fixed nahi — amount ki range se aate hain (niche)
   donation: 0,
 };
-
 /** Kaun sa metric auto hai aur kaun sa manual — service/UI dono isko padhte hain */
 const AUTO_FIELDS = [
   "sanghCreate",
@@ -184,7 +183,9 @@ const CRON = {
   daily: "0 0 * * *", // roz raat 12:00 (midnight)
   monthly: "5 0 1 * *", // har mahine ki 1 tareekh, 00:05 — pichle mahine ka snapshot
   monthlyLock: "0 0 6 * *", // 6 tareekh 00:00 — form window band + final lock
-  yearly: "30 0 1 1 *", // 1 January 00:30 — pichle saal ka snapshot
+  // Yearly 10 January ko — December ka report 1-5 Jan me bhrता, 6 Jan lock,
+  // phir 10 Jan ko yearly bane taaki December ka monthly score bhi included rahe.
+  yearly: "0 0 10 1 *", // 10 January 00:00 — pichle saal ka snapshot (Dec included)
 };
 
 module.exports = {

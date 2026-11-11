@@ -5,7 +5,8 @@ const meetingSchema = new mongoose.Schema({
   agmSubType: { type: String },
   date: { type: Date },
   attendanceCount: { type: String },
-  description: { type: String },
+  meetingPlace: { type: String }, // NEW: meeting place
+  description: { type: String }, // kept for old data (UI se hata diya)
   images: [{ type: String }],
 });
 
@@ -20,13 +21,14 @@ const projectSchema = new mongoose.Schema({
 const visitSchema = new mongoose.Schema({
   visitorName: { type: String },
   visitorPostName: { type: String },
-  visitorLevel: { type: String },
+  visitorLevel: { type: String }, // kept for old data (UI se hata diya)
   sanghName: { type: String },
   sanghId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "HierarchicalSangh",
     default: null,
   },
+  visitPlace: { type: String }, // NEW: visit place (summary ke upar)
   summary: { type: String },
   pdf: { type: String },
   images: [{ type: String }],
@@ -52,6 +54,9 @@ const reportingSchema = new mongoose.Schema(
       ref: "HierarchicalSangh",
     },
     submittedById: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    // ── NEW: kaun submit kar raha (name + role) ──
+    submittedByName: { type: String },
+    submittedByRole: { type: String },
     sanghName: { type: String },
     presidentName: { type: String },
     secretaryName: { type: String },
@@ -92,8 +97,8 @@ const reportingSchema = new mongoose.Schema(
     fieldBy: { type: String },
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected"],
-      default: "pending",
+      enum: ["draft", "pending", "approved", "rejected"],
+      default: "draft",
     },
     remarks: { type: String },
   },

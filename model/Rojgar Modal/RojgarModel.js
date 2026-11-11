@@ -82,7 +82,7 @@ const rojgarSchema = new mongoose.Schema(
         now.setDate(now.getDate() + 30);
         return now;
       },
-      index: { expires: 0 },
+      index: true, // TTL (expires: 0) hataya — job 30 din baad DB se delete nahi hogi
     },
   },
   { timestamps: true },

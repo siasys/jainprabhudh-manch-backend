@@ -676,12 +676,14 @@ module.exports.reportingUpload = [
   compressFiles,
   uploadToS3,
 ];
+// ── NEW: draft upload — upload.any() (koi bhi image field accept, hang na ho) ──
+module.exports.reportingDraftUpload = [upload.any(), compressFiles, uploadToS3];
 module.exports.sadhuNiyamMedia = [
   upload.fields([{ name: "niyamMedia", maxCount: 1 }]),
   compressFiles,
   uploadToS3,
 ];
- 
+
 module.exports.sadhuDocs = [
   upload.fields([
     { name: "entityPhoto", maxCount: 5 },
@@ -742,9 +744,7 @@ module.exports.entityPostUpload = [
 ];
 // ✅ Product photos upload (for VyaparProduct API)
 module.exports.productUpload = [
-  upload.fields([
-    { name: "productPhotos", maxCount: 6 },
-  ]),
+  upload.fields([{ name: "productPhotos", maxCount: 6 }]),
   compressFiles,
   uploadToS3,
 ];

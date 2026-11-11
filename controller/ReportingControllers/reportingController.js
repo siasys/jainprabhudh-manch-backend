@@ -64,6 +64,7 @@ exports.createReport = async (req, res) => {
       agmSubType: m.agmSubType,
       date: m.date,
       attendanceCount: m.attendanceCount,
+      meetingPlace: m.meetingPlace,
       description: m.description,
       images: [
         getUrl(`meeting_${mi}_image_0`),
@@ -87,7 +88,8 @@ exports.createReport = async (req, res) => {
       visitorPostName: v.visitorPostName,
       visitorLevel: v.visitorLevel,
       sanghName: v.sanghName,
-      sanghId: v.sanghId,
+      sanghId: v.sanghId || null,
+      visitPlace: v.visitPlace,
       summary: v.summary,
       pdf: getUrl(`visit_${vi}_pdf`),
       images: [
@@ -699,5 +701,304 @@ exports.getTopPerformers = async (req, res) => {
   } catch (err) {
     console.error("Error getting top performers:", err);
     return errorResponse(res, "Server error", 500);
+  }
+};
+
+// ════════════════════════════════════════════════════════════════════════
+//  DRAFT + SUBMIT (window-based reporting)
+//  - Draft: us month me kabhi bhi save/edit/delete (status "draft")
+//  - Submit: agle mahine ki 1-5 tareekh me final (score backend/service se)
+//  - Submit ke baad draft delete. Window nikal gaya to purana draft frontend
+//    se ignore/delete hota hai (form-open check).
+// ════════════════════════════════════════════════════════════════════════
+
+// request se report data build karo (create/draft/submit teeno reuse)
+const buildReportData = (data, req, user) => {
+  const getUrl = (fieldName) => {
+    // .fields() -> object {field: [file]}, .any() -> array [{fieldname}]
+    let file;
+    if (Array.isArray(req.files)) {
+      file = req.files.find((f) => f.fieldname === fieldName);
+    } else {
+      file = req.files?.[fieldName]?.[0];
+    }
+    if (!file?.location) return null;
+    return convertS3UrlToCDN(file.location);
+  };
+
+  const meetings = (data.meetings || []).map((m, mi) => ({
+    meetingType: m.meetingType,
+    agmSubType: m.agmSubType,
+    date: m.date,
+    attendanceCount: m.attendanceCount,
+    meetingPlace: m.meetingPlace,
+    description: m.description,
+    // existing S3 URLs + naye uploaded
+    images: [
+      ...(m.existingImages || []),
+      getUrl(`meeting_${mi}_image_0`),
+      getUrl(`meeting_${mi}_image_1`),
+    ].filter(Boolean),
+  }));
+  const projects = (data.projects || []).map((p, pi) => ({
+    eventName: p.eventName,
+    description: p.description,
+    memberCount: p.memberCount,
+    eventDate: p.eventDate,
+    images: [
+      ...(p.existingImages || []),
+      getUrl(`event_${pi}_image_0`),
+      getUrl(`event_${pi}_image_1`),
+    ].filter(Boolean),
+  }));
+  const visits = (data.visits || []).map((v, vi) => ({
+    visitorName: v.visitorName,
+    visitorPostName: v.visitorPostName,
+    visitorLevel: v.visitorLevel,
+    sanghName: v.sanghName,
+    sanghId: v.sanghId || null,
+    visitPlace: v.visitPlace,
+    summary: v.summary,
+    pdf: getUrl(`visit_${vi}_pdf`),
+    images: [
+      ...(v.existingImages || []),
+      getUrl(`visit_${vi}_image_0`),
+      getUrl(`visit_${vi}_image_1`),
+    ].filter(Boolean),
+  }));
+  const trainingImages = [
+    getUrl("training_image_0"),
+    getUrl("training_image_1"),
+  ].filter(Boolean);
+
+  return {
+    sanghName: data.sanghName,
+    presidentName: data.presidentName,
+    secretaryName: data.secretaryName,
+    treasurerName: data.treasurerName,
+    reportMonth: data.reportMonth,
+    reportYear: data.reportYear,
+    membershipCount: data.membershipCount,
+    jainAadharCount: data.jainAadharCount,
+    sanghCreateCount: data.sanghCreateCount,
+    membersCreateCount: data.membersCreateCount,
+    businessRegisterCount: data.businessRegisterCount,
+    sadhuRegisterCount: data.sadhuRegisterCount,
+    tirthRegisterCount: data.tirthRegisterCount,
+    matrimonyCount: data.matrimonyCount,
+    scholarshipCount: "0",
+    panchActivityCount: data.panchActivityCount,
+    membershipFeesCount: data.membershipFeesCount,
+    employmentCount: data.employmentCount,
+    donationAmount: data.donationAmount,
+    trainingCount: data.trainingCount,
+    meetings,
+    meetingsHeld: data.meetingsHeld,
+    meetingsAttended: data.meetingsAttended,
+    projects,
+    events: data.events,
+    members: data.members,
+    eventDate: data.eventDate,
+    visits,
+    selectedOption: data.selectedOption,
+    fieldBy: data.fieldBy,
+    trainingHeld: data.trainingHeld,
+    trainingInput: data.trainingInput,
+    trainingImages: trainingImages.length ? trainingImages : undefined,
+    onlineTrainings: data.onlineTrainings || [],
+    onlineTrainingTotal: data.onlineTrainingTotal || 0,
+  };
+};
+
+// submit window: reportMonth ke AGLE mahine ki 1-5 tareekh
+const isSubmitWindowOpen = (reportMonth, reportYear) => {
+  const today = new Date();
+  const d = today.getDate();
+  const curMonth = today.getMonth() + 1;
+  const curYear = today.getFullYear();
+  // report ke agle mahine me submit
+  let nextMonth = Number(reportMonth) + 1;
+  let nextYear = Number(reportYear);
+  if (nextMonth > 12) {
+    nextMonth = 1;
+    nextYear += 1;
+  }
+  return curMonth === nextMonth && curYear === nextYear && d >= 1 && d <= 5;
+};
+
+// ── SAVE / UPDATE DRAFT (us month me kabhi bhi) ──
+exports.saveDraft = async (req, res) => {
+  try {
+    // JSON body (plain) ya multipart (req.body.data) — dono handle
+    const data =
+      typeof req.body?.data === "string"
+        ? JSON.parse(req.body.data)
+        : req.body?.data || req.body;
+    const { sanghId, reportMonth, reportYear } = data;
+    const user = req.user;
+
+    if (!sanghId || !reportMonth || !reportYear) {
+      return errorResponse(
+        res,
+        "sanghId, reportMonth, reportYear required",
+        400,
+      );
+    }
+
+    const submittingSangh = await HierarchicalSangh.findById(sanghId);
+    if (!submittingSangh) return errorResponse(res, "Sangh not found", 404);
+    const recipientSanghId = submittingSangh.parentSangh || sanghId;
+
+    const payload = {
+      ...buildReportData(data, req, user),
+      sanghId,
+      submittingSanghId: sanghId,
+      recipientSanghId,
+      submittedById: user._id,
+      status: "draft",
+    };
+
+    // ek draft per sangh per month — hai to update, warna create
+    const draft = await Reporting.findOneAndUpdate(
+      {
+        submittingSanghId: sanghId,
+        reportMonth: Number(reportMonth),
+        reportYear: Number(reportYear),
+        status: "draft",
+      },
+      { $set: payload },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
+
+    return successResponse(res, "Draft saved successfully", draft);
+  } catch (err) {
+    console.error("saveDraft error:", err);
+    return errorResponse(res, "Server error saving draft", 500);
+  }
+};
+
+// ── GET DRAFT (form-open par load + window-nikla to delete) ──
+exports.getDraft = async (req, res) => {
+  try {
+    const { sanghId } = req.params;
+    const { month, year } = req.query;
+    if (!sanghId || !month || !year) {
+      return errorResponse(res, "sanghId, month, year required", 400);
+    }
+
+    const draft = await Reporting.findOne({
+      submittingSanghId: sanghId,
+      reportMonth: Number(month),
+      reportYear: Number(year),
+      status: "draft",
+    });
+
+    if (!draft) {
+      return successResponse(res, "No draft", null);
+    }
+
+    return successResponse(res, "Draft loaded", draft);
+  } catch (err) {
+    console.error("getDraft error:", err);
+    return errorResponse(res, "Server error", 500);
+  }
+};
+
+// ── DELETE DRAFT (window nikal gaya / user clear kare) ──
+exports.deleteDraft = async (req, res) => {
+  try {
+    const { sanghId } = req.params;
+    const { month, year } = req.query;
+    await Reporting.deleteMany({
+      submittingSanghId: sanghId,
+      reportMonth: Number(month),
+      reportYear: Number(year),
+      status: "draft",
+    });
+    return successResponse(res, "Draft deleted", null);
+  } catch (err) {
+    console.error("deleteDraft error:", err);
+    return errorResponse(res, "Server error", 500);
+  }
+};
+
+// ── SUBMIT REPORT (1-5 window, final, draft delete) ──
+exports.submitReport = async (req, res) => {
+  try {
+    const data = JSON.parse(req.body.data);
+    const { sanghId, reportMonth, reportYear } = data;
+    const user = req.user;
+
+    if (!sanghId || !reportMonth || !reportYear) {
+      return errorResponse(
+        res,
+        "sanghId, reportMonth, reportYear required",
+        400,
+      );
+    }
+
+    // ── window check: report ke agle mahine ki 1-5 tareekh ──
+    if (!isSubmitWindowOpen(reportMonth, reportYear)) {
+      return errorResponse(
+        res,
+        "Submission window closed. Report submit sirf agle mahine ki 1-5 tareekh me hota hai.",
+        400,
+      );
+    }
+
+    // ── ALREADY SUBMITTED check — us month ki report pehle se submit ho chuki? ──
+    const alreadySubmitted = await Reporting.findOne({
+      submittingSanghId: sanghId,
+      reportMonth: Number(reportMonth),
+      reportYear: Number(reportYear),
+      status: { $in: ["pending", "approved", "rejected"] },
+    });
+    if (alreadySubmitted) {
+      return errorResponse(
+        res,
+        "This month's report is already submitted. You cannot submit it again.",
+        409,
+      );
+    }
+
+    const submittingSangh = await HierarchicalSangh.findById(sanghId);
+    if (!submittingSangh) return errorResponse(res, "Sangh not found", 404);
+    const recipientSanghId = submittingSangh.parentSangh || sanghId;
+
+    // ── submit karne wale ka name + role (us sangh me) ──
+    const submitterName =
+      `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
+      user.fullName ||
+      "";
+    const submitterRole =
+      (user.sanghRoles || []).find((r) => String(r.sanghId) === String(sanghId))
+        ?.role || "";
+
+    const payload = {
+      ...buildReportData(data, req, user),
+      sanghId,
+      submittingSanghId: sanghId,
+      recipientSanghId,
+      submittedById: user._id,
+      submittedByName: submitterName,
+      submittedByRole: submitterRole,
+      status: "pending",
+    };
+
+    const report = new Reporting(payload);
+    await report.save();
+
+    // ── submit ke baad us month ka draft delete ──
+    await Reporting.deleteMany({
+      submittingSanghId: sanghId,
+      reportMonth: Number(reportMonth),
+      reportYear: Number(reportYear),
+      status: "draft",
+    });
+
+    return successResponse(res, "Report submitted successfully", report, 201);
+  } catch (err) {
+    console.error("submitReport error:", err);
+    return errorResponse(res, "Server error submitting report", 500);
   }
 };

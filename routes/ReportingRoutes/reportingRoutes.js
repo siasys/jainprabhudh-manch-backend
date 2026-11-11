@@ -1,4 +1,4 @@
-const express = require('express');
+const express = require("express");
 const {
   createReport,
   getReportById,
@@ -10,54 +10,68 @@ const {
   updateReportStatus,
   getTopPerformers,
   getAllReportsAdmin,
+  // ── NEW: draft + submit ──
+  saveDraft,
+  getDraft,
+  deleteDraft,
+  submitReport,
 } = require("../../controller/ReportingControllers/reportingController");
-const { authMiddleware } = require('../../middlewares/authMiddlewares');
-const { validateRequest } = require('../../middlewares/validationMiddleware');
-const { check } = require('express-validator');
-const { reportingUpload } = require('../../middlewares/upload');
+const { authMiddleware } = require("../../middlewares/authMiddlewares");
+const { validateRequest } = require("../../middlewares/validationMiddleware");
+const { check } = require("express-validator");
+const {
+  reportingUpload,
+  reportingDraftUpload,
+} = require("../../middlewares/upload");
 
 const router = express.Router();
 
 // Apply authentication middleware to all routes
 router.use(authMiddleware);
 
-
 const statusValidation = [
-  check('status').isIn(['submitted', 'reviewed', 'approved']).withMessage('Invalid status')
+  check("status")
+    .isIn(["submitted", "reviewed", "approved"])
+    .withMessage("Invalid status"),
 ];
 
 // POST: Create a new report
 router.post("/", reportingUpload, createReport);
 
-
+// ── NEW: DRAFT + SUBMIT (/:id se PEHLE — warna draft ko :id samajh lega) ──
+// Draft me ab images bhi — reportingDraftUpload (.any() — field mismatch hang fix)
+router.post("/draft", reportingDraftUpload, saveDraft);
+router.get("/draft/:sanghId", getDraft);
+router.delete("/draft/:sanghId", deleteDraft);
+router.post("/submit", reportingUpload, submitReport);
 
 // GET: Get reports received by a specific Sangh
-router.get('/received', getReceivedReports);
+router.get("/received", getReceivedReports);
 
 // GET: Get reports submitted by a specific Sangh
-router.get('/submitted/', getSubmittedReports);
+router.get("/submitted/", getSubmittedReports);
 
 // GET: Get top performing Sanghs
-router.get('/top-performers', getTopPerformers);
-
-
+router.get("/top-performers", getTopPerformers);
 
 // GET: Get all reports (with filtering)
-router.get('/', getAllReports);
+router.get("/", getAllReports);
 // superadmin only
 router.get("/all", getAllReportsAdmin);
 // GET: Get a single report by ID
-router.get('/:id', getReportById);
+router.get("/:id", getReportById);
 // PUT: Update a report by ID
-router.put('/:id', validateRequest, updateReport);
+router.put("/:id", validateRequest, updateReport);
 
 // PATCH: Update report status and feedback
-router.patch('/:id/status', statusValidation, validateRequest, updateReportStatus);
+router.patch(
+  "/:id/status",
+  statusValidation,
+  validateRequest,
+  updateReportStatus,
+);
 
 // DELETE: Delete a report by ID
-router.delete('/:id', deleteReport);
-
-
-
+router.delete("/:id", deleteReport);
 
 module.exports = router;
