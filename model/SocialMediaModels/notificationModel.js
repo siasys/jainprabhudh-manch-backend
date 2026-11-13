@@ -35,6 +35,8 @@ const notificationSchema = new mongoose.Schema(
         "job_posted",
         // NEW: freelancer interest
         "freelancer_interest",
+        // NEW: freelancer review / rating
+        "freelancer_review",
         "jain_aadhar_approved",
         "tirth_approved",
         "tirth_rejected",
@@ -180,6 +182,7 @@ notificationSchema.post("save", async function (doc) {
       job_application: "applied to your job",
       job_posted: "posted a new job",
       freelancer_interest: "is interested in your service",
+      freelancer_review: "reviewed your service",
       // NEW
       sadhu_niyam: "posted a new niyam",
     };

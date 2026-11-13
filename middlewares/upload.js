@@ -517,6 +517,12 @@ module.exports.donationUpload = [
   compressFiles,
   uploadToS3,
 ];
+// Employment profile cover photo (folder: cover-pictures/)
+module.exports.profileCoverUpload = [
+  upload.fields([{ name: "coverPicture", maxCount: 1 }]),
+  compressFiles,
+  uploadToS3,
+];
 module.exports.candidateResumeUpload = [
   upload.fields([{ name: "candidateResume", maxCount: 1 }]),
   compressFiles,

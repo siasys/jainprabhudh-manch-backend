@@ -40,6 +40,29 @@ const freelancerSchema = new mongoose.Schema(
         demoLink: { type: String },
       },
     ],
+    // NEW (Fiverr-style gig): sab optional — purani posts waise hi chalengi
+    category: { type: String, default: "" },
+    packages: [
+      {
+        tier: { type: String, enum: ["basic", "standard", "premium"] },
+        title: { type: String },
+        description: { type: String },
+        price: { type: Number, min: 0 },
+        deliveryDays: { type: Number, min: 1 },
+        revisions: { type: Number, min: 0 },
+        features: [{ type: String }],
+      },
+    ],
+    gallery: [{ type: String }],
+    faqs: [
+      {
+        question: { type: String },
+        answer: { type: String },
+      },
+    ],
+    // NEW: rating system (FreelancerReview se calculate hota hai)
+    ratingAvg: { type: Number, default: 0 },
+    ratingCount: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

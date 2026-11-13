@@ -2,6 +2,7 @@
 const express = require("express");
 const router = express.Router();
 const upload = require("../../middlewares/upload");
+const { authMiddleware } = require("../../middlewares/authMiddlewares");
 const {
   createJob,
   getAllJobs,
@@ -28,7 +29,16 @@ const {
   addPortfolioItem,
   deletePortfolioItem,
   updateFreelancer,
+  getReviews,
+  addReview,
+  deleteReview,
+  replyToReview,
 } = require("../../controller/Rojgar/freelancerController");
+const {
+  getProfile,
+  updateProfile,
+  uploadCover,
+} = require("../../controller/Rojgar/profileController");
 
 // Routes for job operations
 router.post("/create", upload.jobPostUpload, createJob);
@@ -55,8 +65,31 @@ router.post(
   addPortfolioItem,
 );
 router.delete("/freelancer/portfolio/:id/:itemId", deletePortfolioItem);
+// NEW: reviews / rating — keep ABOVE "/freelancer/:id"
+router.get("/freelancer/:id/reviews", getReviews);
+router.post("/freelancer/:id/reviews", authMiddleware, addReview);
+router.delete(
+  "/freelancer/:id/reviews/:reviewId",
+  authMiddleware,
+  deleteReview,
+);
+router.patch(
+  "/freelancer/:id/reviews/:reviewId/reply",
+  authMiddleware,
+  replyToReview,
+);
 router.put("/freelancer/:id", upload.jobPostUpload, updateFreelancer);
 router.delete("/freelancer/:id", deleteFreelancer);
+
+// ===== Employment Profile (LinkedIn style) — keep ABOVE "/:id" =====
+router.get("/profile/:userId", getProfile);
+router.put("/profile/:userId", authMiddleware, updateProfile);
+router.post(
+  "/profile/:userId/cover",
+  authMiddleware,
+  upload.profileCoverUpload,
+  uploadCover,
+);
 
 router.get("/:id", getJobById);
 router.put("/:id", updateJob);
