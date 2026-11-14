@@ -17,12 +17,18 @@ const profileSchema = new mongoose.Schema(
       openToWork: { type: Boolean, default: false },
       openRoles: { type: String, maxlength: 200, default: "" },
       openTypes: [{ type: String }],
+      // NEW: Hiring (LinkedIn jaisa). hiringJobIds = apni job posts me se jo profile par dikhani hai
+      hiring: { type: Boolean, default: false },
+      hiringJobIds: [{ type: String }],
     },
     about: { type: String, maxlength: 2000, default: "" },
     // { experience: [{ id, title, company, ... }], education: [...], ... }
     sections: { type: mongoose.Schema.Types.Mixed, default: {} },
     // Pehli baar job-profile/services se auto-fill ho chuka hai ya nahi
     seeded: { type: Boolean, default: false },
+    // NEW: Employment profile ki apni photo aur cover (login user ki main photo/cover se alag)
+    photo: { type: String, default: "" },
+    cover: { type: String, default: "" },
   },
   { timestamps: true, minimize: false },
 );

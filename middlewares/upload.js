@@ -523,6 +523,12 @@ module.exports.profileCoverUpload = [
   compressFiles,
   uploadToS3,
 ];
+// NEW: Employment profile photo (folder: profile-pictures/)
+module.exports.employmentPhotoUpload = [
+  upload.fields([{ name: "profilePicture", maxCount: 1 }]),
+  compressFiles,
+  uploadToS3,
+];
 module.exports.candidateResumeUpload = [
   upload.fields([{ name: "candidateResume", maxCount: 1 }]),
   compressFiles,

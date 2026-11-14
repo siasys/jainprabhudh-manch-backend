@@ -2,6 +2,51 @@
 const Rojgar = require("../../model/Rojgar Modal/RojgarModel");
 const RojgarRecruitee = require("../../model/Rojgar Modal/RojgarRecruiteeModel");
 const { convertS3UrlToCDN } = require("../../utils/s3Utils");
+// NEW: job profile delete par resume S3 se bhi hatane ke liye
+const mongoose = require("mongoose");
+const { DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const { s3Client } = require("../../config/s3Config");
+const JobApplication = require("../../model/Rojgar Modal/Jobapplicationmodel");
+
+// S3 / CDN URL se file ka key nikalo, jaise https://cdn.../resumes/abc.pdf -> resumes/abc.pdf
+const s3KeyFromUrl = (url) => {
+  try {
+    const key = decodeURIComponent(
+      new URL(String(url)).pathname.replace(/^\/+/, ""),
+    );
+    return key || null;
+  } catch {
+    return null;
+  }
+};
+
+// S3 se file hatao. Fail ho to sirf log, request nahi rukti.
+const deleteFromS3 = async (url) => {
+  const key = s3KeyFromUrl(url);
+  if (!key) return false;
+  try {
+    await s3Client.send(
+      new DeleteObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: key,
+      }),
+    );
+    return true;
+  } catch (e) {
+    console.error("S3 delete error:", key, e.message);
+    return false;
+  }
+};
+
+// NEW: phone ka basic check (country code ke saath ya bina). Desh-wise check frontend countryConfig se hota hai.
+// Mobile app ke purane format (sirf digits / +91XXXXXXXXXX) bhi chalte rahenge.
+const isValidPhone = (value) => {
+  const s = String(value || "").trim();
+  if (!s) return true;
+  if (!/^\+?[\d\s()-]+$/.test(s)) return false;
+  const digits = s.replace(/\D/g, "");
+  return digits.length >= 6 && digits.length <= 15;
+};
 
 // Create a new job
 exports.createJob = async (req, res) => {
@@ -23,6 +68,14 @@ exports.createJob = async (req, res) => {
       jobContact,
       jobEmail,
     } = req.body;
+
+    // NEW: galat phone number save na ho
+    if (!isValidPhone(jobContact)) {
+      return res.status(400).json({
+        success: false,
+        message: "Enter a valid phone number.",
+      });
+    }
 
     // ================= JOB POSTS (Images / Videos) =================
     let jobPost = [];
@@ -209,5 +262,65 @@ exports.deleteJob = async (req, res) => {
     res.status(200).json({ message: "Job deleted successfully" });
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+};
+
+// ================= NEW: DELETE JOB PROFILE (recruitee) =================
+// Sirf profile ka owner (ya admin) delete kar sakta hai. Resume S3 se bhi hatta hai,
+// lekin agar wahi resume kisi job application me use hua hai to file rakhi jaati hai
+// (taaki employer purani application me resume dekh sake).
+exports.deleteRecruitee = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid profile id." });
+    }
+
+    const profile = await RojgarRecruitee.findById(id);
+    if (!profile) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Job profile not found." });
+    }
+
+    const isAdmin = ["admin", "superadmin"].includes(req.user?.role);
+    const isOwner =
+      profile.user &&
+      req.userId &&
+      profile.user.toString() === req.userId.toString();
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only delete your own job profile.",
+      });
+    }
+
+    const resumeUrl = profile.candidateResume || "";
+    await profile.deleteOne();
+
+    let resumeDeleted = false;
+    if (resumeUrl) {
+      const cdnUrl = convertS3UrlToCDN(resumeUrl);
+      const [usedInApplication, usedByOtherProfile] = await Promise.all([
+        JobApplication.exists({ resume: { $in: [resumeUrl, cdnUrl] } }),
+        RojgarRecruitee.exists({
+          candidateResume: { $in: [resumeUrl, cdnUrl] },
+        }),
+      ]);
+      if (!usedInApplication && !usedByOtherProfile) {
+        resumeDeleted = await deleteFromS3(resumeUrl);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Job profile deleted.",
+      resumeDeleted,
+    });
+  } catch (error) {
+    console.error("Delete Recruitee Error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };

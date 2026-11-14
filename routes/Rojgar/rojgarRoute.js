@@ -11,6 +11,7 @@ const {
   deleteJob,
   createRecruitee,
   getAllRecruitees,
+  deleteRecruitee,
 } = require("../../controller/Rojgar/rojgarController");
 const {
   applyToJob,
@@ -38,6 +39,9 @@ const {
   getProfile,
   updateProfile,
   uploadCover,
+  uploadPhoto,
+  removePhoto,
+  removeCover,
 } = require("../../controller/Rojgar/profileController");
 
 // Routes for job operations
@@ -45,6 +49,8 @@ router.post("/create", upload.jobPostUpload, createJob);
 router.post("/candidate", upload.candidateResumeUpload, createRecruitee);
 router.get("/", getAllJobs);
 router.get("/recruitee", getAllRecruitees);
+// NEW: job profile delete (sirf owner / admin) — resume S3 se bhi hatta hai
+router.delete("/recruitee/:id", authMiddleware, deleteRecruitee);
 
 // ===== Job Application (Apply flow) — additive, keep ABOVE "/:id" =====
 router.post("/apply", upload.candidateResumeUpload, applyToJob);
@@ -90,6 +96,16 @@ router.post(
   upload.profileCoverUpload,
   uploadCover,
 );
+// NEW: Employment profile ki apni photo
+router.post(
+  "/profile/:userId/photo",
+  authMiddleware,
+  upload.employmentPhotoUpload,
+  uploadPhoto,
+);
+// NEW: Employment profile se photo / cover hatao
+router.delete("/profile/:userId/photo", authMiddleware, removePhoto);
+router.delete("/profile/:userId/cover", authMiddleware, removeCover);
 
 router.get("/:id", getJobById);
 router.put("/:id", updateJob);

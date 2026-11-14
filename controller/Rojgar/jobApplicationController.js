@@ -5,6 +5,16 @@ const { convertS3UrlToCDN } = require("../../utils/s3Utils");
 const Notification = require("../../model/SocialMediaModels/notificationModel");
 const RojgarRecruitee = require("../../model/Rojgar Modal/RojgarRecruiteeModel");
 
+// NEW: phone ka basic check (country code ke saath ya bina). Desh-wise check frontend countryConfig se hota hai.
+// Mobile app ke purane format (sirf digits / +91XXXXXXXXXX) bhi chalte rahenge.
+const isValidPhone = (value) => {
+  const s = String(value || "").trim();
+  if (!s) return true;
+  if (!/^\+?[\d\s()-]+$/.test(s)) return false;
+  const digits = s.replace(/\D/g, "");
+  return digits.length >= 6 && digits.length <= 15;
+};
+
 // ================= APPLY TO A JOB =================
 exports.applyToJob = async (req, res) => {
   try {
@@ -22,6 +32,14 @@ exports.applyToJob = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Job and applicant are required.",
+      });
+    }
+
+    // NEW: galat phone number save na ho
+    if (!isValidPhone(applicantContact)) {
+      return res.status(400).json({
+        success: false,
+        message: "Enter a valid phone number.",
       });
     }
 

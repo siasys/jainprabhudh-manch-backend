@@ -42,6 +42,7 @@ const BOOLEAN_FIELDS = new Set(["current"]);
 const LINK_FIELDS = new Set(["link"]);
 const MAX_ITEMS = 50;
 const MAX_LEN = 2000;
+const MAX_HIRING_JOBS = 20; // NEW: Hiring card me zyada se zyada itni jobs
 const WORK_TYPES = [
   "Full-time",
   "Part-time",
@@ -98,6 +99,17 @@ const cleanIntro = (intro = {}) => ({
   openTypes: Array.isArray(intro.openTypes)
     ? intro.openTypes.filter((t) => WORK_TYPES.includes(t))
     : [],
+  // NEW: Hiring
+  hiring: !!intro.hiring,
+  hiringJobIds: Array.isArray(intro.hiringJobIds)
+    ? [
+        ...new Set(
+          intro.hiringJobIds
+            .map((id) => String(id ?? ""))
+            .filter((id) => mongoose.Types.ObjectId.isValid(id)),
+        ),
+      ].slice(0, MAX_HIRING_JOBS)
+    : [],
 });
 
 const userView = (u) =>
@@ -118,6 +130,8 @@ const emptyProfile = () => ({
   about: "",
   sections: {},
   seeded: false,
+  photo: "",
+  cover: "",
 });
 
 // Login user wahi hai jiska profile hai (ya admin)?
@@ -157,6 +171,9 @@ exports.getProfile = async (req, res) => {
             about: profile.about,
             sections: profile.sections || {},
             seeded: profile.seeded,
+            // NEW: Employment profile ki apni photo / cover
+            photo: profile.photo ? convertS3UrlToCDN(profile.photo) : "",
+            cover: profile.cover ? convertS3UrlToCDN(profile.cover) : "",
             updatedAt: profile.updatedAt,
           }
         : emptyProfile(),
@@ -178,12 +195,10 @@ exports.updateProfile = async (req, res) => {
         .json({ success: false, message: "Invalid user id." });
     }
     if (!isOwner(req, userId)) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "You can only edit your own profile.",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "You can only edit your own profile.",
+      });
     }
 
     const { intro, about, sections, seeded } = req.body || {};
@@ -213,6 +228,8 @@ exports.updateProfile = async (req, res) => {
         about: saved.about,
         sections: saved.sections || {},
         seeded: saved.seeded,
+        photo: saved.photo ? convertS3UrlToCDN(saved.photo) : "",
+        cover: saved.cover ? convertS3UrlToCDN(saved.cover) : "",
         updatedAt: saved.updatedAt,
       },
     });
@@ -222,18 +239,24 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
+// Employment profile me photo / cover save karo (profile na ho to ban jayega)
+const saveProfileMedia = (userId, field, url) =>
+  Profile.findOneAndUpdate(
+    { user: userId },
+    { $set: { [field]: url }, $setOnInsert: { user: userId } },
+    { new: true, upsert: true, setDefaultsOnInsert: true },
+  );
+
 // ================= COVER PHOTO (owner only) =================
-// User model ka coverPicture hi update hota hai, taki app ke main profile me bhi same cover dikhe.
+// UPDATED: ab cover sirf Employment profile me save hota hai — login user ka main cover nahi badalta.
 exports.uploadCover = async (req, res) => {
   try {
     const { userId } = req.params;
     if (!isOwner(req, userId)) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "You can only change your own cover photo.",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "You can only change your own cover photo.",
+      });
     }
     const file = req.files?.coverPicture?.[0];
     if (!file?.location) {
@@ -243,17 +266,86 @@ exports.uploadCover = async (req, res) => {
     }
 
     const url = convertS3UrlToCDN(file.location);
-    await User.findByIdAndUpdate(userId, { coverPicture: url });
+    await saveProfileMedia(userId, "cover", url);
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Cover photo updated.",
-        coverPicture: url,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Cover photo updated.",
+      coverPicture: url,
+    });
   } catch (error) {
     console.error("Upload Cover Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// ================= PROFILE PHOTO (owner only) =================
+// NEW: Employment profile ki apni photo — login user ki main profile photo nahi badalti.
+exports.uploadPhoto = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid user id." });
+    }
+    if (!isOwner(req, userId)) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only change your own profile photo.",
+      });
+    }
+    const file = req.files?.profilePicture?.[0];
+    if (!file?.location) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Please choose an image." });
+    }
+
+    const url = convertS3UrlToCDN(file.location);
+    await saveProfileMedia(userId, "photo", url);
+
+    res.status(200).json({
+      success: true,
+      message: "Profile photo updated.",
+      photo: url,
+    });
+  } catch (error) {
+    console.error("Upload Profile Photo Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ================= REMOVE PHOTO / COVER (owner only) =================
+// NEW: Employment profile se photo ya cover hatao (login user ki main photo/cover par koi asar nahi)
+const removeProfileMedia = (field, label) => async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid user id." });
+    }
+    if (!isOwner(req, userId)) {
+      return res.status(403).json({
+        success: false,
+        message: `You can only remove your own ${label}.`,
+      });
+    }
+    await Profile.findOneAndUpdate(
+      { user: userId },
+      { $set: { [field]: "" } },
+      { new: true },
+    );
+    res.status(200).json({
+      success: true,
+      message: `${label.charAt(0).toUpperCase()}${label.slice(1)} removed.`,
+    });
+  } catch (error) {
+    console.error(`Remove ${label} Error:`, error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.removePhoto = removeProfileMedia("photo", "profile photo");
+exports.removeCover = removeProfileMedia("cover", "cover photo");
