@@ -27,6 +27,24 @@ const num = (v, min, max) => {
 };
 const TIERS = ["basic", "standard", "premium"];
 
+// NEW: portfolio ka demo link — sirf sahi http/https link (khaali chalega)
+// "abc", "javascript:..." jaise text save nahi honge
+const LINK_ERROR = "Enter a valid link that starts with http:// or https://";
+const cleanLink = (v) => {
+  const s = String(v ?? "").trim();
+  if (!s) return { ok: true, value: "" };
+  if (s.length > 500 || /\s/.test(s)) return { ok: false };
+  try {
+    const u = new URL(s);
+    if (!["http:", "https:"].includes(u.protocol)) return { ok: false };
+    if (!u.hostname.includes(".") && u.hostname !== "localhost")
+      return { ok: false };
+    return { ok: true, value: s };
+  } catch {
+    return { ok: false };
+  }
+};
+
 const cleanPackages = (raw) => {
   const list = parseJSON(raw, []);
   if (!Array.isArray(list)) return [];
@@ -419,7 +437,14 @@ exports.updateFreelancer = async (req, res) => {
 exports.addPortfolioItem = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, demoLink } = req.body;
+    const { title, description } = req.body;
+
+    // NEW: galat link save na ho
+    const link = cleanLink(req.body.demoLink);
+    if (!link.ok) {
+      return res.status(400).json({ success: false, message: LINK_ERROR });
+    }
+    const demoLink = link.value;
 
     let image = "";
     if (req.files?.jobPost?.[0]?.location) {
@@ -446,6 +471,69 @@ exports.addPortfolioItem = async (req, res) => {
     });
   } catch (error) {
     console.error("Add Portfolio Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ================= NEW: EDIT PORTFOLIO ITEM =================
+// PUT /freelancer/portfolio/:id/:itemId  — title / description / demoLink badlo,
+// nayi image (jobPost) aaye to image badlo, removeImage = "true" ho to image hatao.
+exports.updatePortfolioItem = async (req, res) => {
+  try {
+    const { id, itemId } = req.params;
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(itemId)
+    ) {
+      return res.status(400).json({ success: false, message: "Invalid id." });
+    }
+
+    const set = {};
+    if (req.body.title !== undefined) {
+      const title = txt(req.body.title, 120);
+      if (!title) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Add a project title." });
+      }
+      set["portfolio.$.title"] = title;
+    }
+    if (req.body.description !== undefined)
+      set["portfolio.$.description"] = txt(req.body.description, 600);
+    if (req.body.demoLink !== undefined) {
+      const link = cleanLink(req.body.demoLink);
+      if (!link.ok) {
+        return res.status(400).json({ success: false, message: LINK_ERROR });
+      }
+      set["portfolio.$.demoLink"] = link.value;
+    }
+    if (req.files?.jobPost?.[0]?.location) {
+      set["portfolio.$.image"] = convertS3UrlToCDN(
+        req.files.jobPost[0].location,
+      );
+    } else if (String(req.body.removeImage) === "true") {
+      set["portfolio.$.image"] = "";
+    }
+
+    const updated = await Freelancer.findOneAndUpdate(
+      { _id: id, "portfolio._id": itemId },
+      { $set: set },
+      { new: true },
+    );
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Project updated.",
+      data: updated,
+    });
+  } catch (error) {
+    console.error("Update Portfolio Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -548,15 +636,13 @@ exports.getReviews = async (req, res) => {
         10
       : 0;
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        avg,
-        count,
-        breakdown,
-        data: reviews.map(reviewerView),
-      });
+    res.status(200).json({
+      success: true,
+      avg,
+      count,
+      breakdown,
+      data: reviews.map(reviewerView),
+    });
   } catch (error) {
     console.error("Get Reviews Error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -583,12 +669,10 @@ exports.addReview = async (req, res) => {
         .json({ success: false, message: "Freelancer post not found." });
     }
     if (gig.user && gig.user.toString() === reviewerId.toString()) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "You cannot review your own service.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "You cannot review your own service.",
+      });
     }
     // Sirf wahi review de sakta hai jisne interest bheja tha
     const hasInterest = await FreelancerInterest.exists({
@@ -639,12 +723,10 @@ exports.addReview = async (req, res) => {
     });
   } catch (error) {
     if (error?.code === 11000) {
-      return res
-        .status(409)
-        .json({
-          success: false,
-          message: "You have already reviewed this service.",
-        });
+      return res.status(409).json({
+        success: false,
+        message: "You have already reviewed this service.",
+      });
     }
     console.error("Add Review Error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -666,12 +748,10 @@ exports.deleteReview = async (req, res) => {
     }
     const isAdmin = ["admin", "superadmin"].includes(req.user?.role);
     if (!isAdmin && review.reviewer.toString() !== req.userId.toString()) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "You can only delete your own review.",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "You can only delete your own review.",
+      });
     }
     await review.deleteOne();
     const stats = await recalcRating(id);
@@ -714,13 +794,11 @@ exports.replyToReview = async (req, res) => {
         .status(404)
         .json({ success: false, message: "Review not found." });
     }
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: text ? "Reply saved." : "Reply removed.",
-        data: reviewerView(review),
-      });
+    res.status(200).json({
+      success: true,
+      message: text ? "Reply saved." : "Reply removed.",
+      data: reviewerView(review),
+    });
   } catch (error) {
     console.error("Reply Review Error:", error);
     res.status(500).json({ success: false, message: error.message });

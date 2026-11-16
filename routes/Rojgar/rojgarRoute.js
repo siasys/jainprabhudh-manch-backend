@@ -29,6 +29,7 @@ const {
   deleteFreelancer,
   addPortfolioItem,
   deletePortfolioItem,
+  updatePortfolioItem,
   updateFreelancer,
   getReviews,
   addReview,
@@ -71,6 +72,12 @@ router.post(
   addPortfolioItem,
 );
 router.delete("/freelancer/portfolio/:id/:itemId", deletePortfolioItem);
+// NEW: portfolio project edit
+router.put(
+  "/freelancer/portfolio/:id/:itemId",
+  upload.jobPostUpload,
+  updatePortfolioItem,
+);
 // NEW: reviews / rating — keep ABOVE "/freelancer/:id"
 router.get("/freelancer/:id/reviews", getReviews);
 router.post("/freelancer/:id/reviews", authMiddleware, addReview);
