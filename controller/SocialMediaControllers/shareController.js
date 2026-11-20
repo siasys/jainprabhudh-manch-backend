@@ -247,7 +247,7 @@ const getShareMeta = asyncHandler(async (req, res) => {
       data: {
         restricted: true,
         title: "Jaintva",
-        description: "Jain samaj ka apna social platform — Jaintva",
+        description: "Jaintva — the social platform for the Jain community.",
         image: DEFAULT_SHARE_IMAGE,
         url: WEB_APP_URL,
         type: "website",
@@ -269,7 +269,7 @@ const getShareMeta = asyncHandler(async (req, res) => {
   } else if (post.caption) {
     description = cleanText(post.caption, 160);
   } else {
-    description = "Jaintva par ye post dekhein";
+    description = "See this post on Jaintva.";
   }
 
   return res.status(200).json({
