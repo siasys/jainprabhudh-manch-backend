@@ -2,99 +2,104 @@ const dotenv = require("dotenv");
 dotenv.config();
 
 // require('newrelic');
-const logger = require('./config/logger');
+const logger = require("./config/logger");
 // 🔔 Firebase Admin initialize (push notifications)
-require('./config/firebaseAdmin');
+require("./config/firebaseAdmin");
 const express = require("express");
 const http = require("http");
 const dbConnect = require("./config/dbConnect");
 const app = express();
-require('./services/boostExpiry');
+require("./services/boostExpiry");
 const { startPostScheduler } = require("./services/Postscheduler");
-const path = require('path')
-const helmet = require('helmet');
+const path = require("path");
+const helmet = require("helmet");
 //console.log("Loaded JWT_SECRET:", process.env.JWT_SECRET);
 const PORT = 4000;
-const { initializeWebSocket } = require('./websocket/socket');
+const { initializeWebSocket } = require("./websocket/socket");
 const { scheduleScoreJobs } = require("./jobs/scoreJob");
-const session = require('express-session');
-const upload = require('./middlewares/upload');
+const session = require("express-session");
+const upload = require("./middlewares/upload");
 const bodyParser = require("body-parser");
 const { notFound, errorHandler } = require("./middlewares/errorHandler");
 const cors = require("cors");
-const adminRouter = require('./admin/route/adminRoute');
+const adminRouter = require("./admin/route/adminRoute");
 const adminPanelRouter = require("./adminPanel/route/adminPanelRoute");
 
-const authRouter = require('./routes/UserRegistrationRoutes/authRoute');
-const { logMiddleware, authMiddleware, isAdmin } = require('./middlewares/authMiddlewares');
-const jainAdharRouter = require('./routes/UserRegistrationRoutes/jainAdharRoute');
-const friendshipRoutes = require('./routes/SocialMediaRoutes/friendshipRoutes');
-const postRoutes = require('./routes/SocialMediaRoutes/postRoutes');
-const messageRoutes = require('./routes/SocialMediaRoutes/messageRoutes');
-const tirthSanrakshanRoute = require('./routes/TirthSanrakshanRoute');
-const ShanghatanIdPasswordRoute = require('./routes/ShanghatanIdPasswordRoute');
-const panchayatIdPasswordRoutes = require('./routes/panchayatIdPasswordRoutes');
-const tirthIdPasswordRoutes = require('./routes/tirthIdPasswordRoutes');
-const jainVyaparRoute = require('./routes/JainVyaparIdPassRoutes');
-const sadhuRoutes = require('./routes/SadhuRoutes/sadhuRoutes');
-const sadhuPostRoutes = require('./routes/SadhuRoutes/sadhuPostRoutes');
+const authRouter = require("./routes/UserRegistrationRoutes/authRoute");
+const {
+  logMiddleware,
+  authMiddleware,
+  isAdmin,
+} = require("./middlewares/authMiddlewares");
+const jainAdharRouter = require("./routes/UserRegistrationRoutes/jainAdharRoute");
+const friendshipRoutes = require("./routes/SocialMediaRoutes/friendshipRoutes");
+const postRoutes = require("./routes/SocialMediaRoutes/postRoutes");
+const shareRoutes = require("./routes/SocialMediaRoutes/shareRoutes"); // ✅ NEW: Share module (public)
+const messageRoutes = require("./routes/SocialMediaRoutes/messageRoutes");
+const tirthSanrakshanRoute = require("./routes/TirthSanrakshanRoute");
+const ShanghatanIdPasswordRoute = require("./routes/ShanghatanIdPasswordRoute");
+const panchayatIdPasswordRoutes = require("./routes/panchayatIdPasswordRoutes");
+const tirthIdPasswordRoutes = require("./routes/tirthIdPasswordRoutes");
+const jainVyaparRoute = require("./routes/JainVyaparIdPassRoutes");
+const sadhuRoutes = require("./routes/SadhuRoutes/sadhuRoutes");
+const sadhuPostRoutes = require("./routes/SadhuRoutes/sadhuPostRoutes");
 const sadhuViharRoutes = require("./routes/SadhuRoutes/Sadhuviharroutes");
 const sadhuNiyamRoutes = require("./routes/SadhuRoutes/Sadhuniyamroutes");
-const biodataRoutes = require('./routes/Matrimonial/vyavahikBiodata');
-const groupChatRoutes = require('./routes/SocialMediaRoutes/groupChatRoutes');
-const rojgarRoutes = require('./routes/Rojgar/rojgarRoute');
-const reportingRoutes = require('./routes/ReportingRoutes/reportingRoutes');
-const suggestionComplaintRoutes = require('./routes/SuggestionComplaintRoutes/suggestionComplaintRoutes');
-const granthRoutes = require('./routes/Jain Granth/JainGranthRoute');
+const biodataRoutes = require("./routes/Matrimonial/vyavahikBiodata");
+const groupChatRoutes = require("./routes/SocialMediaRoutes/groupChatRoutes");
+const rojgarRoutes = require("./routes/Rojgar/rojgarRoute");
+const reportingRoutes = require("./routes/ReportingRoutes/reportingRoutes");
+const suggestionComplaintRoutes = require("./routes/SuggestionComplaintRoutes/suggestionComplaintRoutes");
+const granthRoutes = require("./routes/Jain Granth/JainGranthRoute");
 const panchangRoutes = require("./routes/Panchang/PanchangRoute");
 
-const jainItihasRoutes = require('./routes/jainItihasRoutes');
-const storyRoutes = require('./routes/SocialMediaRoutes/storyRoutes');
-const notificationRoutes = require('./routes/SocialMediaRoutes/notificationRoutes')
-const govtYojanaRoutes = require('./routes/govtYojanaRoutes');
-const hierarchicalSanghRoutes = require('./routes/SanghRoutes/hierarchicalSanghRoute');
-const sanghAccessRoutes = require('./routes/SanghRoutes/sanghAccessRoute');
-const locationRoutes = require('./routes/locationRoutes')
-const panchPostRoutes = require('./routes/SanghRoutes/panchPostRoutes');
-const sanghPostRoutes = require('./routes/SanghRoutes/sanghPostRoutes');
-const panchayatRoutes = require('./routes/SanghRoutes/panchRoutes');
-const tirthRoutes = require('./routes/TirthRoutes/tirthRoutes');
-const tirthPostRoutes = require('./routes/TirthRoutes/tirthPostRoutes');
-const { scheduleStoryCleanup } = require('./jobs/storyCleanupJob');
+const jainItihasRoutes = require("./routes/jainItihasRoutes");
+const storyRoutes = require("./routes/SocialMediaRoutes/storyRoutes");
+const notificationRoutes = require("./routes/SocialMediaRoutes/notificationRoutes");
+const govtYojanaRoutes = require("./routes/govtYojanaRoutes");
+const hierarchicalSanghRoutes = require("./routes/SanghRoutes/hierarchicalSanghRoute");
+const sanghAccessRoutes = require("./routes/SanghRoutes/sanghAccessRoute");
+const locationRoutes = require("./routes/locationRoutes");
+const panchPostRoutes = require("./routes/SanghRoutes/panchPostRoutes");
+const sanghPostRoutes = require("./routes/SanghRoutes/sanghPostRoutes");
+const panchayatRoutes = require("./routes/SanghRoutes/panchRoutes");
+const tirthRoutes = require("./routes/TirthRoutes/tirthRoutes");
+const tirthPostRoutes = require("./routes/TirthRoutes/tirthPostRoutes");
+const { scheduleStoryCleanup } = require("./jobs/storyCleanupJob");
 const { scheduleNiyamCleanup } = require("./jobs/Sadhuniyamcleanupjob");
 
-const vyaparRoutes = require('./routes/VyaparRoutes/vyaparRoutes');
-const vyaparPostRoutes = require('./routes/VyaparRoutes/vyaparPostRoutes');
-const inquiryRoutes = require('./routes/SanghRoutes/inquiryRoutes');
-const paymentRoute = require('./routes/SanghRoutes/paymentRoutes');
-const contactUsRoutes = require('./routes/UserRegistrationRoutes/contactUsRoutes');
-const foundationPaymentRoutes = require('./routes/Foundation/foundationPaymentRoutes')
-const bailorRoutes = require('./routes/Bailors/bailors');
-const jainPratibhaRoutes = require('./routes/Jain Prathibha/jainPratibhaRoutes');
-const jainHostalRoutes = require('./routes/JainHostal/jainHostalRoutes');
-const jainFoodRoutes = require('./routes/JainFood/jainFoodRoutes');
-const reportRoutes = require('./routes/SocialMediaRoutes/reportRoutes');
-const blockRoutes = require('./routes/Block User/blockRoutes');
-const deleteAccountRoutes = require('./routes/Account delete/deleteAccountRoutes');
-const projectRoutes = require('./routes/SanghRoutes/projectRoutes');
-const activityRoute = require('./routes/Activities/activityRoutes');
-const scholarshipRoute = require('./routes/Scholarship/scholarshipRoutes');
-const boostRoute = require('./routes/BoostPlan/boostRoutes');
-const trainingRoute = require('./routes/Training Model/trainingRoute');
-const donationRoute = require('./routes/Donation/donationRoutes');
-const accountRoutes = require('./routes/Account Model/sanghClaimRoutes');
-const expenseRoutes = require('./routes/Account Model/sanghExpenseRoutes');
-const panchApplicationRoutes = require('./routes/SanghRoutes/applicationRoutes');
-const donationPaymentRoutes = require('./routes/Donation/Donationpaymentroutes');
-const matrimonyPaymentRoutes = require('./routes/Matrimonial/Matrimonialpaymentroutes');
-const sanghCertificateRoutes = require('./routes/SanghRoutes/Sanghcertificateroute');
+const vyaparRoutes = require("./routes/VyaparRoutes/vyaparRoutes");
+const vyaparPostRoutes = require("./routes/VyaparRoutes/vyaparPostRoutes");
+const inquiryRoutes = require("./routes/SanghRoutes/inquiryRoutes");
+const paymentRoute = require("./routes/SanghRoutes/paymentRoutes");
+const contactUsRoutes = require("./routes/UserRegistrationRoutes/contactUsRoutes");
+const foundationPaymentRoutes = require("./routes/Foundation/foundationPaymentRoutes");
+const bailorRoutes = require("./routes/Bailors/bailors");
+const jainPratibhaRoutes = require("./routes/Jain Prathibha/jainPratibhaRoutes");
+const jainHostalRoutes = require("./routes/JainHostal/jainHostalRoutes");
+const jainFoodRoutes = require("./routes/JainFood/jainFoodRoutes");
+const reportRoutes = require("./routes/SocialMediaRoutes/reportRoutes");
+const blockRoutes = require("./routes/Block User/blockRoutes");
+const deleteAccountRoutes = require("./routes/Account delete/deleteAccountRoutes");
+const projectRoutes = require("./routes/SanghRoutes/projectRoutes");
+const activityRoute = require("./routes/Activities/activityRoutes");
+const scholarshipRoute = require("./routes/Scholarship/scholarshipRoutes");
+const boostRoute = require("./routes/BoostPlan/boostRoutes");
+const trainingRoute = require("./routes/Training Model/trainingRoute");
+const donationRoute = require("./routes/Donation/donationRoutes");
+const accountRoutes = require("./routes/Account Model/sanghClaimRoutes");
+const expenseRoutes = require("./routes/Account Model/sanghExpenseRoutes");
+const panchApplicationRoutes = require("./routes/SanghRoutes/applicationRoutes");
+const donationPaymentRoutes = require("./routes/Donation/Donationpaymentroutes");
+const matrimonyPaymentRoutes = require("./routes/Matrimonial/Matrimonialpaymentroutes");
+const sanghCertificateRoutes = require("./routes/SanghRoutes/Sanghcertificateroute");
 const fcmRoutes = require("./routes/fcmRoutes");
 const vyaparProductRoutes = require("./routes/VyaparRoutes/Productroutes");
 const cartRoutes = require("./routes/VyaparRoutes/Cartroutes");
 const orderRoutes = require("./routes/VyaparRoutes/Orderroutes");
 const wishlistRoutes = require("./routes/VyaparRoutes/Wishlistroutes");
 const scoreRoutes = require("./routes/ScoreRoutes/scoreRoutes");
-const tirthBookingRoutes = require('./routes/TirthRoutes/Tirthbookingroutes');
+const tirthBookingRoutes = require("./routes/TirthRoutes/Tirthbookingroutes");
 const tirthBhojanRoutes = require("./routes/TirthRoutes/tirthBhojanRoutes");
 const tirthPujaRoutes = require("./routes/TirthRoutes/tirthPujaRoutes");
 const tirthComplaintRoutes = require("./routes/TirthRoutes/tirthComplaintRoutes");
@@ -102,21 +107,23 @@ const addressRoutes = require("./routes/UserRegistrationRoutes/Addressroutes");
 const tirthAnnouncementRoutes = require("./routes/TirthRoutes/tirthAnnouncementRoutes");
 
 //const appVersionRoute = require('./routes/Update apk/appVersion');
-app.set('trust proxy',1);
+app.set("trust proxy", 1);
 // connect to databse
 dbConnect();
 app.use(helmet());
 
 // Middleware
-app.use(cors({
-  origin: "*",
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    credentials: true,
+  }),
+);
 
 app.use(logMiddleware);
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({extended:false}));
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -136,56 +143,62 @@ app.use((req, res, next) => {
   next();
 });
 // Serve app-version.json as static file
-app.use('/app-version', express.static(path.join(__dirname, 'app-version.json')));
+app.use(
+  "/app-version",
+  express.static(path.join(__dirname, "app-version.json")),
+);
 // Session configuration for payment flow
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'jainprabhutmanch-secret-key',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { 
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
-app.get('/', (req, res) => {
-  res.send('Hello World!');
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "jainprabhutmanch-secret-key",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    },
+  }),
+);
+app.get("/", (req, res) => {
+  res.send("Hello World!");
 });
 //app.use('/static', express.static('./Public/latest.apk'));
 // Routes
-app.use("/api/user", authRouter)
+app.use("/api/user", authRouter);
 app.use("/api/admin-panel", adminPanelRouter);
 
 // Protected routes (require authentication)
 //app.use('/api/app', appVersionRoute);
 app.use("/api/JainAadhar", jainAdharRouter);
 app.use("/api/friendship", authMiddleware, friendshipRoutes);
-app.use('/api/posts', postRoutes);
-app.use('/api/stories', storyRoutes);
-app.use('/api/notification', authMiddleware, notificationRoutes);
-app.use('/api/messages', authMiddleware, messageRoutes);
-app.use('/api/group', authMiddleware, groupChatRoutes);
+app.use("/api/posts", postRoutes);
+app.use("/api/share", shareRoutes); // ✅ NEW: public share page + link preview meta
+app.use("/api/stories", storyRoutes);
+app.use("/api/notification", authMiddleware, notificationRoutes);
+app.use("/api/messages", authMiddleware, messageRoutes);
+app.use("/api/group", authMiddleware, groupChatRoutes);
 // 🔔 FCM token save/remove (auth required)
-app.use('/api/fcm', authMiddleware, fcmRoutes);
+app.use("/api/fcm", authMiddleware, fcmRoutes);
 
-app.use('/api/contact-us', contactUsRoutes);
+app.use("/api/contact-us", contactUsRoutes);
 // app.use('/api/units', authMiddleware, unitRoutes );
 //app.use('/api/panchayat',panchayatRoute );
 
 // Admin protected routes
-app.use('/api/tirthsanrakshan', tirthSanrakshanRoute);
-app.use('/api/Shanghatan', ShanghatanIdPasswordRoute);
-app.use('/api/panchayat', panchayatIdPasswordRoutes);
-app.use('/api/tirth', tirthIdPasswordRoutes);
-app.use('/api/jainvyapar', jainVyaparRoute);
-app.use('/api/biodata', biodataRoutes);
+app.use("/api/tirthsanrakshan", tirthSanrakshanRoute);
+app.use("/api/Shanghatan", ShanghatanIdPasswordRoute);
+app.use("/api/panchayat", panchayatIdPasswordRoutes);
+app.use("/api/tirth", tirthIdPasswordRoutes);
+app.use("/api/jainvyapar", jainVyaparRoute);
+app.use("/api/biodata", biodataRoutes);
 app.use("/api/matrimonial-payment", matrimonyPaymentRoutes);
 app.use("/api/rojgar", rojgarRoutes);
-app.use('/api/reporting', reportingRoutes);
-app.use('/api/suggestion-complaint', suggestionComplaintRoutes);
+app.use("/api/reporting", reportingRoutes);
+app.use("/api/suggestion-complaint", suggestionComplaintRoutes);
 app.use("/api/granth", granthRoutes);
 app.use("/api/panchang", panchangRoutes);
 app.use("/api/jainitihas", jainItihasRoutes);
-app.use('/api/yojana', govtYojanaRoutes);
+app.use("/api/yojana", govtYojanaRoutes);
 
 // JainVyapar routes
 app.use("/api/vyapar", vyaparRoutes);
@@ -196,8 +209,8 @@ app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/order", orderRoutes);
 app.use("/api/address", addressRoutes);
 // Tirth routes
-app.use('/api/tirth', authMiddleware, tirthRoutes);
-app.use('/api/tirth/posts', tirthPostRoutes);
+app.use("/api/tirth", authMiddleware, tirthRoutes);
+app.use("/api/tirth/posts", tirthPostRoutes);
 app.use("/api/tirth-booking", tirthBookingRoutes);
 app.use("/api/tirth-bhojan", tirthBhojanRoutes);
 app.use("/api/tirth-puja", tirthPujaRoutes);
@@ -205,56 +218,56 @@ app.use("/api/tirth-complaint", tirthComplaintRoutes);
 app.use("/api/tirth-announcement", tirthAnnouncementRoutes);
 
 // Sadhu routes
-app.use('/api/sadhu', sadhuRoutes);
-app.use('/api/sadhu/posts', sadhuPostRoutes);
+app.use("/api/sadhu", sadhuRoutes);
+app.use("/api/sadhu/posts", sadhuPostRoutes);
 app.use("/api/sadhu-vihar", sadhuViharRoutes);
 app.use("/api/sadhu-niyam", sadhuNiyamRoutes);
 
 // Sangh Routes
-app.use('/api/sangh-payment', paymentRoute);
-app.use('/api/hierarchical-sangh', authMiddleware, hierarchicalSanghRoutes);
+app.use("/api/sangh-payment", paymentRoute);
+app.use("/api/hierarchical-sangh", authMiddleware, hierarchicalSanghRoutes);
 app.use("/api/sangh-certificate", sanghCertificateRoutes);
-app.use('/api/sangh-access', authMiddleware, sanghAccessRoutes);
-app.use('/api/sangh-posts', authMiddleware, sanghPostRoutes);
-app.use('/api/panch', authMiddleware, panchayatRoutes);
-app.use('/api/applications', authMiddleware, panchApplicationRoutes);
-app.use('/api/panch-posts', authMiddleware, panchPostRoutes);
-app.use('/api/locations', locationRoutes);
-app.use('/api/inqury', inquiryRoutes);
-app.use('/api', projectRoutes);
+app.use("/api/sangh-access", authMiddleware, sanghAccessRoutes);
+app.use("/api/sangh-posts", authMiddleware, sanghPostRoutes);
+app.use("/api/panch", authMiddleware, panchayatRoutes);
+app.use("/api/applications", authMiddleware, panchApplicationRoutes);
+app.use("/api/panch-posts", authMiddleware, panchPostRoutes);
+app.use("/api/locations", locationRoutes);
+app.use("/api/inqury", inquiryRoutes);
+app.use("/api", projectRoutes);
 app.use("/api/score", scoreRoutes);
 
 // uplaod biolers
-app.use('/api/bailors', bailorRoutes);
-app.use('/api/donation', donationRoute);
+app.use("/api/bailors", bailorRoutes);
+app.use("/api/donation", donationRoute);
 app.use("/api/donation/payment", donationPaymentRoutes);
 
-// Post boostup 
-app.use('/api/boost', boostRoute);
-app.use('/api/training', trainingRoute);
+// Post boostup
+app.use("/api/boost", boostRoute);
+app.use("/api/training", trainingRoute);
 
 // Sangh Account Model Routes
-app.use('/api/account', accountRoutes);
-app.use('/api/expense', expenseRoutes);
+app.use("/api/account", accountRoutes);
+app.use("/api/expense", expenseRoutes);
 // Activity Api
-app.use('/api/activity', activityRoute);
+app.use("/api/activity", activityRoute);
 // Scholarship Api
-app.use('/api/scholarship', scholarshipRoute);
+app.use("/api/scholarship", scholarshipRoute);
 // Jain Prathibha
-app.use('/api/jainpratibha', jainPratibhaRoutes);
+app.use("/api/jainpratibha", jainPratibhaRoutes);
 // jain Hostel
-app.use('/api/jainhostal', jainHostalRoutes);
+app.use("/api/jainhostal", jainHostalRoutes);
 // jain Food
-app.use('/api/jainFood', jainFoodRoutes);
+app.use("/api/jainFood", jainFoodRoutes);
 // Foundation Payment
-app.use('/api/payment', foundationPaymentRoutes);
+app.use("/api/payment", foundationPaymentRoutes);
 // report
-app.use('/api/report', reportRoutes);
+app.use("/api/report", reportRoutes);
 // block user
-app.use('/api/block', blockRoutes);
+app.use("/api/block", blockRoutes);
 // Admin API routes
 app.use("/api/admin", adminRouter);
-app.use('/api', deleteAccountRoutes);
+app.use("/api", deleteAccountRoutes);
 // app.use((err, req, res, next) => {
 //   const newrelic = require("newrelic");
 //   newrelic.noticeError(err);
@@ -282,7 +295,6 @@ scheduleScoreJobs();
 
 server.listen(PORT, () => {
   console.log(`✅ Server (HTTP + WebSocket) running on port ${PORT}`);
-
 });
 
 // // Function to delete expired stories every hour
