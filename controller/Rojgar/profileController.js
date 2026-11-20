@@ -134,6 +134,76 @@ const emptyProfile = () => ({
   cover: "",
 });
 
+// ================= NEW: Public profile URL (slug) =================
+// 3-40 chars: a-z, 0-9, beech me "-"
+const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
+const RESERVED_SLUGS = new Set([
+  "admin",
+  "api",
+  "edit",
+  "employment",
+  "freelancer",
+  "freelancers",
+  "help",
+  "home",
+  "jobs",
+  "login",
+  "me",
+  "new",
+  "profile",
+  "settings",
+  "support",
+  "talent",
+]);
+const slugify = (text) =>
+  String(text || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32)
+    .replace(/-+$/g, "");
+
+const slugTaken = (slug, userId) =>
+  Profile.exists({ slug, ...(userId ? { user: { $ne: userId } } : {}) });
+
+// Naam se khaali slug dhoondo: sejal-bhawsar, sejal-bhawsar-2, ...
+const freeSlugFor = async (fullName, userId) => {
+  let base = slugify(fullName);
+  if (base.length < 3 || RESERVED_SLUGS.has(base))
+    base = `member-${String(userId).slice(-6)}`;
+  for (let i = 1; i <= 50; i += 1) {
+    const candidate = i === 1 ? base : `${base}-${i}`;
+    if (!(await slugTaken(candidate, userId))) return candidate;
+  }
+  return `${base}-${String(userId).slice(-6)}`;
+};
+
+// Profile me slug na ho to bana kar save karo (profile na ho to ban jayega). Slug lauta do.
+const ensureSlug = async (userId, fullName, existing) => {
+  if (existing?.slug) return existing.slug;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const slug = await freeSlugFor(fullName, userId);
+    try {
+      const saved = await Profile.findOneAndUpdate(
+        { user: userId, slug: { $exists: false } },
+        { $set: { slug }, $setOnInsert: { user: userId } },
+        { new: true, upsert: true, setDefaultsOnInsert: true },
+      ).lean();
+      return saved?.slug || slug;
+    } catch (e) {
+      if (e?.code !== 11000) throw e;
+      // dusre ne usi waqt le liya, ya profile pehle se slug ke saath hai
+      const again = await Profile.findOne({ user: userId })
+        .select("slug")
+        .lean();
+      if (again?.slug) return again.slug;
+    }
+  }
+  return "";
+};
+
 // Login user wahi hai jiska profile hai (ya admin)?
 const isOwner = (req, userId) =>
   (req.userId && req.userId.toString() === String(userId)) ||
@@ -162,11 +232,21 @@ exports.getProfile = async (req, res) => {
         .json({ success: false, message: "User not found." });
     }
 
+    // NEW: public URL ka slug (na ho to naam se ban jata hai)
+    let slug = profile?.slug || "";
+    try {
+      slug = await ensureSlug(userId, user.fullName, profile);
+    } catch (e) {
+      console.error("Slug create error:", e.message);
+    }
+
     res.status(200).json({
       success: true,
       exists: !!profile,
+      slug,
       data: profile
         ? {
+            slug,
             intro: profile.intro,
             about: profile.about,
             sections: profile.sections || {},
@@ -176,7 +256,7 @@ exports.getProfile = async (req, res) => {
             cover: profile.cover ? convertS3UrlToCDN(profile.cover) : "",
             updatedAt: profile.updatedAt,
           }
-        : emptyProfile(),
+        : { ...emptyProfile(), slug },
       user: userView(user),
     });
   } catch (error) {
@@ -224,6 +304,7 @@ exports.updateProfile = async (req, res) => {
       success: true,
       message: "Profile saved.",
       data: {
+        slug: saved.slug || "",
         intro: saved.intro,
         about: saved.about,
         sections: saved.sections || {},
@@ -349,3 +430,155 @@ const removeProfileMedia = (field, label) => async (req, res) => {
 
 exports.removePhoto = removeProfileMedia("photo", "profile photo");
 exports.removeCover = removeProfileMedia("cover", "cover photo");
+
+// ================= NEW: GET PROFILE BY SLUG (public URL) =================
+// GET /profile/by-slug/:slug — slug na mile aur valid user id ho to id se bhi chalega
+exports.getProfileBySlug = async (req, res) => {
+  try {
+    const raw = String(req.params.slug || "")
+      .trim()
+      .toLowerCase();
+    let profile = SLUG_RE.test(raw)
+      ? await Profile.findOne({ slug: raw }).lean()
+      : null;
+    let userId = profile?.user;
+    if (!profile && mongoose.Types.ObjectId.isValid(raw)) {
+      userId = raw;
+      profile = await Profile.findOne({ user: raw }).lean();
+    }
+    if (!userId) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Profile not found." });
+    }
+    const user = await User.findById(userId)
+      .select("fullName profilePicture coverPicture jainAadharNumber")
+      .lean();
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Profile not found." });
+    }
+    let slug = profile?.slug || "";
+    try {
+      slug = await ensureSlug(userId, user.fullName, profile);
+    } catch (e) {
+      console.error("Slug create error:", e.message);
+    }
+    res.status(200).json({ success: true, userId: String(userId), slug });
+  } catch (error) {
+    console.error("Get Profile By Slug Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ================= NEW: SLUG FREE HAI? =================
+// GET /profile/slug-check/:slug?userId=...
+exports.checkSlug = async (req, res) => {
+  try {
+    const slug = String(req.params.slug || "")
+      .trim()
+      .toLowerCase();
+    if (!SLUG_RE.test(slug)) {
+      return res.status(200).json({
+        success: true,
+        available: false,
+        message:
+          "Use 3-40 letters, numbers or hyphens. It can't start or end with a hyphen.",
+      });
+    }
+    if (RESERVED_SLUGS.has(slug)) {
+      return res
+        .status(200)
+        .json({
+          success: true,
+          available: false,
+          message: "This URL is reserved. Try another.",
+        });
+    }
+    const userId = mongoose.Types.ObjectId.isValid(req.query.userId)
+      ? req.query.userId
+      : null;
+    const taken = await slugTaken(slug, userId);
+    res.status(200).json({
+      success: true,
+      available: !taken,
+      message: taken
+        ? "This URL is already taken. Try another."
+        : "This URL is available.",
+    });
+  } catch (error) {
+    console.error("Check Slug Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ================= NEW: APNA URL BADLO (owner only) =================
+// PUT /profile/:userId/slug  body: { slug }
+exports.updateSlug = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid user id." });
+    }
+    if (!isOwner(req, userId)) {
+      return res
+        .status(403)
+        .json({
+          success: false,
+          message: "You can only change your own profile URL.",
+        });
+    }
+    const slug = String(req.body?.slug || "")
+      .trim()
+      .toLowerCase();
+    if (!SLUG_RE.test(slug)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Use 3-40 letters, numbers or hyphens. It can't start or end with a hyphen.",
+      });
+    }
+    if (RESERVED_SLUGS.has(slug)) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "This URL is reserved. Try another.",
+        });
+    }
+    if (await slugTaken(slug, userId)) {
+      return res
+        .status(409)
+        .json({
+          success: false,
+          message: "This URL is already taken. Try another.",
+        });
+    }
+    const saved = await Profile.findOneAndUpdate(
+      { user: userId },
+      { $set: { slug }, $setOnInsert: { user: userId } },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    ).lean();
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Profile URL updated.",
+        slug: saved.slug,
+      });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res
+        .status(409)
+        .json({
+          success: false,
+          message: "This URL is already taken. Try another.",
+        });
+    }
+    console.error("Update Slug Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

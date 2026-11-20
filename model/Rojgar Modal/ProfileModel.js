@@ -29,6 +29,16 @@ const profileSchema = new mongoose.Schema(
     // NEW: Employment profile ki apni photo aur cover (login user ki main photo/cover se alag)
     photo: { type: String, default: "" },
     cover: { type: String, default: "" },
+    // NEW: public profile URL (LinkedIn jaisa) — /employment/in/<slug>. Naam se apne aap banta hai, user badal sakta hai.
+    // default nahi (sparse unique ke liye khaali value save na ho)
+    slug: {
+      type: String,
+      unique: true,
+      sparse: true,
+      lowercase: true,
+      trim: true,
+      maxlength: 40,
+    },
   },
   { timestamps: true, minimize: false },
 );

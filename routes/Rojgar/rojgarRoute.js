@@ -43,6 +43,9 @@ const {
   uploadPhoto,
   removePhoto,
   removeCover,
+  getProfileBySlug,
+  checkSlug,
+  updateSlug,
 } = require("../../controller/Rojgar/profileController");
 
 // Routes for job operations
@@ -95,6 +98,10 @@ router.put("/freelancer/:id", upload.jobPostUpload, updateFreelancer);
 router.delete("/freelancer/:id", deleteFreelancer);
 
 // ===== Employment Profile (LinkedIn style) — keep ABOVE "/:id" =====
+// NEW: public profile URL (slug) — keep ABOVE "/profile/:userId"
+router.get("/profile/by-slug/:slug", getProfileBySlug);
+router.get("/profile/slug-check/:slug", checkSlug);
+router.put("/profile/:userId/slug", authMiddleware, updateSlug);
 router.get("/profile/:userId", getProfile);
 router.put("/profile/:userId", authMiddleware, updateProfile);
 router.post(
